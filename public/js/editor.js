@@ -181,7 +181,8 @@
         },
         h('span', { class: `chev${open ? ' open' : ''}` }, isDir ? svg(ICON.chevron) : null),
         fileIcon(entry, open),
-        h('span', { class: 'name' }, entry.name)));
+        h('span', { class: 'name' }, entry.name),
+        h('button', { type: 'button', class: 'row-more', title: 'Menu', 'aria-label': `Menu ${entry.name}` }, '⋯')));
         if (isDir && open) walk(entry.path, depth + 1);
       }
     };
@@ -585,6 +586,23 @@
     location.href = '/';
   }
 
+  // ---------- Tampilan HP ----------
+  const mobileQuery = window.matchMedia('(max-width: 760px)');
+
+  function setMobileView(view) {
+    document.body.dataset.mobileView = view;
+    document.querySelectorAll('.mobile-nav [data-view]').forEach((btn) => {
+      btn.setAttribute('aria-current', String(btn.dataset.view === view));
+    });
+  }
+
+  // Editor kode di layar kecil: tanpa minimap, font sedikit lebih kecil, baris panjang dibungkus.
+  function applyResponsiveEditor() {
+    editor?.updateOptions(mobileQuery.matches
+      ? { minimap: { enabled: false }, fontSize: 13, wordWrap: 'on', lineNumbersMinChars: 3, folding: false, glyphMargin: false }
+      : { minimap: { enabled: true }, fontSize: 14, wordWrap: 'off', lineNumbersMinChars: 5, folding: true });
+  }
+
   // ---------- Status bar ----------
   function updateStatus() {
     const model = state.active && state.models.get(state.active);
@@ -651,12 +669,20 @@
       const row = e.target.closest('.row');
       if (!row) return;
       const { path, type } = row.dataset;
+      if (e.target.closest('.row-more')) {
+        state.selected = path;
+        renderTree();
+        const rect = e.target.closest('.row-more').getBoundingClientRect();
+        showMenu(rect.right - 200, rect.bottom + 4, treeMenu(state.entries.find((x) => x.path === path)));
+        return;
+      }
       state.selected = path;
       if (type === 'dir') {
         state.expanded.has(path) ? state.expanded.delete(path) : state.expanded.add(path);
         renderTree();
       } else {
         setMode('code');
+        setMobileView('editor');
         openFile(path);
       }
     });
@@ -1335,6 +1361,11 @@
       btn.onclick = () => setMode(btn.dataset.mode);
     });
     $('#aiReset').onclick = resetAiChat;
+    document.querySelectorAll('.mobile-nav [data-view]').forEach((btn) => {
+      btn.onclick = () => setMobileView(btn.dataset.view);
+    });
+    setMobileView(document.body.dataset.mobileView || 'editor');
+    mobileQuery.addEventListener('change', applyResponsiveEditor);
     $('#dbNewTable').onclick = openCreateTable;
     $('#aiCredits').onclick = openTopup;
     $('#aiTopupBtn').onclick = openTopup;
@@ -2098,6 +2129,7 @@
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyS, saveAll);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => toggleAi());
     editor.onDidChangeCursorPosition(updateStatus);
+    applyResponsiveEditor();
 
     await loadTree();
     reloadPreview();

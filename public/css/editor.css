@@ -199,7 +199,8 @@ a { color: inherit; }
 .resize-overlay { position: fixed; inset: 0; z-index: 1000; cursor: col-resize; }
 
 /* ---------- Sidebar ---------- */
-.sidebar { width: 250px; min-width: 180px; flex-shrink: 0; }
+/* Panel samping boleh menyusut (sampai min-width) supaya tiga kolom tetap muat di layar tablet. */
+.sidebar { width: 250px; min-width: 180px; flex-shrink: 1; }
 .panel-head {
   display: flex;
   align-items: center;
@@ -434,7 +435,7 @@ kbd {
 .switch input:focus-visible + .track { outline: 2px solid var(--accent-line); outline-offset: 2px; }
 
 /* ---------- Preview ---------- */
-.preview { width: 42%; min-width: 260px; flex-shrink: 0; position: relative; }
+.preview { width: 42%; min-width: 240px; flex-shrink: 1; position: relative; }
 .preview-bar { display: flex; align-items: center; gap: 4px; height: 48px; padding: 0 8px; flex-shrink: 0; }
 .url-pill {
   flex: 1;
@@ -629,16 +630,6 @@ kbd {
   .topbar { grid-template-columns: 1fr auto; }
 }
 
-@media (max-width: 760px) {
-  .app { padding: 0 8px 8px; overflow: auto; }
-  body { overflow: auto; }
-  .project-chip { display: none; }
-  .workbench { flex-direction: column; gap: 8px; }
-  .splitter { display: none; }
-  .sidebar { width: 100% !important; max-height: 32vh; }
-  .editor-area { min-height: 50vh; }
-  .preview { width: 100% !important; min-width: 0; height: 60vh; }
-}
 
 /* ---------- Asisten AI ---------- */
 .mode-switch {
@@ -823,9 +814,6 @@ kbd {
 .diff-head h3 { margin: 0; font: 600 13px var(--mono); }
 .diff-body { height: 60vh; }
 
-@media (max-width: 760px) {
-  .mode-switch button { padding: 0 9px; }
-}
 
 .msg.assistant { white-space: normal; }
 .md p { margin: 0 0 8px; }
@@ -1186,8 +1174,157 @@ button.credit-badge:disabled { cursor: default; }
 .db-copy:hover { border-color: var(--faint); }
 .db-snippet pre { margin: 0; padding: 10px 12px; background: var(--bg); overflow-x: auto; font: 12px/1.55 var(--mono); color: var(--text); user-select: text; }
 
-@media (max-width: 760px) {
-  .data-view { flex-direction: column; }
-  .db-sidebar { width: 100%; max-height: 160px; border-right: 0; border-bottom: 1px solid var(--line); }
-}
 .badge.table { background: rgb(16 185 129 / 0.14); color: #6ee7b7; }
+
+/* ---------- Tombol ⋯ di explorer (untuk layar sentuh & saat disorot) ---------- */
+.row-more {
+  display: none;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.row-more:hover { background: var(--raised); color: var(--white); }
+.row:hover .row-more, .row.selected .row-more { display: inline-grid; }
+
+/* Perangkat sentuh: tidak ada hover, jadi tampilkan kontrol yang biasanya muncul saat disorot. */
+@media (hover: none) {
+  .sidebar-actions { opacity: 1; }
+  .tab .close { opacity: 1; }
+  .row-more { display: inline-grid; }
+  .db-grid td.row-actions .icon-btn { opacity: 1; }
+  .device-switch { opacity: 1; }
+}
+
+/* ---------- Tampilan HP ---------- */
+.mobile-nav { display: none; }
+
+@media (max-width: 760px) {
+  .app { padding: 0; }
+
+  .topbar { height: 52px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+  .project-chip, #toggleSidebar, #togglePreview { display: none; }
+  .publish-btn { width: 34px; padding: 0; justify-content: center; }
+
+  /* Satu panel layar penuh, dipilih lewat navigasi bawah. */
+  .workbench { padding: 8px 8px 0; }
+  .splitter { display: none !important; }
+  .workbench > .panel { display: none; flex: 1; width: 100% !important; min-width: 0; }
+  body[data-mobile-view="files"] #sidebar,
+  body[data-mobile-view="editor"] #editorArea,
+  body[data-mobile-view="preview"] #preview { display: flex !important; }
+
+  .mobile-nav {
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  .mobile-nav button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 0;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .mobile-nav button svg { width: 20px; height: 20px; }
+  .mobile-nav button[aria-current="true"] { background: var(--accent-soft); color: var(--white); }
+  .mobile-nav button[aria-current="true"] svg { color: #c4b5fd; }
+
+  /* Panel file */
+  .row { height: 38px; }
+  .tree { padding: 4px 6px 12px; }
+
+  /* Area editor */
+  .editor-top { gap: 6px; min-height: 44px; padding: 6px 6px 0; }
+  .ai-head { padding-left: 4px; }
+  .ai-head .ai-title { display: none; }
+  .mode-switch button { padding: 0 10px; }
+  .breadcrumbs, #statusUser, #statusCursor { display: none; }
+  .editor-foot { padding: 0 10px; }
+
+  .ai-messages { padding: 12px; }
+  .ai-composer, .ai-topup { width: calc(100% - 16px); margin-bottom: 8px; }
+  .msg.user { max-width: 92%; }
+
+  /* Mode Data: daftar tabel jadi chip horizontal */
+  .data-view { flex-direction: column; margin-top: 6px; }
+  .db-sidebar { width: 100%; flex-direction: row; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); }
+  .db-sidebar-head { order: 2; height: auto; padding: 0 6px; }
+  .db-sidebar-head span, .db-sidebar .usage { display: none; }
+  .db-table-list { flex: 1; display: flex; gap: 6px; padding: 8px; overflow-x: auto; scrollbar-width: none; }
+  .db-table-list::-webkit-scrollbar { display: none; }
+  .db-table-item { width: auto; flex-shrink: 0; height: 32px; margin: 0; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 999px; }
+  .db-table-item.active { border-color: rgb(16 185 129 / 0.5); }
+  .db-main-head { padding: 10px 12px; }
+  .db-actions { margin-left: auto; }
+  .db-grid-wrap { margin: 0 8px; }
+  .db-grid td { max-width: 200px; }
+  .db-empty { padding: 20px 16px; }
+
+  /* Preview */
+  .device-switch { display: none; }
+  .stage { padding: 0 6px 6px; }
+
+  /* Modal jadi bottom sheet */
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal, .modal.db-modal, .modal.db-modal.wide, .modal.topup-modal {
+    max-width: 100%;
+    max-height: 90dvh;
+    overflow: auto;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+  .modal.diff-modal { height: 90dvh; display: flex; flex-direction: column; }
+  .diff-body { flex: 1; height: auto; }
+  .pkg-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .pkg { padding: 14px 6px 12px; }
+  .pkg-credits { font-size: 24px; }
+  .db-col-row { flex-wrap: wrap; }
+  .db-col-row input:not([type="checkbox"]) { flex-basis: 100%; }
+
+  .toasts { bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+  /* iOS memperbesar halaman bila font input < 16px */
+  .ai-composer textarea, .modal input:not([type="checkbox"]), .modal textarea, .modal select,
+  .db-grid td.editing input, .db-grid td.editing textarea { font-size: 16px !important; }
+}
+
+@media (max-width: 400px) {
+  /* Label mode disembunyikan, cukup ikon */
+  .mode-switch button { font-size: 0; gap: 0; padding: 0 12px; }
+}
+
+/* Aturan .modal input di atas untuk kotak teks; checkbox di dalam modal tidak boleh ikut. */
+.modal input[type="checkbox"] { width: auto; height: auto; margin: 0; padding: 0; }
+
+/* Bar atas area editor menyesuaikan lebar kolomnya sendiri (bukan lebar layar). */
+.editor-area { container-type: inline-size; }
+.ai-head, .data-head { overflow: hidden; }
+.ai-title { white-space: nowrap; }
+@container (max-width: 460px) {
+  .ai-head .ai-title { display: none; }
+}
+@container (max-width: 340px) {
+  .mode-switch button { font-size: 0; gap: 0; padding: 0 11px; }
+  .data-head .data-title { display: none; }
+}
+@container (max-width: 300px) {
+  #aiReset { display: none; }
+}
