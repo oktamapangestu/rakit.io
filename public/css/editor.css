@@ -58,18 +58,9 @@ a { color: inherit; }
 .top-center { display: flex; align-items: center; gap: 10px; min-width: 0; }
 
 .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; margin-right: 4px; }
-.logo {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--grad);
-  box-shadow: 0 4px 14px rgb(139 92 246 / 0.35);
-  font: 700 11px var(--mono);
-  color: #fff;
-}
-.brand-name { font-weight: 700; font-size: 15px; color: var(--white); letter-spacing: -0.01em; }
+.logo { display: block; width: 30px; height: 30px; border-radius: 9px; box-shadow: 0 4px 14px rgb(139 92 246 / 0.35); }
+.brand-name { font-weight: 800; font-size: 16px; color: var(--white); letter-spacing: -0.035em; }
+.brand-name .dim { color: var(--muted); font-weight: 600; }
 
 .chip-btn {
   display: inline-flex;
@@ -372,17 +363,7 @@ body.resizing iframe { pointer-events: none; }
     radial-gradient(circle at 50% 35%, rgb(139 92 246 / 0.1), transparent 45%),
     var(--panel);
 }
-.welcome-logo {
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
-  background: var(--grad);
-  box-shadow: 0 12px 40px rgb(139 92 246 / 0.4);
-  font: 700 22px var(--mono);
-  color: #fff;
-}
+.welcome-logo { width: 72px; height: 72px; border-radius: 20px; box-shadow: 0 12px 40px rgb(139 92 246 / 0.4); }
 .welcome h2 { margin: 20px 0 6px; font-size: 20px; color: var(--white); letter-spacing: -0.01em; }
 .welcome p { margin: 0 0 22px; color: var(--muted); }
 .welcome-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }

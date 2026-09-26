@@ -40,25 +40,10 @@ code { font-family: var(--mono); }
   padding: 20px 16px;
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 20px;
-  text-decoration: none;
-}
-.brand .dim { color: var(--muted); font-weight: 500; }
-.logo {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  font: 700 13px var(--mono);
-  color: #fff;
-}
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.logo { display: block; width: 36px; height: 36px; box-shadow: 0 6px 18px rgb(139 92 246 / 0.35); border-radius: 10px; }
+.wordmark { font-size: 21px; font-weight: 800; letter-spacing: -0.035em; color: #fff; }
+.wordmark .dim { color: var(--muted); font-weight: 600; }
 .nav-link {
   padding: 8px 16px;
   border: 1px solid var(--border);
