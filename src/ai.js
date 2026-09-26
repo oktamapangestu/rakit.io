@@ -6,6 +6,7 @@ import { requireAuth } from './auth.js';
 import { creditInfo, reserveCredits } from './credits.js';
 import { cleanPath, isAllowedFile, LIMITS, listTree, readText, userRoot } from './files.js';
 import { COLUMN_TYPES, hasDatabase, listTables, OPERATIONS, schemaSummary } from './userdb.js';
+import { acquireSlot, countRetry, QueueError, reportBusy, reportSuccess } from './aiqueue.js';
 
 export const ai = express.Router();
 
@@ -135,9 +136,10 @@ How to answer — reply with a single <message> block written in markdown, in th
 const PROMPTS = { build: BUILD_PROMPT, plan: PLAN_PROMPT };
 
 class ProviderError extends Error {
-  constructor(status, detail) {
+  constructor(status, detail, retryAfter = null) {
     super(`AI provider ${status}: ${detail}`);
     this.status = status;
+    this.retryAfter = retryAfter; // detik, dari header Retry-After bila ada
   }
 }
 
@@ -156,7 +158,10 @@ async function chatCompletion({ messages, tools, signal, onText, onThinking }) {
     }),
     signal,
   });
-  if (!res.ok) throw new ProviderError(res.status, (await res.text().catch(() => '')).slice(0, 500));
+  if (!res.ok) {
+    const retryAfter = Number(res.headers.get('retry-after')) || null;
+    throw new ProviderError(res.status, (await res.text().catch(() => '')).slice(0, 500), retryAfter);
+  }
 
   let text = '';
   let reasoning = '';
@@ -208,6 +213,49 @@ async function chatCompletion({ messages, tools, signal, onText, onThinking }) {
   }
   const toolCalls = calls.filter(Boolean).map((c, i) => ({ ...c, id: c.id || `call_${i}` }));
   return { text, reasoning, toolCalls, finishReason, usage };
+}
+
+const RETRY_DELAYS_MS = [2000, 5000, 10000]; // jeda coba ulang saat provider sibuk (429/503)
+const sleep = (ms, signal) => new Promise((resolve, reject) => {
+  const timer = setTimeout(resolve, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+});
+
+/**
+ * Panggil provider lewat antrean: tunggu slot, jalankan, lepas slot. Bila provider menolak karena
+ * sibuk (429/503), coba lagi dengan jeda (atau sesuai Retry-After) sampai 3 kali.
+ * hooks: { signal, onText, onThinking, onQueued(pos, total), onRunning(), onRetry(attempt, seconds) }
+ */
+async function callAI(request, hooks) {
+  for (let attempt = 0; ; attempt++) {
+    let release;
+    try {
+      release = await acquireSlot({ signal: hooks.signal, onPosition: hooks.onQueued });
+    } catch (err) {
+      if (err instanceof QueueError) {
+        throw aiFailure(err.kind === 'full' ? 'queue_full' : 'queue_timeout', 503, `${err.message} Kredit dikembalikan.`);
+      }
+      throw err;
+    }
+    try {
+      hooks.onRunning?.();
+      const reply = await chatCompletion({ ...request, signal: hooks.signal, onText: hooks.onText, onThinking: hooks.onThinking });
+      reportSuccess();
+      return reply;
+    } catch (err) {
+      const busy = err instanceof ProviderError && [429, 503].includes(err.status);
+      if (busy) reportBusy();
+      if (!busy || attempt >= RETRY_DELAYS_MS.length || hooks.signal?.aborted) throw err;
+      const delay = err.retryAfter ? Math.min(err.retryAfter * 1000, 30_000) : RETRY_DELAYS_MS[attempt] + Math.random() * 1000;
+      countRetry();
+      hooks.onRetry?.(attempt + 1, Math.ceil(delay / 1000));
+      release();
+      release = null;
+      await sleep(delay, hooks.signal);
+    } finally {
+      release?.();
+    }
+  }
 }
 
 function aiFailure(status, httpStatus, message) {
@@ -365,7 +413,7 @@ function stageToolCall(call, staged, existingTables, truncated) {
 const MAX_BUILD_ROUNDS = 8;
 
 // Mode Builder: ulangi permintaan sampai model selesai memanggil tool dan menulis ringkasan.
-async function runBuilder({ messages, existingTables, signal, onText, onThinking }) {
+async function runBuilder({ messages, existingTables, hooks }) {
   const convo = [...messages];
   const staged = new Map();
   const usage = { input_tokens: 0, output_tokens: 0 };
@@ -373,7 +421,7 @@ async function runBuilder({ messages, existingTables, signal, onText, onThinking
   let truncatedRounds = 0;
 
   for (let round = 0; round < MAX_BUILD_ROUNDS; round++) {
-    const reply = await chatCompletion({ messages: convo, tools: TOOLS, signal, onText, onThinking });
+    const reply = await callAI({ messages: convo, tools: TOOLS }, hooks);
     usage.input_tokens += reply.usage?.prompt_tokens ?? 0;
     usage.output_tokens += reply.usage?.completion_tokens ?? 0;
     if (process.env.AI_DEBUG) {
@@ -490,10 +538,18 @@ ai.post('/prompt', async (req, res) => {
       }
     };
     const convo = [{ role: 'system', content: PROMPTS[mode] }, ...merged];
+    const hooks = {
+      signal: abort.signal,
+      onText,
+      onThinking,
+      onQueued: (position, total) => send({ type: 'queued', position, total }),
+      onRunning: () => send({ type: 'running' }),
+      onRetry: (attempt, seconds) => send({ type: 'retry', attempt, max: 3, seconds }),
+    };
 
     let result;
     if (mode === 'plan') {
-      const reply = await chatCompletion({ messages: convo, signal: abort.signal, onText, onThinking });
+      const reply = await callAI({ messages: convo }, hooks);
       usage = { input_tokens: reply.usage?.prompt_tokens ?? 0, output_tokens: reply.usage?.completion_tokens ?? 0 };
       if (process.env.AI_DEBUG) console.log(`----- AI plan (${reply.finishReason}) -----\n${reply.text}`);
       checkFinish(reply);
@@ -501,7 +557,7 @@ ai.post('/prompt', async (req, res) => {
       result = { message: text && reply.finishReason === 'length' ? text + TRUNCATED_NOTE : text, changes: [] };
     } else {
       const existingTables = hasDatabase(req.user.username) ? listTables(req.user.username).map((t) => t.name) : [];
-      result = await runBuilder({ messages: convo, existingTables, signal: abort.signal, onText, onThinking });
+      result = await runBuilder({ messages: convo, existingTables, hooks });
       usage = result.usage;
     }
     if (!result.message && !result.changes.length) {

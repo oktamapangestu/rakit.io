@@ -33,6 +33,7 @@ src/
   database.js  API editor database (khusus pemilik)
   siteapi.js   API publik /api/db/* di domain user
   admin.js     dashboard pemilik: statistik platform (khusus ADMIN_EMAILS)
+  aiqueue.js   antrean & batas concurrency adaptif untuk panggilan ke provider AI
   db.js        skema SQLite
 public/        landing page + editor (Monaco dari CDN jsDelivr)
 templates/     file awal untuk user baru
@@ -53,12 +54,21 @@ Konfigurasi di `.env`:
 | `AI_API_KEY` | — | Wajib. Tanpa ini fitur AI nonaktif. |
 | `AI_MODEL` | `deepseek-v4-pro` | Nama model di provider. |
 | `AI_MAX_TOKENS` | `64000` | Batas token output per putaran AI (termasuk token "berpikir" model reasoning). |
+| `AI_MAX_CONCURRENT` | `4` | Maks. panggilan ke provider yang berjalan bersamaan (lihat Antrean AI). |
+| `AI_QUEUE_MAX` | `30` | Panjang antrean maksimal; lebih dari ini ditolak dengan pesan "AI sedang penuh". |
+| `AI_QUEUE_TIMEOUT_S` | `120` | Batas menunggu di antrean (detik). |
 | `AI_DEBUG` | — | Isi `1` untuk mencetak jawaban mentah AI ke log (berisi kode user — jangan di production). |
 | `AI_MONTHLY_CREDITS` | `30` | Kredit gratis per user per bulan (reset tanggal 1, UTC). |
 | `AI_CREDITS_PER_PROMPT` | `1` | Kredit yang dipakai per prompt. |
 
 - Mode **Builder** memakai *tool calling* (`write_file`, `delete_file`, `create_table`); server memvalidasi setiap
   panggilan dan memeriksa alamat `/api/db/...` di kode sebelum hasilnya dikirim ke editor. Mode **Plan** hanya teks.
+- **Antrean AI:** panggilan ke provider dibatasi `AI_MAX_CONCURRENT`; sisanya menunggu urut (FIFO) dan panel AI
+  menampilkan posisinya. Bila provider tetap menolak (429/503), server mencoba lagi sampai 3 kali (mengikuti
+  `Retry-After`) dan **menurunkan batasnya sendiri**, lalu menaikkannya lagi perlahan setelah 20 panggilan lancar —
+  jadi antrean menyesuaikan diri dengan batas provider tanpa perlu tahu angkanya. Antrean penuh, terlalu lama,
+  atau dihentikan user → kredit dikembalikan. Statistiknya ada di dashboard pemilik. Antrean disimpan di memori
+  (satu proses server); bila nanti memakai beberapa server, pindahkan ke Redis.
 - Kredit dipotong di awal dan **dikembalikan** kalau request gagal, dihentikan, atau ditolak.
 - Setiap request dicatat di tabel `ai_requests` (token input/output) untuk memantau biaya:
   ```sql

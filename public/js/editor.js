@@ -941,16 +941,22 @@
     autoGrow();
 
     const status = h('span', {}, 'Membaca proyek…');
-    // Model reasoning bisa "berpikir" puluhan detik sebelum menulis; tampilkan waktu berjalan.
-    let thinkingTimer = null;
-    const thinkingStart = Date.now();
-    const startThinkingTimer = () => {
-      if (thinkingTimer) return;
-      const tick = () => { status.textContent = `AI sedang berpikir… ${Math.round((Date.now() - thinkingStart) / 1000)} dtk`; };
-      tick();
-      thinkingTimer = setInterval(tick, 1000);
+    // Status diperbarui tiap detik sesuai fase: antre → berpikir → menulis (atau menunggu coba ulang).
+    // Model reasoning bisa "berpikir" puluhan detik, jadi waktu berjalan ikut ditampilkan.
+    const promptStart = Date.now();
+    let phase = { kind: 'prepare' };
+    const renderStatus = () => {
+      const secs = Math.round((Date.now() - promptStart) / 1000);
+      status.textContent = {
+        prepare: () => 'Membaca proyek…',
+        queued: () => `Menunggu antrean AI… posisi ${phase.position} dari ${phase.total}`,
+        thinking: () => `AI sedang berpikir… ${secs} dtk`,
+        writing: () => `Menulis kode… ${(phase.chars / 1000).toFixed(1)}k karakter`,
+        retry: () => `AI sedang sibuk, mencoba lagi (${phase.attempt}/${phase.max})…`,
+      }[phase.kind]();
     };
-    const stopThinkingTimer = () => { clearInterval(thinkingTimer); thinkingTimer = true; };
+    const statusTimer = setInterval(renderStatus, 1000);
+    const setPhase = (next) => { phase = next; renderStatus(); };
     const loading = h('div', { class: 'msg loading' },
       h('span', { class: 'dots' }, h('i'), h('i'), h('i')), status,
       h('button', { class: 'stop', type: 'button', onclick: () => ai.controller?.abort() }, 'Stop'));
@@ -979,11 +985,10 @@
       let result = null;
       for await (const event of readEvents(res)) {
         if (event.credits) { ai.credits = event.credits; renderCredits(); }
-        if (event.type === 'start' || event.type === 'thinking') startThinkingTimer();
-        else if (event.type === 'progress') {
-          stopThinkingTimer();
-          status.textContent = `Menulis kode… ${(event.chars / 1000).toFixed(1)}k karakter`;
-        }
+        if (event.type === 'queued') setPhase({ kind: 'queued', position: event.position, total: event.total });
+        else if (event.type === 'running' || (event.type === 'thinking' && phase.kind !== 'writing')) setPhase({ kind: 'thinking' });
+        else if (event.type === 'retry') setPhase({ kind: 'retry', attempt: event.attempt, max: event.max });
+        else if (event.type === 'progress') setPhase({ kind: 'writing', chars: event.chars });
         else if (event.type === 'error') throw new Error(event.error);
         else if (event.type === 'done') result = event;
       }
@@ -1005,7 +1010,7 @@
           : null));
       if (aborted || err.code === 'no_credits') setTimeout(loadCredits, 500);
     } finally {
-      stopThinkingTimer();
+      clearInterval(statusTimer);
       ai.busy = false;
       ai.controller = null;
       updateAiComposer();

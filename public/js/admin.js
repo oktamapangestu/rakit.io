@@ -178,6 +178,8 @@
     bad_output: { label: 'Jawaban tidak terbaca', color: 'var(--serious)' },
     refusal: { label: 'Ditolak AI', color: 'var(--warning)' },
     aborted: { label: 'Dihentikan user', color: 'var(--faint)' },
+    queue_full: { label: 'Ditolak: antrean penuh', color: 'var(--serious)' },
+    queue_timeout: { label: 'Kelamaan di antrean', color: 'var(--serious)' },
   };
 
   function table(columns, rows, empty) {
@@ -256,6 +258,16 @@
       h('dt', {}, 'Database proyek'), h('dd', {}, `${bytes(st.storage.dbBytes)} · ${num(st.storage.projectsWithDatabase)} proyek`),
       h('dt', {}, 'Sesi login aktif'), h('dd', {}, `${num(st.users.activeSessions)} pengguna`)));
 
+    const q = st.queue;
+    const secs = (ms) => `${(ms / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} dtk`;
+    const queueCard = card('Antrean AI', `Sejak server terakhir dinyalakan · maks ${num(q.maxConcurrent)} request bersamaan`, h('dl', { class: 'kv flush' },
+      h('dt', {}, 'Sedang berjalan / batas saat ini'), h('dd', {}, `${num(q.active)} / ${num(q.currentLimit)}${q.currentLimit < q.maxConcurrent ? ` (diturunkan dari ${num(q.maxConcurrent)})` : ''}`),
+      h('dt', {}, 'Menunggu di antrean'), h('dd', {}, `${num(q.queued)} / ${num(q.queueMax)}`),
+      h('dt', {}, 'Request yang sempat mengantre'), h('dd', {}, `${num(q.queuedTotal)} dari ${num(q.served)}`),
+      h('dt', {}, 'Waktu tunggu (median / maks)'), h('dd', {}, `${secs(q.medianWaitMs)} / ${secs(q.maxWaitMs)}`),
+      h('dt', {}, 'Coba ulang karena provider sibuk'), h('dd', {}, num(q.retries)),
+      h('dt', {}, 'Ditolak: antrean penuh / kelamaan'), h('dd', {}, `${num(q.rejectedFull)} / ${num(q.timedOut)}`)));
+
     const payments = card('Transaksi terbaru', `${num(st.revenue.pending)} QRIS masih menunggu pembayaran`, table([
       { label: 'Waktu', value: (p) => shortTime(p.createdAt) },
       { label: 'Pengguna', value: (p) => p.username },
@@ -274,7 +286,7 @@
       h('p', { class: 'meta' }, `Diperbarui ${dateTime(st.generatedAt)} · waktu WIB`),
       tiles,
       charts,
-      h('div', { class: 'grid three' }, health, topUsers, storage),
+      h('div', { class: 'grid three' }, health, topUsers, h('div', { class: 'stack' }, queueCard, storage)),
       h('div', { class: 'grid two' }, payments, signups));
   }
 

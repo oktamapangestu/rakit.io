@@ -197,3 +197,5 @@ td a:hover { color: var(--white); text-decoration: underline; }
 @media (max-width: 760px) {
   .grid.three { grid-template-columns: minmax(0, 1fr); }
 }
+
+.stack { display: grid; gap: 16px; align-content: start; }

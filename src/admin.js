@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { db } from './db.js';
 import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
+import { queueStats } from './aiqueue.js';
 
 // Dashboard pemilik platform: statistik pengguna, AI, pendapatan, dan penyimpanan.
 // Akses dibatasi ke email di ADMIN_EMAILS.
@@ -177,5 +178,6 @@ admin.get('/stats', async (req, res) => {
     topUsers,
     recentUsers,
     storage: await storage(),
+    queue: queueStats(),
   });
 });

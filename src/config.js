@@ -24,6 +24,10 @@ export const config = {
     apiKey: env.AI_API_KEY || '',
     model: env.AI_MODEL || 'deepseek-v4-pro',
     maxTokens: Number(env.AI_MAX_TOKENS || 64000),
+    // Antrean: jumlah panggilan ke provider yang boleh berjalan bersamaan, panjang antrean, dan batas tunggu.
+    maxConcurrent: Math.max(1, Number(env.AI_MAX_CONCURRENT || 4)),
+    queueMax: Math.max(0, Number(env.AI_QUEUE_MAX || 30)),
+    queueTimeoutMs: Math.max(5, Number(env.AI_QUEUE_TIMEOUT_S || 120)) * 1000,
     monthlyCredits: Number(env.AI_MONTHLY_CREDITS || 30),
     creditsPerPrompt: Number(env.AI_CREDITS_PER_PROMPT || 1),
   },
