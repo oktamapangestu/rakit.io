@@ -22,7 +22,7 @@ export const config = {
     enabled: Boolean(env.AI_API_KEY && env.AI_BASE_URL),
     baseUrl: (env.AI_BASE_URL || '').replace(/\/+$/, ''),
     apiKey: env.AI_API_KEY || '',
-    model: env.AI_MODEL || 'deepseek-v4.1-flash',
+    model: env.AI_MODEL || 'deepseek-v4-pro',
     maxTokens: Number(env.AI_MAX_TOKENS || 32000),
     monthlyCredits: Number(env.AI_MONTHLY_CREDITS || 30),
     creditsPerPrompt: Number(env.AI_CREDITS_PER_PROMPT || 1),
