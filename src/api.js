@@ -21,6 +21,14 @@ export const api = express.Router();
 api.use(express.json({ limit: '1mb' }));
 api.use(requireSameOrigin);
 
+// Batas per akun (atau per IP bila belum login) supaya satu pengguna tidak bisa membanjiri server.
+// Auto-save normal hanya ±60 penulisan/menit.
+const perAccount = (prefix) => (req) => `${prefix}:${req.user ? `u${req.user.id}` : req.ip}`;
+const busy = 'Terlalu banyak permintaan dalam waktu singkat. Tunggu sebentar lalu coba lagi.';
+const accountWriteLimiter = rateLimit({ windowMs: 60_000, max: 300, key: perAccount('w'), message: busy });
+const accountReadLimiter = rateLimit({ windowMs: 60_000, max: 1200, key: perAccount('r'), message: busy });
+api.use((req, res, next) => (['GET', 'HEAD'].includes(req.method) ? accountReadLimiter : accountWriteLimiter)(req, res, next));
+
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Hash dummy supaya waktu respons login sama walau user tidak ada.

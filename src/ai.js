@@ -280,7 +280,9 @@ const TABLE_NAME_RE = /^[a-z][a-z0-9_]{0,39}$/;
 function validateChange(change) {
   if (change.action === 'table') {
     const name = String(change.name ?? '').trim().toLowerCase();
-    if (!TABLE_NAME_RE.test(name)) throw new Error(`Nama tabel "${change.name}" tidak valid: pakai huruf kecil, angka, dan _, diawali huruf.`);
+    if (!TABLE_NAME_RE.test(name) || name.startsWith('sqlite_') || name.startsWith('_rakit')) {
+      throw new Error(`Nama tabel "${change.name}" tidak valid: pakai huruf kecil, angka, dan _, diawali huruf (awalan sqlite_ dan _rakit dicadangkan).`);
+    }
     if (!Array.isArray(change.columns)) throw new Error('columns harus berupa array.');
     const columns = change.columns.map((c) => {
       const col = String(c?.name ?? '').trim().toLowerCase();

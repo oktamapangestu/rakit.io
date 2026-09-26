@@ -82,7 +82,7 @@ export function requireSameOrigin(req, res, next) {
   next();
 }
 
-export function rateLimit({ windowMs, max, key = (req) => req.ip }) {
+export function rateLimit({ windowMs, max, key = (req) => req.ip, message = 'Terlalu banyak percobaan. Coba lagi nanti.' }) {
   const hits = new Map();
   setInterval(() => {
     const now = Date.now();
@@ -96,7 +96,7 @@ export function rateLimit({ windowMs, max, key = (req) => req.ip }) {
     if (!hit || hit.reset <= now) hits.set(id, (hit = { count: 0, reset: now + windowMs }));
     if (++hit.count > max) {
       res.set('Retry-After', String(Math.ceil((hit.reset - now) / 1000)));
-      return res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi nanti.' });
+      return res.status(429).json({ error: message });
     }
     next();
   };
