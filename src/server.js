@@ -7,6 +7,7 @@ import { cleanupSessions, loadUser } from './auth.js';
 import { api } from './api.js';
 import { kaseraWebhook } from './billing.js';
 import { serveSite } from './sites.js';
+import { siteApi } from './siteapi.js';
 import { USERNAME_RE } from './username.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
@@ -24,8 +25,10 @@ app.use((req, res, next) => {
   if (host.endsWith(suffix)) {
     const sub = host.slice(0, -suffix.length);
     if (sub === 'www') return res.redirect(301, config.appOrigin + req.originalUrl);
-    if (USERNAME_RE.test(sub)) return serveSite(req, res, sub).catch(next);
-    return res.status(404).send('Not found');
+    if (!USERNAME_RE.test(sub)) return res.status(404).send('Not found');
+    req.siteUser = sub;
+    if (req.path === '/api' || req.path.startsWith('/api/')) return siteApi(req, res, next);
+    return serveSite(req, res, sub).catch(next);
   }
   // Akses lewat IP / host lain -> arahkan ke domain utama.
   return res.redirect(302, config.appOrigin + req.originalUrl);

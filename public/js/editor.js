@@ -13,7 +13,7 @@
       else if (key.startsWith('on')) el.addEventListener(key.slice(2), value);
       else el.setAttribute(key, value === true ? '' : value);
     }
-    for (const child of children.flat()) if (child != null && child !== false) el.append(child);
+    for (const child of children.flat(Infinity)) if (child != null && child !== false) el.append(child);
     return el;
   }
 
@@ -30,6 +30,11 @@
     chevron: 'M5.7 13.7 5 13l5-5-5-5 .7-.7L11.4 8z',
     close: 'm8 8.7 3.6 3.6.7-.7L8.7 8l3.6-3.6-.7-.7L8 7.3 4.4 3.7l-.7.7L7.3 8l-3.6 3.6.7.7z',
     folder: 'M14.5 3H7.7l-1-1.4-.4-.1H1.5l-.5.5v11l.5.5h13l.5-.5v-9.5zM14 13H2V6h12zm0-8H7.3l-.4.1-.6.9H2V2.5h4.1l1 1.4.4.1H14z',
+    table: 'M1.5 2h13l.5.5v11l-.5.5h-13l-.5-.5v-11zM2 3v3h5V3zm6 0v3h6V3zM2 7v3h5V7zm6 0v3h6V7zm-6 4v2h5v-2zm6 0v2h6v-2z',
+    lock: 'M8 1a3 3 0 0 0-3 3v2H4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1V4a3 3 0 0 0-3-3m2 5H6V4a2 2 0 1 1 4 0z',
+    trash: 'M6 1h4l.5.5V3H14v1h-1v10.5l-.5.5h-9l-.5-.5V4H2V3h3.5V1.5zM6.5 3h3V2h-3zM4 4v10h8V4zm2 2h1v6H6zm3 0h1v6H9z',
+    refresh: 'M13.45 5.17A6 6 0 1 0 14 8h-1a5 5 0 1 1-.8-2.73l-1.7.23.14 1 3.4-.5-.5-3.4-1 .14z',
+    gear: 'M9.1 1l.4 1.9 1 .4 1.6-1.1 1.6 1.6-1.1 1.6.4 1 1.9.4v2.3l-1.9.4-.4 1 1.1 1.6-1.6 1.6-1.6-1.1-1 .4-.4 1.9H6.9l-.4-1.9-1-.4-1.6 1.1-1.6-1.6 1.1-1.6-.4-1L1 9.1V6.9l1.9-.4.4-1-1.1-1.6 1.6-1.6 1.6 1.1 1-.4L6.9 1zM8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5',
     folderOpen: 'M1.5 14h11l.5-.4 2.6-6.9-.5-.7H14V4.5l-.5-.5H7.7l-.9-.9-.3-.1H1.5l-.5.5v10zM2 3h4.3l.8.8.4.2H13v2H4l-.5.3L2 10.4zm10.1 10H2.2l2.2-6h9.9z',
   };
 
@@ -509,10 +514,10 @@
     ];
   }
 
-  async function copyText(text) {
+  async function copyText(text, message = 'URL disalin') {
     try {
       await navigator.clipboard.writeText(text);
-      toast('URL disalin');
+      toast(message);
     } catch {
       toast(text);
     }
@@ -842,10 +847,13 @@
     $('#editorArea').dataset.mode = mode;
     $('#codeView').hidden = mode !== 'code';
     $('#aiPanel').hidden = mode !== 'ai';
+    $('#dataView').hidden = mode !== 'data';
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.setAttribute('aria-selected', String(btn.dataset.mode === mode));
     });
-    if (mode === 'ai') {
+    if (mode === 'data') {
+      dbLoad();
+    } else if (mode === 'ai') {
       renderAiEmpty();
       updateAiComposer();
       $('#aiInput').focus();
@@ -906,6 +914,16 @@
     autoGrow();
 
     const status = h('span', {}, 'Membaca proyek…');
+    // Model reasoning bisa "berpikir" puluhan detik sebelum menulis; tampilkan waktu berjalan.
+    let thinkingTimer = null;
+    const thinkingStart = Date.now();
+    const startThinkingTimer = () => {
+      if (thinkingTimer) return;
+      const tick = () => { status.textContent = `AI sedang berpikir… ${Math.round((Date.now() - thinkingStart) / 1000)} dtk`; };
+      tick();
+      thinkingTimer = setInterval(tick, 1000);
+    };
+    const stopThinkingTimer = () => { clearInterval(thinkingTimer); thinkingTimer = true; };
     const loading = h('div', { class: 'msg loading' },
       h('span', { class: 'dots' }, h('i'), h('i'), h('i')), status,
       h('button', { class: 'stop', type: 'button', onclick: () => ai.controller?.abort() }, 'Stop'));
@@ -934,8 +952,11 @@
       let result = null;
       for await (const event of readEvents(res)) {
         if (event.credits) { ai.credits = event.credits; renderCredits(); }
-        if (event.type === 'start') status.textContent = 'AI sedang berpikir…';
-        else if (event.type === 'progress') status.textContent = `Menulis kode… ${(event.chars / 1000).toFixed(1)}k karakter`;
+        if (event.type === 'start' || event.type === 'thinking') startThinkingTimer();
+        else if (event.type === 'progress') {
+          stopThinkingTimer();
+          status.textContent = `Menulis kode… ${(event.chars / 1000).toFixed(1)}k karakter`;
+        }
         else if (event.type === 'error') throw new Error(event.error);
         else if (event.type === 'done') result = event;
       }
@@ -943,7 +964,8 @@
 
       loading.remove();
       ai.history.push({ role: 'user', content: prompt });
-      const changedList = result.changes.map((c) => `${c.action === 'delete' ? 'hapus' : 'tulis'} ${c.path}`).join(', ');
+      const changedList = result.changes.map((c) => (c.action === 'table' ? `tabel ${c.name}`
+        : `${c.action === 'delete' ? 'hapus' : 'tulis'} ${c.path}`)).join(', ');
       ai.history.push({ role: 'assistant', content: result.message + (changedList ? `\n\n(Perubahan diusulkan: ${changedList})` : '') });
       box.append(renderAiReply(result));
     } catch (err) {
@@ -956,6 +978,7 @@
           : null));
       if (aborted || err.code === 'no_credits') setTimeout(loadCredits, 500);
     } finally {
+      stopThinkingTimer();
       ai.busy = false;
       ai.controller = null;
       updateAiComposer();
@@ -1038,23 +1061,33 @@
     if (!result.changes.length) return wrap;
 
     const existing = new Set(state.entries.filter((e) => e.type === 'file').map((e) => e.path));
-    const kind = (c) => (c.action === 'delete' ? 'delete' : existing.has(c.path) ? 'edit' : 'new');
-    const label = { new: 'baru', edit: 'ubah', delete: 'hapus' };
+    const kind = (c) => (c.action === 'table' ? 'table' : c.action === 'delete' ? 'delete' : existing.has(c.path) ? 'edit' : 'new');
+    const label = { new: 'baru', edit: 'ubah', delete: 'hapus', table: 'tabel' };
     let snapshot = null;
     const beforeOf = (path) => snapshot?.find((s) => s.path === path)?.before ?? '';
 
     const actions = h('div', { class: 'changes-actions' });
     const card = h('div', { class: 'changes' },
-      h('div', { class: 'changes-head' }, h('span', {}, `${result.changes.length} file diubah`)),
-      result.changes.map((c) => h('button', {
-        type: 'button',
-        class: 'change-row',
-        title: c.action === 'delete' ? c.path : 'Lihat perubahan',
-        onclick: () => (c.action === 'delete' ? null : showDiff(c, beforeOf(c.path))),
-      },
-      h('span', { class: `badge ${kind(c)}` }, label[kind(c)]),
-      h('span', { class: 'path' }, c.path),
-      c.action === 'delete' ? null : h('span', { class: 'view' }, 'lihat'))),
+      h('div', { class: 'changes-head' }, h('span', {}, `${result.changes.length} perubahan`)),
+      result.changes.map((c) => (c.action === 'table'
+        ? h('button', {
+          type: 'button',
+          class: 'change-row',
+          title: 'Buka di editor database',
+          onclick: () => { dbState.active = c.name; setMode('data'); },
+        },
+        h('span', { class: 'badge table' }, label.table),
+        h('span', { class: 'path' }, `${c.name} (${c.columns.map((col) => col.name).join(', ')})`),
+        h('span', { class: 'view' }, 'buka'))
+        : h('button', {
+          type: 'button',
+          class: 'change-row',
+          title: c.action === 'delete' ? c.path : 'Lihat perubahan',
+          onclick: () => (c.action === 'delete' ? null : showDiff(c, beforeOf(c.path))),
+        },
+        h('span', { class: `badge ${kind(c)}` }, label[kind(c)]),
+        h('span', { class: 'path' }, c.path),
+        c.action === 'delete' ? null : h('span', { class: 'view' }, 'lihat')))),
       actions);
     const setStatus = (text, cls = '') => actions.replaceChildren(h('span', { class: `changes-status ${cls}` }, text));
 
@@ -1141,13 +1174,18 @@
   async function applyChanges(changes) {
     // Simpan isi semua file sebelum mengubah apa pun, supaya bisa dibatalkan seluruhnya.
     const snapshot = [];
-    for (const change of changes) {
+    const fileChanges = changes.filter((c) => c.action !== 'table');
+    for (const change of fileChanges) {
       snapshot.push({ path: change.path, before: fileExists(change.path) ? await currentContent(change.path) : null });
     }
     snapshot.dirsBefore = new Set(state.entries.filter((e) => e.type === 'dir').map((e) => e.path));
 
     try {
-      for (const change of changes) {
+      // Tabel dulu, supaya halaman yang memakai datanya langsung berfungsi di preview.
+      for (const change of changes.filter((c) => c.action === 'table')) {
+        snapshot.push(await applyTableChange(change));
+      }
+      for (const change of fileChanges) {
         const exists = fileExists(change.path);
         if (change.action === 'delete') {
           if (exists) {
@@ -1169,6 +1207,7 @@
     }
 
     await loadTree();
+    if (!$('#dataView').hidden) dbLoad();
     const firstWritten = changes.find((c) => c.action === 'write');
     if (firstWritten) {
       expandTo(firstWritten.path);
@@ -1179,7 +1218,12 @@
   }
 
   async function restoreSnapshot(snapshot) {
-    for (const { path, before } of [...snapshot].reverse()) {
+    for (const entry of [...snapshot].reverse()) {
+      if (entry.table) {
+        await revertTableChange(entry);
+        continue;
+      }
+      const { path, before } = entry;
       const exists = fileExists(path);
       if (before === null) {
         if (exists) {
@@ -1208,7 +1252,32 @@
       }
       if (newDirs.length) await loadTree();
     }
+    if (!$('#dataView').hidden) dbLoad();
     reloadPreview();
+  }
+
+  // Buat tabel baru, atau tambah kolom/buka akses di tabel yang sudah ada. Mengembalikan catatan untuk dibatalkan.
+  async function applyTableChange(change) {
+    const { tables } = await api('GET', '/api/database/tables');
+    const existing = tables.find((t) => t.name === change.name);
+    const rules = Object.fromEntries(change.public.map((op) => [op, 'public']));
+    if (!existing) {
+      await api('POST', '/api/database/tables', { name: change.name, columns: change.columns, rules });
+      return { table: change.name, existed: false };
+    }
+    const addColumns = change.columns.filter((c) => !existing.columns.some((e) => e.name === c.name));
+    const widened = change.public.some((op) => existing.rules[op] !== 'public');
+    if (addColumns.length || widened) await api('PATCH', tableUrl(change.name), { addColumns, rules });
+    return { table: change.name, existed: true, addedColumns: addColumns.map((c) => c.name), beforeRules: existing.rules };
+  }
+
+  async function revertTableChange(entry) {
+    try {
+      if (!entry.existed) await api('DELETE', tableUrl(entry.table));
+      else await api('PATCH', tableUrl(entry.table), { dropColumns: entry.addedColumns, rules: entry.beforeRules });
+    } catch (err) {
+      if (!/tidak ditemukan/i.test(err.message)) throw err;
+    }
   }
 
   // `before` = isi file sebelum perubahan AI ('' untuk file baru).
@@ -1266,6 +1335,7 @@
       btn.onclick = () => setMode(btn.dataset.mode);
     });
     $('#aiReset').onclick = resetAiChat;
+    $('#dbNewTable').onclick = openCreateTable;
     $('#aiCredits').onclick = openTopup;
     $('#aiTopupBtn').onclick = openTopup;
     $('#aiForm').onsubmit = (e) => { e.preventDefault(); sendPrompt(); };
@@ -1277,6 +1347,470 @@
         sendPrompt();
       }
     });
+  }
+
+  // ---------- Database (mode Data) ----------
+  const DB_TYPES = { text: 'Teks', number: 'Angka', boolean: 'Ya/Tidak', date: 'Tanggal' };
+  const DB_OPS = [
+    ['list', 'Lihat daftar'],
+    ['view', 'Lihat satu baris'],
+    ['create', 'Tambah'],
+    ['update', 'Ubah'],
+    ['delete', 'Hapus'],
+  ];
+  const DB_PAGE = 50;
+  const dbState = { tables: [], usage: null, active: null, rows: [], total: 0, offset: 0 };
+  const activeTable = () => dbState.tables.find((t) => t.name === dbState.active);
+  const tableUrl = (name) => `/api/database/tables/${encodeURIComponent(name)}`;
+
+  async function dbLoad() {
+    try {
+      const data = await api('GET', '/api/database/tables');
+      dbState.tables = data.tables;
+      dbState.usage = data.usage;
+    } catch (err) {
+      return toast(err.message, 'error');
+    }
+    if (!activeTable()) {
+      dbState.active = dbState.tables[0]?.name ?? null;
+      dbState.offset = 0;
+    }
+    renderDbSidebar();
+    await dbLoadRows();
+  }
+
+  async function dbLoadRows() {
+    const t = activeTable();
+    if (t) {
+      try {
+        const data = await api('GET', `${tableUrl(t.name)}/rows?limit=${DB_PAGE}&offset=${dbState.offset}`);
+        dbState.rows = data.rows;
+        dbState.total = data.total;
+      } catch (err) {
+        toast(err.message, 'error');
+        dbState.rows = [];
+        dbState.total = 0;
+      }
+    }
+    renderDbMain();
+  }
+
+  function selectDbTable(name) {
+    dbState.active = name;
+    dbState.offset = 0;
+    renderDbSidebar();
+    dbLoadRows();
+  }
+
+  function renderDbSidebar() {
+    $('#dbTableList').replaceChildren(...(dbState.tables.length
+      ? dbState.tables.map((t) => h('button', {
+        type: 'button',
+        class: `db-table-item${t.name === dbState.active ? ' active' : ''}`,
+        onclick: () => selectDbTable(t.name),
+      }, svg(ICON.table), h('span', { class: 'name' }, t.name), h('span', { class: 'count' }, String(t.rowCount))))
+      : [h('div', { class: 'db-empty-list' }, 'Belum ada tabel')]));
+    const u = dbState.usage;
+    if (u) {
+      $('#dbUsage').replaceChildren(
+        `${formatBytes(u.bytes)} / ${formatBytes(u.limits.bytes)} · ${u.tables}/${u.limits.tables} tabel`,
+        h('div', { class: 'usage-bar' }, h('div', { style: `width:${Math.min(100, (u.bytes / u.limits.bytes) * 100)}%` })),
+      );
+    }
+  }
+
+  function formatDbValue(column, value) {
+    if (value === null || value === undefined || value === '') return h('span', { class: 'null' }, '—');
+    if (column.name === 'created_at') {
+      return new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+    }
+    if (column.type === 'boolean') return value ? 'Ya' : 'Tidak';
+    return String(value);
+  }
+
+  function renderDbMain() {
+    const main = $('#dbMain');
+    const t = activeTable();
+    if (!t) {
+      main.replaceChildren(h('div', { class: 'db-empty' },
+        h('div', { class: 'db-empty-icon' }, svg(ICON.table)),
+        h('h3', {}, 'Belum ada tabel'),
+        h('p', {}, 'Tabel menyimpan data dari websitemu — misalnya ucapan tamu, RSVP, atau pesan dari form kontak.'),
+        h('button', { type: 'button', class: 'db-btn primary', onclick: openCreateTable }, '+ Buat tabel'),
+        h('p', { class: 'db-hint' }, 'Atau minta AI di mode Builder, misalnya: "buat form RSVP yang datanya tersimpan".')));
+      return;
+    }
+
+    const publicOps = DB_OPS.filter(([op]) => t.rules[op] === 'public').map(([, label]) => label.toLowerCase());
+    const columns = [{ name: 'id', type: 'number', system: true }, ...t.columns, { name: 'created_at', type: 'date', system: true }];
+
+    const head = h('div', { class: 'db-main-head' },
+      h('div', { class: 'db-title' },
+        h('h3', {}, t.name),
+        h('span', { class: `db-access${publicOps.length ? ' open' : ''}` },
+          publicOps.length ? `Publik: ${publicOps.join(', ')}` : 'Privat — hanya kamu')),
+      h('div', { class: 'db-actions' },
+        h('button', { type: 'button', class: 'icon-btn', title: 'Muat ulang', onclick: dbLoad }, svg(ICON.refresh)),
+        h('button', { type: 'button', class: 'db-btn', onclick: () => openTableSettings(t.name) }, svg(ICON.gear), 'Atur'),
+        h('button', { type: 'button', class: 'db-btn primary', onclick: () => openRowForm(t) }, '+ Baris')));
+
+    const grid = h('table', { class: 'db-grid' },
+      h('thead', {}, h('tr', {},
+        columns.map((c) => h('th', {},
+          h('span', { class: 'col-name' }, c.name),
+          c.required ? h('span', { class: 'col-flag', title: 'Wajib diisi' }, '*') : null,
+          c.private ? h('span', { class: 'col-flag private', title: 'Privat — tidak tampil di API publik' }, svg(ICON.lock)) : null,
+          h('span', { class: 'col-type' }, c.system ? 'otomatis' : DB_TYPES[c.type]))),
+        h('th', { class: 'row-actions' }))),
+      h('tbody', {}, dbState.rows.length
+        ? dbState.rows.map((row) => h('tr', {},
+          columns.map((c) => dbCell(t, row, c)),
+          h('td', { class: 'row-actions' },
+            h('button', { type: 'button', class: 'icon-btn', title: 'Hapus baris', onclick: () => deleteDbRow(t, row) }, svg(ICON.trash)))))
+        : h('tr', {}, h('td', { colspan: String(columns.length + 1), class: 'db-no-rows' },
+          'Belum ada data. Klik "+ Baris", atau kirim data dari websitemu.'))));
+
+    const from = dbState.total ? dbState.offset + 1 : 0;
+    const to = dbState.offset + dbState.rows.length;
+    const pager = h('div', { class: 'db-pager' },
+      h('span', {}, `${from}–${to} dari ${dbState.total} baris`),
+      h('button', {
+        type: 'button', class: 'icon-btn', title: 'Sebelumnya', disabled: dbState.offset === 0,
+        onclick: () => { dbState.offset = Math.max(0, dbState.offset - DB_PAGE); dbLoadRows(); },
+      }, '‹'),
+      h('button', {
+        type: 'button', class: 'icon-btn', title: 'Berikutnya', disabled: to >= dbState.total,
+        onclick: () => { dbState.offset += DB_PAGE; dbLoadRows(); },
+      }, '›'));
+
+    main.replaceChildren(head, h('div', { class: 'db-grid-wrap' }, grid), pager);
+  }
+
+  function dbCell(t, row, column) {
+    if (column.system) return h('td', { class: `sys ${column.name}` }, formatDbValue(column, row[column.name]));
+    if (column.type === 'boolean') {
+      const box = h('input', { type: 'checkbox', 'aria-label': column.name });
+      box.checked = Boolean(row[column.name]);
+      box.onchange = () => saveDbCell(t, row, column, box.checked).catch(() => { box.checked = !box.checked; });
+      return h('td', { class: 'bool' }, box);
+    }
+    const td = h('td', { title: 'Klik dua kali untuk mengubah' }, formatDbValue(column, row[column.name]));
+    td.ondblclick = () => editDbCell(td, t, row, column);
+    return td;
+  }
+
+  function editDbCell(td, t, row, column) {
+    if (td.classList.contains('editing')) return;
+    const original = row[column.name] ?? '';
+    const input = column.type === 'text'
+      ? h('textarea', { rows: '1' })
+      : h('input', {
+        type: column.type === 'number' ? 'number' : 'text',
+        step: column.type === 'number' ? 'any' : null,
+        placeholder: column.type === 'date' ? '2026-12-31' : null,
+      });
+    input.value = String(original);
+    td.classList.add('editing');
+    td.replaceChildren(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = async (commit) => {
+      if (finished) return;
+      finished = true;
+      if (commit && input.value !== String(original)) {
+        try {
+          await saveDbCell(t, row, column, input.value);
+          return;
+        } catch { /* pesan error sudah ditampilkan */ }
+      }
+      td.classList.remove('editing');
+      td.replaceChildren(formatDbValue(column, row[column.name]));
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    };
+    input.onblur = () => finish(true);
+  }
+
+  async function saveDbCell(t, row, column, value) {
+    try {
+      const { row: updated } = await api('PATCH', `${tableUrl(t.name)}/rows/${row.id}`, { [column.name]: value });
+      Object.assign(row, updated);
+      renderDbMain();
+    } catch (err) {
+      toast(err.message, 'error');
+      throw err;
+    }
+  }
+
+  async function deleteDbRow(t, row) {
+    const ok = await modal({
+      title: 'Hapus baris?',
+      message: `Baris #${row.id} di tabel "${t.name}" akan dihapus permanen.`,
+      buttons: [{ label: 'Hapus', value: true, primary: true, danger: true }, { label: 'Batal', value: null }],
+    });
+    if (!ok) return;
+    try {
+      await api('DELETE', `${tableUrl(t.name)}/rows/${row.id}`);
+      if (dbState.rows.length === 1 && dbState.offset > 0) dbState.offset -= DB_PAGE;
+      await dbLoad();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  // Modal kosong untuk form database. Mengembalikan elemen isi dan fungsi tutup.
+  function openPanel(className) {
+    const root = $('#modal');
+    const body = h('div', { class: `modal ${className}` });
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    function close() {
+      root.hidden = true;
+      root.replaceChildren();
+      document.removeEventListener('keydown', onKey, true);
+    }
+    root.replaceChildren(body);
+    root.hidden = false;
+    root.onmousedown = (e) => { if (e.target === root) close(); };
+    document.addEventListener('keydown', onKey, true);
+    return { body, close };
+  }
+
+  function typeSelect(value = 'text') {
+    const select = h('select', {}, Object.entries(DB_TYPES).map(([v, label]) => h('option', { value: v }, label)));
+    select.value = value;
+    return select;
+  }
+
+  function miniCheck(label, checked, title, onChange) {
+    const box = h('input', { type: 'checkbox' });
+    box.checked = Boolean(checked);
+    if (onChange) box.onchange = () => onChange(box.checked);
+    return h('label', { class: 'mini-check', title }, box, label);
+  }
+
+  function openRowForm(t) {
+    const { body, close } = openPanel('db-modal');
+    const inputs = new Map();
+    const fields = t.columns.map((c) => {
+      const input = c.type === 'boolean' ? h('input', { type: 'checkbox' })
+        : c.type === 'text' ? h('textarea', { rows: '2' })
+          : c.type === 'number' ? h('input', { type: 'number', step: 'any' })
+            : h('input', { type: 'text', placeholder: '2026-12-31 atau 2026-12-31T19:00' });
+      inputs.set(c.name, input);
+      return h('label', { class: `db-field ${c.type}` },
+        h('span', { class: 'db-field-label' }, c.name, c.required ? h('span', { class: 'req' }, '*') : null,
+          h('span', { class: 'col-type' }, DB_TYPES[c.type])),
+        input);
+    });
+    const error = h('p', { class: 'db-form-error' });
+    const form = h('form', {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const data = {};
+        for (const c of t.columns) {
+          const el = inputs.get(c.name);
+          if (c.type === 'boolean') data[c.name] = el.checked;
+          else if (el.value !== '') data[c.name] = el.value;
+        }
+        try {
+          await api('POST', `${tableUrl(t.name)}/rows`, data);
+          close();
+          toast('Baris ditambahkan');
+          dbLoad();
+        } catch (err) {
+          error.textContent = err.message;
+        }
+      },
+    },
+    h('h3', {}, `Tambah baris ke ${t.name}`),
+    t.columns.length ? fields : h('p', { class: 'db-note' }, 'Tabel ini belum punya kolom. Tambahkan kolom lewat ⚙ Atur.'),
+    error,
+    h('div', { class: 'modal-buttons' },
+      h('button', { type: 'button', onclick: close }, 'Batal'),
+      h('button', { type: 'submit', class: 'primary' }, 'Simpan')));
+    body.append(form);
+    form.querySelector('input, textarea')?.focus();
+  }
+
+  function openCreateTable() {
+    const { body, close } = openPanel('db-modal wide');
+    const nameInput = h('input', { placeholder: 'contoh: ucapan', spellcheck: 'false', autocomplete: 'off' });
+    const columnList = h('div', { class: 'db-col-list' });
+    const addColumnRow = (preset = {}) => {
+      const name = h('input', { placeholder: 'nama_kolom', spellcheck: 'false', autocomplete: 'off', value: preset.name ?? '' });
+      const type = typeSelect(preset.type);
+      const required = h('input', { type: 'checkbox' });
+      const secret = h('input', { type: 'checkbox' });
+      const row = h('div', { class: 'db-col-row' },
+        name, type,
+        h('label', { class: 'mini-check', title: 'Wajib diisi' }, required, 'Wajib'),
+        h('label', { class: 'mini-check', title: 'Tidak tampil di API publik' }, secret, 'Privat'),
+        h('button', { type: 'button', class: 'icon-btn', title: 'Hapus kolom', onclick: () => row.remove() }, svg(ICON.close)));
+      row.read = () => ({ name: name.value.trim(), type: type.value, required: required.checked, private: secret.checked });
+      columnList.append(row);
+      return name;
+    };
+    addColumnRow({ name: 'nama', type: 'text' });
+
+    const error = h('p', { class: 'db-form-error' });
+    const form = h('form', {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const columns = [...columnList.children].map((row) => row.read()).filter((c) => c.name);
+        try {
+          const { table } = await api('POST', '/api/database/tables', { name: nameInput.value, columns });
+          close();
+          toast(`Tabel ${table.name} dibuat`);
+          dbState.active = table.name;
+          dbState.offset = 0;
+          dbLoad();
+        } catch (err) {
+          error.textContent = err.message;
+        }
+      },
+    },
+    h('h3', {}, 'Tabel baru'),
+    h('label', { class: 'db-field' }, h('span', { class: 'db-field-label' }, 'Nama tabel'), nameInput),
+    h('div', { class: 'db-field-label' }, 'Kolom', h('span', { class: 'col-type' }, 'id dan created_at dibuat otomatis')),
+    columnList,
+    h('button', { type: 'button', class: 'db-add-col', onclick: () => addColumnRow().focus() }, '+ Tambah kolom'),
+    h('p', { class: 'db-note' }, 'Tabel baru bersifat privat. Buka akses di ⚙ Atur supaya websitemu bisa membaca atau mengirim data.'),
+    error,
+    h('div', { class: 'modal-buttons' },
+      h('button', { type: 'button', onclick: close }, 'Batal'),
+      h('button', { type: 'submit', class: 'primary' }, 'Buat tabel')));
+    body.append(form);
+    nameInput.focus();
+  }
+
+  // Tombol berbahaya dengan konfirmasi dua kali klik (modal konfirmasi akan menutup panel ini).
+  function confirmButton(label, onConfirm) {
+    const btn = h('button', { type: 'button', class: 'db-danger' }, label);
+    let armed = false;
+    let timer;
+    btn.onclick = () => {
+      if (armed) {
+        clearTimeout(timer);
+        onConfirm();
+        return;
+      }
+      armed = true;
+      btn.textContent = 'Klik lagi untuk yakin';
+      timer = setTimeout(() => { armed = false; btn.textContent = label; }, 3000);
+    };
+    return btn;
+  }
+
+  function dbSnippets(t) {
+    const url = `/api/db/${t.name}`;
+    const example = { text: 'teks', number: 1, boolean: true, date: '2026-12-31' };
+    const sample = Object.fromEntries(t.columns.map((c) => [c.name, example[c.type]]));
+    const listCode = `// Ambil data, terbaru dulu\nconst res = await fetch('${url}?sort=-created_at');\nconst { rows } = await res.json();`;
+    const createCode = `// Tambah data\nawait fetch('${url}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify(${JSON.stringify(sample)}),\n});`;
+    const block = (title, code, op) => h('div', { class: 'db-snippet' },
+      h('div', { class: 'db-snippet-head' },
+        h('span', {}, title),
+        t.rules[op] !== 'public' ? h('span', { class: 'db-warn', title: 'Buka akses di atas supaya kode ini berfungsi' }, 'Akses belum publik') : null,
+        h('button', { type: 'button', class: 'db-copy', onclick: () => copyText(code, 'Kode disalin') }, 'Salin')),
+      h('pre', {}, h('code', {}, code)));
+    return [
+      block('Membaca data', listCode, 'list'),
+      block('Menambah data', createCode, 'create'),
+      h('p', { class: 'db-section-desc' }, `Filter: ${url}?nama=Budi · Urutkan: ?sort=-created_at · Halaman: ?limit=20&offset=20`),
+    ];
+  }
+
+  function openTableSettings(name) {
+    const { body, close } = openPanel('db-modal wide');
+    let tableName = name;
+
+    const patch = async (payload, message) => {
+      try {
+        const { table } = await api('PATCH', tableUrl(tableName), payload);
+        const i = dbState.tables.findIndex((t) => t.name === tableName);
+        if (i >= 0) dbState.tables[i] = table;
+        if (dbState.active === tableName) dbState.active = table.name;
+        tableName = table.name;
+        if (message) toast(message);
+        renderDbSidebar();
+        dbLoadRows();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+      render();
+    };
+
+    const section = (title, desc, ...children) => h('section', { class: 'db-section' },
+      h('h4', {}, title), desc ? h('p', { class: 'db-section-desc' }, desc) : null, children);
+
+    function render() {
+      const t = dbState.tables.find((x) => x.name === tableName);
+      if (!t) return close();
+      const scroll = body.scrollTop;
+
+      const access = h('div', { class: 'db-access-list' }, DB_OPS.map(([op, label]) => h('div', { class: 'db-access-row' },
+        h('span', {}, label),
+        h('div', { class: 'seg' }, [['public', 'Publik'], ['owner', 'Hanya kamu']].map(([value, text]) => h('button', {
+          type: 'button',
+          class: t.rules[op] === value ? `on ${value}` : '',
+          onclick: () => t.rules[op] !== value && patch({ rules: { [op]: value } }),
+        }, text))))));
+
+      const columnRows = t.columns.map((c) => {
+        const nameInput = h('input', { value: c.name, spellcheck: 'false', title: 'Ganti nama kolom lalu tekan Enter' });
+        nameInput.onchange = () => {
+          const to = nameInput.value.trim();
+          if (to && to !== c.name) patch({ renameColumns: [{ from: c.name, to }] }, 'Nama kolom diganti');
+        };
+        return h('div', { class: 'db-col-row' },
+          nameInput,
+          h('span', { class: 'db-type-fixed' }, DB_TYPES[c.type]),
+          miniCheck('Wajib', c.required, 'Wajib diisi', (v) => patch({ columnFlags: { [c.name]: { required: v } } })),
+          miniCheck('Privat', c.private, 'Tidak tampil di API publik', (v) => patch({ columnFlags: { [c.name]: { private: v } } })),
+          confirmButton('Hapus', () => patch({ dropColumns: [c.name] }, `Kolom ${c.name} dihapus`)));
+      });
+      const newName = h('input', { placeholder: 'kolom_baru', spellcheck: 'false', autocomplete: 'off' });
+      const newType = typeSelect();
+      const addColumn = () => newName.value.trim() && patch({ addColumns: [{ name: newName.value.trim(), type: newType.value }] }, 'Kolom ditambahkan');
+      newName.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addColumn(); } };
+
+      const renameInput = h('input', { value: t.name, spellcheck: 'false' });
+
+      body.replaceChildren(
+        h('div', { class: 'topup-head' },
+          h('div', {}, h('h3', {}, `Atur tabel ${t.name}`), h('p', {}, `${t.rowCount} baris`)),
+          h('button', { type: 'button', class: 'icon-btn', title: 'Tutup', onclick: close }, svg(ICON.close))),
+        section('Akses dari website', 'Siapa yang boleh memakai tabel ini lewat API websitemu. Kamu sendiri selalu bisa mengelola datanya di editor ini.', access),
+        section('Kolom', 'Kolom privat tidak ditampilkan ke pengunjung. Tipe kolom tidak bisa diubah setelah dibuat.',
+          columnRows,
+          h('div', { class: 'db-col-row add' }, newName, newType, h('button', { type: 'button', class: 'db-btn', onclick: addColumn }, '+ Tambah'))),
+        section('Pakai di websitemu', null, dbSnippets(t)),
+        section('Tabel', null, h('div', { class: 'db-col-row' },
+          renameInput,
+          h('button', {
+            type: 'button',
+            class: 'db-btn',
+            onclick: () => renameInput.value.trim() !== t.name && patch({ rename: renameInput.value.trim() }, 'Nama tabel diganti'),
+          }, 'Ganti nama'),
+          confirmButton('Hapus tabel', async () => {
+            try {
+              await api('DELETE', tableUrl(t.name));
+              close();
+              toast(`Tabel ${t.name} dihapus`);
+              dbState.active = null;
+              dbLoad();
+            } catch (err) {
+              toast(err.message, 'error');
+            }
+          }))),
+      );
+      body.scrollTop = scroll;
+    }
+    render();
   }
 
   // ---------- Isi ulang kredit (QRIS) ----------

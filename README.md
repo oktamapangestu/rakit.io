@@ -29,6 +29,9 @@ src/
   ai.js        asisten AI: konteks proyek, panggilan ke provider AI
   credits.js   kredit AI: jatah gratis bulanan + saldo yang dibeli
   billing.js   isi ulang kredit via QRIS (Kasera Pay) + webhook
+  userdb.js    database per proyek (SQLite), validasi & aturan akses
+  database.js  API editor database (khusus pemilik)
+  siteapi.js   API publik /api/db/* di domain user
   db.js        skema SQLite
 public/        landing page + editor (Monaco dari CDN jsDelivr)
 templates/     file awal untuk user baru
@@ -47,11 +50,14 @@ Konfigurasi di `.env`:
 |---|---|---|
 | `AI_BASE_URL` | — | Wajib. Contoh: `https://api.kelontongai.id/v1` |
 | `AI_API_KEY` | — | Wajib. Tanpa ini fitur AI nonaktif. |
-| `AI_MODEL` | `deepseek-v4.1-flash` | Nama model di provider. |
+| `AI_MODEL` | `deepseek-v4-pro` | Nama model di provider. |
 | `AI_MAX_TOKENS` | `32000` | Batas token output per prompt. |
+| `AI_DEBUG` | — | Isi `1` untuk mencetak jawaban mentah AI ke log (berisi kode user — jangan di production). |
 | `AI_MONTHLY_CREDITS` | `30` | Kredit gratis per user per bulan (reset tanggal 1, UTC). |
 | `AI_CREDITS_PER_PROMPT` | `1` | Kredit yang dipakai per prompt. |
 
+- Mode **Builder** memakai *tool calling* (`write_file`, `delete_file`, `create_table`); server memvalidasi setiap
+  panggilan dan memeriksa alamat `/api/db/...` di kode sebelum hasilnya dikirim ke editor. Mode **Plan** hanya teks.
 - Kredit dipotong di awal dan **dikembalikan** kalau request gagal, dihentikan, atau ditolak.
 - Setiap request dicatat di tabel `ai_requests` (token input/output) untuk memantau biaya:
   ```sql
@@ -78,6 +84,29 @@ Di dashboard Kasera, daftarkan URL webhook: `https://rakit.icu/api/billing/webho
   tetap berfungsi di localhost tanpa webhook.
 - Setiap pembayaran hanya menambah kredit sekali, walaupun webhook terkirim berulang.
 - Riwayat pembayaran ada di tabel `payments`.
+
+## Database proyek
+
+Setiap proyek punya database sendiri (satu file SQLite di `data/db/<username>.db`) yang dikelola lewat
+mode **Data** di editor: buat tabel, atur kolom, dan lihat/ubah isi seperti spreadsheet.
+
+Website user memakainya lewat API otomatis di domainnya sendiri:
+
+| Request | Fungsi |
+|---|---|
+| `GET /api/db/<tabel>?sort=-created_at&limit=20&offset=0&<kolom>=<nilai>` | daftar baris → `{ rows, total }` |
+| `GET /api/db/<tabel>/<id>` | satu baris |
+| `POST /api/db/<tabel>` | tambah baris (body JSON) |
+| `PATCH /api/db/<tabel>/<id>` | ubah baris |
+| `DELETE /api/db/<tabel>/<id>` | hapus baris |
+
+- Setiap operasi per tabel diatur **Publik** atau **Hanya pemilik** (default: semua hanya pemilik).
+- Kolom **privat** tidak pernah dikirim lewat API publik.
+- Tipe kolom: teks, angka, ya/tidak, tanggal. Kolom `id` dan `created_at` otomatis.
+- Batas per proyek: 10 MB, 20 tabel, 30 kolom per tabel (`DB_LIMITS` di `src/userdb.js`).
+- Rate limit API publik per situs per IP: 300 baca dan 60 tulis per menit.
+- Path `/api/` di domain user dicadangkan untuk sistem.
+- Di mode Builder, AI bisa membuat tabel sendiri; perubahannya ikut dikonfirmasi (Simpan/Batalkan).
 
 ## Batasan (ubah di `src/files.js` → `LIMITS`)
 

@@ -5,6 +5,7 @@ import { HttpError } from './http-error.js';
 import { usernameError } from './username.js';
 import { ai } from './ai.js';
 import { billing } from './billing.js';
+import { database } from './database.js';
 import {
   clearSessionCookie, createSession, destroySession, hashPassword, rateLimit,
   requireAuth, requireSameOrigin, setSessionCookie, verifyPassword,
@@ -119,5 +120,6 @@ api.delete('/files', async (req, res) => {
 
 api.use('/ai', ai);
 api.use('/billing', billing);
+api.use('/database', database);
 
 api.use((req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan' }));
