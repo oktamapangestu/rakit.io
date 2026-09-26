@@ -295,7 +295,7 @@
     const el = $('#breadcrumbs');
     if (!state.active) return el.replaceChildren();
     const parts = state.active.split('/');
-    el.replaceChildren(...parts.flatMap((part, i) => [i ? h('span', { class: 'sep' }, '›') : null, h('span', {}, part)]));
+    el.replaceChildren(...parts.flatMap((part, i) => (i ? [h('span', { class: 'sep' }, '›'), h('span', {}, part)] : [h('span', {}, part)])));
   }
 
   function disposeFile(path) {
@@ -601,31 +601,40 @@
 
     document.querySelectorAll('.splitter').forEach((splitter) => {
       splitter.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
         e.preventDefault();
         const target = $(`#${splitter.dataset.target}`);
-        splitter.setPointerCapture(e.pointerId);
+
+        // Lapisan transparan di atas semua elemen (termasuk iframe preview & Monaco) selama drag:
+        // kursor tetap col-resize dan semua gerakan mouse tertangkap di dokumen ini.
+        const overlay = h('div', { class: 'resize-overlay' });
+        document.body.append(overlay);
         splitter.classList.add('dragging');
-        document.body.classList.add('resizing');
 
         const onMove = (ev) => {
+          if (ev.buttons === 0) return end(); // tombol sudah dilepas di luar jangkauan (mis. di luar jendela)
           const rect = target.getBoundingClientRect();
           const width = splitter.dataset.target === 'sidebar'
             ? Math.min(Math.max(ev.clientX - rect.left, 160), 600)
             : Math.min(Math.max(rect.right - ev.clientX, 240), innerWidth - 480);
           target.style.width = `${width}px`;
         };
-        const onUp = () => {
-          splitter.removeEventListener('pointermove', onMove);
+        const end = () => {
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', end);
+          window.removeEventListener('pointercancel', end);
+          window.removeEventListener('blur', end);
+          overlay.remove();
           splitter.classList.remove('dragging');
-          document.body.classList.remove('resizing');
           storage.set('rakit.widths', {
             sidebar: $('#sidebar').getBoundingClientRect().width || widths.sidebar,
             preview: $('#preview').getBoundingClientRect().width || widths.preview,
           });
         };
-        splitter.addEventListener('pointermove', onMove);
-        splitter.addEventListener('pointerup', onUp, { once: true });
-        splitter.addEventListener('pointercancel', onUp, { once: true });
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', end);
+        window.addEventListener('pointercancel', end);
+        window.addEventListener('blur', end);
       });
     });
   }
@@ -718,7 +727,7 @@
     });
 
     window.addEventListener('beforeunload', (e) => {
-      if (state.tabs.some(isDirty)) e.preventDefault();
+      if (state.tabs.some(isDirty) || ai.pending || ai.applying) e.preventDefault();
     });
   }
 
@@ -729,14 +738,50 @@
     history: [], // {role, content} untuk konteks percakapan
     busy: false,
     controller: null,
+    mode: storage.get('rakit.aiMode', 'build'), // 'build' (Builder) | 'plan' (Plan)
+    pending: null, // perubahan Builder yang sudah diterapkan tapi belum dikonfirmasi
+    applying: false,
   };
 
-  const AI_SUGGESTIONS = [
-    'Buat landing page portofolio yang modern',
-    'Tambahkan navbar responsif dengan menu hamburger',
-    'Tambahkan tombol dark mode',
-    'Jelaskan kode di file yang sedang dibuka',
-  ];
+  const AI_MODES = {
+    build: {
+      title: 'Mau bikin apa hari ini?',
+      intro: 'AI membaca semua file proyekmu lalu menulis atau mengubah kodenya. Kamu bisa cek dulu sebelum menerapkan.',
+      placeholder: 'Minta AI membuat atau mengubah kode… (Enter kirim, Shift+Enter baris baru)',
+      suggestions: [
+        'Buat landing page portofolio yang modern',
+        'Tambahkan navbar responsif dengan menu hamburger',
+        'Tambahkan tombol dark mode',
+        'Jelaskan kode di file yang sedang dibuka',
+      ],
+    },
+    plan: {
+      title: 'Rencanakan dulu, bangun kemudian',
+      intro: 'Diskusikan idemu dengan AI tanpa mengubah file apa pun. Kalau rencananya sudah pas, jalankan dengan satu klik.',
+      placeholder: 'Ceritakan website yang ingin kamu buat… AI tidak akan mengubah file.',
+      suggestions: [
+        'Rencanakan website toko online sederhana',
+        'Halaman apa saja yang dibutuhkan untuk portofolio?',
+        'Beri saran tampilan yang lebih menarik untuk websiteku',
+        'Rencanakan website undangan pernikahan',
+      ],
+    },
+  };
+
+  function setAiMode(mode) {
+    ai.mode = mode === 'plan' ? 'plan' : 'build';
+    storage.set('rakit.aiMode', ai.mode);
+    document.querySelectorAll('[data-ai-mode]').forEach((btn) => {
+      btn.setAttribute('aria-checked', String(btn.dataset.aiMode === ai.mode));
+    });
+    $('#aiInput').placeholder = AI_MODES[ai.mode].placeholder;
+    // Perbarui halaman sambutan kalau belum ada percakapan.
+    const box = $('#aiMessages');
+    if (box.querySelector('.ai-empty')) {
+      box.replaceChildren();
+      renderAiEmpty();
+    }
+  }
 
   function renderCredits() {
     const badge = $('#aiCredits');
@@ -763,7 +808,7 @@
 
   function updateAiComposer() {
     const c = ai.credits;
-    const canSend = c?.enabled && c.remaining >= c.costPerPrompt && !ai.busy;
+    const canSend = c?.enabled && c.remaining >= c.costPerPrompt && !ai.busy && !ai.applying;
     $('#aiSend').disabled = !canSend || !$('#aiInput').value.trim();
     $('#aiInput').disabled = !c?.enabled;
     $('#aiContext').textContent = state.active ? `konteks: ${state.active}` : 'konteks: semua file';
@@ -773,14 +818,15 @@
     const box = $('#aiMessages');
     if (box.children.length) return;
     if (ai.credits && !ai.credits.enabled) {
-      box.append(h('div', { class: 'ai-notice' }, 'Fitur AI belum diaktifkan di server ini. Admin perlu mengisi ANTHROPIC_API_KEY.'));
+      box.append(h('div', { class: 'ai-notice' }, 'Fitur AI belum diaktifkan di server ini.'));
       return;
     }
+    const copy = AI_MODES[ai.mode];
     box.append(h('div', { class: 'ai-empty' },
       h('div', { class: 'spark' }, svg(SPARK)),
-      h('h3', {}, 'Mau bikin apa hari ini?'),
-      h('p', {}, 'AI bisa membaca semua file proyekmu lalu menulis atau mengubah kodenya. Kamu bisa cek dulu sebelum menerapkan.'),
-      h('div', { class: 'ai-suggestions' }, AI_SUGGESTIONS.map((text) => h('button', {
+      h('h3', {}, copy.title),
+      h('p', {}, copy.intro),
+      h('div', { class: 'ai-suggestions' }, copy.suggestions.map((text) => h('button', {
         type: 'button',
         onclick: () => { $('#aiInput').value = text; sendPrompt(); },
       }, text)))));
@@ -799,7 +845,6 @@
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.setAttribute('aria-selected', String(btn.dataset.mode === mode));
     });
-    storage.set('rakit.mode', mode);
     if (mode === 'ai') {
       renderAiEmpty();
       updateAiComposer();
@@ -849,11 +894,14 @@
   async function sendPrompt() {
     const input = $('#aiInput');
     const prompt = input.value.trim();
-    if (!prompt || ai.busy) return;
+    if (!prompt || ai.busy || ai.applying) return;
+    // Prompt baru = perubahan sebelumnya yang belum dikonfirmasi dianggap disimpan.
+    ai.pending?.keep();
 
     const box = $('#aiMessages');
     box.querySelector('.ai-empty')?.remove();
-    box.append(h('div', { class: 'msg user' }, prompt));
+    const mode = ai.mode;
+    box.append(h('div', { class: 'msg user' }, mode === 'plan' ? h('span', { class: 'msg-mode' }, 'Plan') : null, prompt));
     input.value = '';
     autoGrow();
 
@@ -873,7 +921,7 @@
       const res = await fetch('/api/ai/prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, activePath: state.active, history: ai.history }),
+        body: JSON.stringify({ prompt, mode, activePath: state.active, history: ai.history }),
         signal: ai.controller.signal,
       });
       if (!res.ok) {
@@ -937,6 +985,21 @@
         list = null;
         continue;
       }
+      if (line.trim().startsWith('|')) {
+        const rows = [];
+        for (; i < lines.length && lines[i].trim().startsWith('|'); i++) {
+          const cells = lines[i].trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+          if (!cells.every((c) => /^:?-{2,}:?$/.test(c))) rows.push(cells); // lewati baris pemisah |---|
+        }
+        i--;
+        if (!rows.length) continue;
+        const [headRow, ...bodyRows] = rows;
+        out.append(h('div', { class: 'md-table' }, h('table', {},
+          h('thead', {}, h('tr', {}, headRow.map((c) => h('th', {}, inlineMd(c))))),
+          h('tbody', {}, bodyRows.map((r) => h('tr', {}, r.map((c) => h('td', {}, inlineMd(c)))))))));
+        list = null;
+        continue;
+      }
       const heading = line.match(/^#{1,6}\s+(.*)/);
       const item = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);
       if (heading) {
@@ -957,11 +1020,28 @@
 
   function renderAiReply(result) {
     const wrap = h('div', { class: 'msg assistant' }, renderMarkdown(result.message || 'Selesai.'));
+    if (result.mode === 'plan') {
+      wrap.classList.add('plan');
+      wrap.prepend(h('div', { class: 'plan-label' }, 'Rencana'));
+      const runBtn = h('button', { type: 'button', class: 'plan-run' }, '▶ Jalankan rencana ini');
+      runBtn.onclick = () => {
+        if (ai.busy) return;
+        runBtn.disabled = true;
+        runBtn.textContent = 'Dijalankan di mode Builder';
+        setAiMode('build');
+        $('#aiInput').value = 'Jalankan rencana di atas.';
+        sendPrompt();
+      };
+      wrap.append(runBtn);
+      return wrap;
+    }
     if (!result.changes.length) return wrap;
 
     const existing = new Set(state.entries.filter((e) => e.type === 'file').map((e) => e.path));
     const kind = (c) => (c.action === 'delete' ? 'delete' : existing.has(c.path) ? 'edit' : 'new');
     const label = { new: 'baru', edit: 'ubah', delete: 'hapus' };
+    let snapshot = null;
+    const beforeOf = (path) => snapshot?.find((s) => s.path === path)?.before ?? '';
 
     const actions = h('div', { class: 'changes-actions' });
     const card = h('div', { class: 'changes' },
@@ -970,49 +1050,71 @@
         type: 'button',
         class: 'change-row',
         title: c.action === 'delete' ? c.path : 'Lihat perubahan',
-        onclick: () => (c.action === 'delete' ? null : showDiff(c)),
+        onclick: () => (c.action === 'delete' ? null : showDiff(c, beforeOf(c.path))),
       },
       h('span', { class: `badge ${kind(c)}` }, label[kind(c)]),
       h('span', { class: 'path' }, c.path),
       c.action === 'delete' ? null : h('span', { class: 'view' }, 'lihat'))),
       actions);
+    const setStatus = (text, cls = '') => actions.replaceChildren(h('span', { class: `changes-status ${cls}` }, text));
 
-    const showPending = () => {
-      const applyBtn = h('button', { type: 'button', class: 'apply' }, 'Terapkan');
-      const skipBtn = h('button', { type: 'button' }, 'Abaikan');
-      applyBtn.onclick = async () => {
-        applyBtn.disabled = skipBtn.disabled = true;
-        applyBtn.textContent = 'Menerapkan…';
-        try {
-          const snapshot = await applyChanges(result.changes);
-          showApplied(snapshot);
-        } catch (err) {
-          toast(`Gagal menerapkan: ${err.message}`, 'error');
-          applyBtn.disabled = skipBtn.disabled = false;
-          applyBtn.textContent = 'Terapkan';
-        }
-      };
-      skipBtn.onclick = () => actions.replaceChildren(h('span', { class: 'changes-status muted' }, 'Diabaikan'));
-      actions.replaceChildren(applyBtn, skipBtn);
+    // Perubahan langsung diterapkan (preview ikut berubah), lalu user memilih Simpan atau Batalkan.
+    const pending = {
+      settled: false,
+      keep() {
+        if (pending.settled) return;
+        pending.settled = true;
+        if (ai.pending === pending) ai.pending = null;
+        setStatus('✓ Perubahan disimpan');
+      },
     };
 
-    const showApplied = (snapshot) => {
-      const undoBtn = h('button', { type: 'button' }, 'Batalkan');
-      undoBtn.onclick = async () => {
-        undoBtn.disabled = true;
+    const showConfirm = () => {
+      const keepBtn = h('button', { type: 'button', class: 'apply' }, '✓ Simpan');
+      const revertBtn = h('button', { type: 'button' }, 'Batalkan');
+      keepBtn.onclick = pending.keep;
+      revertBtn.onclick = async () => {
+        keepBtn.disabled = revertBtn.disabled = true;
+        revertBtn.textContent = 'Mengembalikan…';
+        ai.applying = true;
+        updateAiComposer();
         try {
           await restoreSnapshot(snapshot);
-          toast('Perubahan AI dibatalkan');
-          showPending();
+          pending.settled = true;
+          if (ai.pending === pending) ai.pending = null;
+          setStatus('↩ Dibatalkan — file dikembalikan ke versi sebelumnya', 'muted');
         } catch (err) {
           toast(`Gagal membatalkan: ${err.message}`, 'error');
-          undoBtn.disabled = false;
+          keepBtn.disabled = revertBtn.disabled = false;
+          revertBtn.textContent = 'Batalkan';
+        } finally {
+          ai.applying = false;
+          updateAiComposer();
         }
       };
-      actions.replaceChildren(h('span', { class: 'changes-status' }, '✓ Diterapkan'), undoBtn);
+      actions.replaceChildren(
+        h('span', { class: 'changes-question' }, 'Perubahan sudah tampil di preview. Simpan perubahan ini?'),
+        keepBtn,
+        revertBtn,
+      );
     };
 
-    showPending();
+    setStatus('Menerapkan perubahan…', 'muted');
+    ai.applying = true;
+    updateAiComposer();
+    applyChanges(result.changes)
+      .then((snap) => {
+        snapshot = snap;
+        ai.pending = pending;
+        showConfirm();
+      })
+      .catch((err) => setStatus(`Gagal menerapkan: ${err.message}. File dikembalikan seperti semula.`, 'error'))
+      .finally(() => {
+        ai.applying = false;
+        updateAiComposer();
+        aiScroll();
+      });
+
     wrap.append(card);
     return wrap;
   }
@@ -1037,23 +1139,35 @@
   const fileExists = (path) => state.entries.some((e) => e.path === path && e.type === 'file');
 
   async function applyChanges(changes) {
+    // Simpan isi semua file sebelum mengubah apa pun, supaya bisa dibatalkan seluruhnya.
     const snapshot = [];
     for (const change of changes) {
-      const exists = fileExists(change.path);
-      snapshot.push({ path: change.path, before: exists ? await currentContent(change.path) : null });
-      if (change.action === 'delete') {
-        if (exists) {
-          await api('DELETE', `/api/files?path=${encodeURIComponent(change.path)}`);
-          removeTabs((p) => p === change.path);
-        }
-      } else {
-        if (!exists) {
-          await api('POST', '/api/files', { path: change.path, type: 'file' });
-          state.entries.push({ path: change.path, name: baseName(change.path), type: 'file', size: 0 });
-        }
-        await writeFileContent(change.path, change.content);
-      }
+      snapshot.push({ path: change.path, before: fileExists(change.path) ? await currentContent(change.path) : null });
     }
+    snapshot.dirsBefore = new Set(state.entries.filter((e) => e.type === 'dir').map((e) => e.path));
+
+    try {
+      for (const change of changes) {
+        const exists = fileExists(change.path);
+        if (change.action === 'delete') {
+          if (exists) {
+            await api('DELETE', `/api/files?path=${encodeURIComponent(change.path)}`);
+            removeTabs((p) => p === change.path);
+            state.entries = state.entries.filter((e) => e.path !== change.path);
+          }
+        } else {
+          if (!exists) {
+            await api('POST', '/api/files', { path: change.path, type: 'file' });
+            state.entries.push({ path: change.path, name: baseName(change.path), type: 'file', size: 0 });
+          }
+          await writeFileContent(change.path, change.content);
+        }
+      }
+    } catch (err) {
+      await restoreSnapshot(snapshot).catch(() => {});
+      throw err;
+    }
+
     await loadTree();
     const firstWritten = changes.find((c) => c.action === 'write');
     if (firstWritten) {
@@ -1061,7 +1175,6 @@
       await openFile(firstWritten.path);
     }
     reloadPreview();
-    toast(`${changes.length} perubahan diterapkan`);
     return snapshot;
   }
 
@@ -1083,11 +1196,23 @@
       }
     }
     await loadTree();
+    // Folder yang dibuat oleh perubahan AI dan kini kosong ikut dihapus (terdalam dulu).
+    if (snapshot.dirsBefore) {
+      const newDirs = state.entries
+        .filter((e) => e.type === 'dir' && !snapshot.dirsBefore.has(e.path))
+        .sort((a, b) => b.path.length - a.path.length);
+      for (const dir of newDirs) {
+        if (state.entries.some((e) => e.path.startsWith(`${dir.path}/`))) continue;
+        await api('DELETE', `/api/files?path=${encodeURIComponent(dir.path)}`);
+        state.entries = state.entries.filter((e) => e.path !== dir.path);
+      }
+      if (newDirs.length) await loadTree();
+    }
     reloadPreview();
   }
 
-  async function showDiff(change) {
-    const before = fileExists(change.path) ? await currentContent(change.path).catch(() => '') : '';
+  // `before` = isi file sebelum perubahan AI ('' untuk file baru).
+  function showDiff(change, before) {
     const root = $('#modal');
     const body = h('div', { class: 'diff-body' });
     let diffEditor;
@@ -1133,6 +1258,10 @@
   }
 
   function bindAiEvents() {
+    document.querySelectorAll('[data-ai-mode]').forEach((btn) => {
+      btn.onclick = () => { setAiMode(btn.dataset.aiMode); $('#aiInput').focus(); };
+    });
+    setAiMode(ai.mode);
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.onclick = () => setMode(btn.dataset.mode);
     });
@@ -1210,13 +1339,12 @@
       },
       h('span', { class: 'pkg-credits' }, String(pkg.credits)),
       h('span', { class: 'pkg-label' }, 'kredit'),
-      h('span', { class: 'pkg-price' }, rupiah(pkg.price)),
-      h('span', { class: 'pkg-per' }, `${rupiah(Math.round(pkg.price / pkg.credits))} / prompt`)));
+      h('span', { class: 'pkg-price' }, rupiah(pkg.price))));
       const mark = () => cards.forEach((card, i) => card.classList.toggle('selected', data.packages[i] === selected));
       mark();
 
       const c = data.credits;
-      body.replaceChildren(
+      body.replaceChildren(...[
         head('Isi ulang kredit AI', 'Kredit yang dibeli tidak hangus, dan dipakai setelah kredit gratis bulananmu habis.'),
         h('div', { class: 'topup-balance' },
           h('span', {}, 'Sisa kredit sekarang'),
@@ -1226,7 +1354,7 @@
         h('div', { class: 'modal-buttons' },
           h('button', { type: 'button', onclick: close }, 'Batal'),
           h('button', { type: 'button', class: 'primary', onclick: () => startPayment(selected) }, 'Bayar dengan QRIS')),
-      );
+      ].filter(Boolean)); // replaceChildren() bawaan browser menulis null sebagai teks "null"
     }
 
     async function startPayment(pkg) {
@@ -1443,7 +1571,7 @@
     for (const path of first) await openFile(path);
     if (first.length) activate(first[0]);
     else activate(null);
-    setMode(storage.get('rakit.mode', 'code'));
+    setMode('ai'); // editor selalu dibuka di mode AI
   }
 
   init().catch((err) => {

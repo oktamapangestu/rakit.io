@@ -67,7 +67,7 @@
       </aside>
       <div class="splitter" data-target="sidebar"><i></i></div>
 
-      <main class="panel editor-area" id="editorArea" data-mode="code">
+      <main class="panel editor-area" id="editorArea" data-mode="ai">
         <div class="editor-top">
           <div class="tabs" id="tabs"></div>
           <div class="ai-head">
@@ -92,7 +92,7 @@
           </div>
         </div>
 
-        <div class="code-view" id="codeView">
+        <div class="code-view" id="codeView" hidden>
           <div class="breadcrumbs" id="breadcrumbs"></div>
           <div class="editor-wrap">
             <div id="editor"></div>
@@ -134,7 +134,7 @@
           </footer>
         </div>
 
-        <div class="ai-view" id="aiPanel" hidden>
+        <div class="ai-view" id="aiPanel">
           <div class="ai-messages" id="aiMessages"></div>
           <div class="ai-topup" id="aiTopupBanner" hidden>
             <span id="aiTopupText">Kredit AI kamu habis.</span>
@@ -144,6 +144,16 @@
             <textarea id="aiInput" rows="3" maxlength="4000"
                       placeholder="Minta AI membuat atau mengubah kode… (Enter kirim, Shift+Enter baris baru)"></textarea>
             <div class="ai-composer-foot">
+              <div class="ai-mode" role="radiogroup" aria-label="Mode AI">
+                <button type="button" role="radio" data-ai-mode="build" title="AI langsung menulis dan mengubah file">
+                  <svg viewBox="0 0 16 16"><path d="M9.8 1.2a3.8 3.8 0 0 0-4.6 4.9L1 10.3a1.7 1.7 0 0 0 2.4 2.4l4.2-4.2a3.8 3.8 0 0 0 4.9-4.6l-2 2-1.8-.3-.3-1.8zM2.3 11.6l4.5-4.5.1.1.4.4-4.5 4.5a.4.4 0 0 1-.5-.5"/></svg>
+                  Builder
+                </button>
+                <button type="button" role="radio" data-ai-mode="plan" title="Diskusi & susun rencana, tanpa mengubah file">
+                  <svg viewBox="0 0 16 16"><path d="M2 3h1.5v1.5H2zm3 .25h9v1H5zM2 7.25h1.5v1.5H2zm3 .25h9v1H5zM2 11.5h1.5V13H2zm3 .25h9v1H5z"/></svg>
+                  Plan
+                </button>
+              </div>
               <span class="ai-context" id="aiContext"></span>
               <button class="ai-send" id="aiSend" type="submit" title="Kirim">
                 <svg viewBox="0 0 16 16"><path d="M1 1.5 15 8 1 14.5l2-6.5 6-.5v-1l-6-.5z"/></svg>
