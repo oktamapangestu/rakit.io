@@ -38,6 +38,8 @@ export const config = {
       return { id: `p${credits}`, credits, price };
     }).filter((p) => p.credits > 0 && p.price > 0),
   },
+  // Email pemilik platform yang boleh membuka dashboard /admin (dipisah koma).
+  adminEmails: (env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
   siteHost: (username) => `${username}.${baseDomain}`,
   siteUrl: (username) => `${protocol}://${username}.${baseDomain}${portSuffix}`,
 };

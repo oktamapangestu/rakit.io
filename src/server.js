@@ -8,6 +8,7 @@ import { api } from './api.js';
 import { kaseraWebhook } from './billing.js';
 import { serveSite } from './sites.js';
 import { siteApi } from './siteapi.js';
+import { isAdmin } from './admin.js';
 import { USERNAME_RE } from './username.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
@@ -58,6 +59,13 @@ app.get('/editor', (req, res) => {
   if (!req.user) return res.redirect('/');
   res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(PUBLIC_DIR, 'editor.html'));
+});
+
+app.get('/admin', (req, res) => {
+  if (!req.user) return res.redirect('/');
+  if (!isAdmin(req.user)) return res.redirect('/editor');
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
 });
 
 app.use(express.static(PUBLIC_DIR, { index: false }));

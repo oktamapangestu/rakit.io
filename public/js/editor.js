@@ -573,6 +573,7 @@
       { label: 'Salin URL website', run: () => copyText(state.me.siteUrl) },
       { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
       ai.credits?.topupEnabled && { label: 'Isi ulang kredit AI', run: openTopup },
+      state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
       '-',
       { label: 'Keluar', danger: true, run: logout },
     ]);

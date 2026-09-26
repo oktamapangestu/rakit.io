@@ -32,6 +32,7 @@ src/
   userdb.js    database per proyek (SQLite), validasi & aturan akses
   database.js  API editor database (khusus pemilik)
   siteapi.js   API publik /api/db/* di domain user
+  admin.js     dashboard pemilik: statistik platform (khusus ADMIN_EMAILS)
   db.js        skema SQLite
 public/        landing page + editor (Monaco dari CDN jsDelivr)
 templates/     file awal untuk user baru
@@ -107,6 +108,15 @@ Website user memakainya lewat API otomatis di domainnya sendiri:
 - Rate limit API publik per situs per IP: 300 baca dan 60 tulis per menit.
 - Path `/api/` di domain user dicadangkan untuk sistem.
 - Di mode Builder, AI bisa membuat tabel sendiri; perubahannya ikut dikonfirmasi (Simpan/Batalkan).
+
+## Dashboard pemilik
+
+`https://rakit.icu/admin` menampilkan statistik platform: pengguna, pendapatan, request AI (termasuk
+yang gagal per status dan pemakaian token), kredit terjual, pengguna paling aktif, transaksi dan
+pendaftar terbaru, serta ukuran penyimpanan. Periode bisa dipilih 7/30/90 hari (waktu WIB).
+
+Hanya akun dengan email di `ADMIN_EMAILS` (dipisah koma) yang bisa membukanya; link-nya muncul di
+menu avatar editor. Pengguna lain diarahkan kembali ke editor, dan API `/api/admin/*` menolak dengan 403.
 
 ## Batasan (ubah di `src/files.js` → `LIMITS`)
 

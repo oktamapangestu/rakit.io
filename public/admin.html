@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard — rakit.icu</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/editor"><img class="logo" src="/logo.svg" alt=""><span class="wordmark">rakit<span class="dim">.icu</span></span></a>
+    <span class="page-title">Dashboard pemilik</span>
+    <div class="top-actions">
+      <div class="range" role="radiogroup" aria-label="Periode">
+        <button type="button" role="radio" data-days="7">7 hari</button>
+        <button type="button" role="radio" data-days="30">30 hari</button>
+        <button type="button" role="radio" data-days="90">90 hari</button>
+      </div>
+      <button type="button" class="icon-btn" id="refresh" title="Muat ulang">
+        <svg viewBox="0 0 16 16"><path d="M13.45 5.17A6 6 0 1 0 14 8h-1a5 5 0 1 1-.8-2.73l-1.7.23.14 1 3.4-.5-.5-3.4-1 .14z"/></svg>
+      </button>
+      <a class="back" href="/editor">Ke editor</a>
+    </div>
+  </header>
+
+  <main class="page" id="page">
+    <p class="loading">Memuat statistik…</p>
+  </main>
+
+  <div class="tooltip" id="tooltip" role="status" hidden></div>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import { usernameError } from './username.js';
 import { ai } from './ai.js';
 import { billing } from './billing.js';
 import { database } from './database.js';
+import { admin, isAdmin } from './admin.js';
 import {
   clearSessionCookie, createSession, destroySession, hashPassword, rateLimit,
   requireAuth, requireSameOrigin, setSessionCookie, verifyPassword,
@@ -79,7 +80,7 @@ api.post('/logout', (req, res) => {
 });
 
 api.get('/me', requireAuth, (req, res) => {
-  res.json({ user: publicUser(req.user) });
+  res.json({ user: { ...publicUser(req.user), isAdmin: isAdmin(req.user) } });
 });
 
 // ---- File ----
@@ -121,5 +122,6 @@ api.delete('/files', async (req, res) => {
 api.use('/ai', ai);
 api.use('/billing', billing);
 api.use('/database', database);
+api.use('/admin', admin);
 
 api.use((req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan' }));
