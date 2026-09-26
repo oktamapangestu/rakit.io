@@ -86,7 +86,11 @@
       throw new Error('Sesi berakhir');
     }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
+    if (!res.ok) {
+      const err = new Error(data.error || `Gagal (${res.status})`);
+      err.code = data.code;
+      throw err;
+    }
     return data;
   }
 
@@ -479,6 +483,7 @@
   // ---------- Context menu ----------
   function showMenu(x, y, items) {
     const menu = $('#ctxmenu');
+    menu.classList.remove('history-menu');
     menu.replaceChildren(...items.filter(Boolean).map((item) => (item === '-'
       ? h('div', { class: 'sep' })
       : h('button', { class: item.danger ? 'danger' : '', onclick: () => { hideMenu(); item.run(); } },
@@ -759,7 +764,7 @@
     });
 
     window.addEventListener('beforeunload', (e) => {
-      if (state.tabs.some(isDirty) || ai.pending || ai.applying) e.preventDefault();
+      if (state.tabs.some(isDirty)) e.preventDefault();
     });
   }
 
@@ -767,12 +772,13 @@
   const SPARK = 'M8 0l1.6 4.4L14 6l-4.4 1.6L8 12 6.4 7.6 2 6l4.4-1.6zM13 10l.8 2.2L16 13l-2.2.8L13 16l-.8-2.2L10 13l2.2-.8z';
   const ai = {
     credits: null,
-    history: [], // {role, content} untuk konteks percakapan
-    busy: false,
-    controller: null,
+    busy: false, // ada job AI yang sedang diikuti editor ini
+    jobId: null, // id pesan AI yang sedang berjalan
+    stream: null, // AbortController koneksi event (menutupnya TIDAK membatalkan job)
+    threadId: null, // percakapan yang sedang dibuka
     mode: storage.get('rakit.aiMode', 'build'), // 'build' (Builder) | 'plan' (Plan)
-    pending: null, // perubahan Builder yang sudah diterapkan tapi belum dikonfirmasi
-    applying: false,
+    pendingCard: null, // kartu perubahan yang menunggu Simpan/Batalkan
+    applying: false, // sedang Simpan/Batalkan
   };
 
   const AI_MODES = {
@@ -891,14 +897,6 @@
 
   const toggleAi = () => setMode($('#editorArea').dataset.mode === 'ai' ? 'code' : 'ai');
 
-  function resetAiChat() {
-    if (ai.busy) ai.controller?.abort();
-    ai.history = [];
-    $('#aiMessages').replaceChildren();
-    renderAiEmpty();
-    $('#aiInput').focus();
-  }
-
   async function loadCredits() {
     try {
       ai.credits = await api('GET', '/api/ai/credits');
@@ -926,29 +924,166 @@
     }
   }
 
+  // ---------- Riwayat percakapan ----------
+  const userBubble = (m) => h('div', { class: 'msg user' }, m.mode === 'plan' ? h('span', { class: 'msg-mode' }, 'Plan') : null, m.content);
+  const errorBubble = (text, code) => h('div', { class: 'msg error' },
+    text,
+    code === 'no_credits' && ai.credits?.topupEnabled
+      ? h('button', { type: 'button', class: 'ai-topup-btn inline', onclick: openTopup }, 'Isi ulang kredit')
+      : null);
+
+  function guardBusy() {
+    if (!ai.busy) return false;
+    toast('Tunggu AI selesai, atau tekan Stop dulu.', 'error');
+    return true;
+  }
+
+  function newConversation() {
+    if (guardBusy()) return;
+    ai.threadId = null;
+    ai.pendingCard = null;
+    storage.set('rakit.aiThread', 'new');
+    $('#aiMessages').replaceChildren();
+    renderAiEmpty();
+    $('#aiInput').focus();
+  }
+
+  function renderMessage(m) {
+    const box = $('#aiMessages');
+    if (m.role === 'user') box.append(userBubble(m));
+    else if (m.status === 'queued' || m.status === 'running') attachJob(m);
+    else if (m.status === 'done') box.append(renderAiReply(m));
+    else box.append(errorBubble(m.error || 'Gagal.'));
+  }
+
+  async function openThread(id) {
+    let data;
+    try {
+      data = await api('GET', `/api/ai/threads/${id}`);
+    } catch (err) {
+      return toast(err.message, 'error');
+    }
+    ai.threadId = data.thread.id;
+    ai.pendingCard = null;
+    storage.set('rakit.aiThread', ai.threadId);
+    $('#aiMessages').replaceChildren();
+    data.messages.forEach(renderMessage);
+    renderAiEmpty();
+    aiScroll();
+  }
+
+  // Saat editor dibuka: lanjutkan job yang masih berjalan, atau buka percakapan terakhir.
+  async function initAiHistory() {
+    if (!ai.credits?.enabled) return;
+    let data;
+    try {
+      data = await api('GET', '/api/ai/threads');
+    } catch {
+      return;
+    }
+    const saved = storage.get('rakit.aiThread', null);
+    const target = data.activeJob?.threadId
+      ?? (saved === 'new' ? null : data.threads.find((t) => t.id === saved)?.id ?? data.threads[0]?.id);
+    if (target) await openThread(target);
+  }
+
+  async function showHistoryMenu() {
+    let data;
+    try {
+      data = await api('GET', '/api/ai/threads');
+    } catch (err) {
+      return toast(err.message, 'error');
+    }
+    const when = (ms) => new Date(ms).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const rect = $('#aiHistory').getBoundingClientRect();
+    showMenu(rect.left, rect.bottom + 6, [
+      { label: 'Percakapan baru', run: newConversation },
+      data.threads.length ? '-' : null,
+      ...data.threads.slice(0, 20).map((t) => ({
+        label: `${t.id === ai.threadId ? '● ' : ''}${t.title}`,
+        hint: when(t.updatedAt),
+        run: () => { if (!guardBusy()) openThread(t.id); },
+      })),
+      data.threads.length ? '-' : null,
+      data.threads.length ? { label: 'Hapus semua riwayat', danger: true, run: clearHistory } : null,
+    ]);
+    $('#ctxmenu').classList.add('history-menu');
+  }
+
+  async function clearHistory() {
+    if (guardBusy()) return;
+    const ok = await modal({
+      title: 'Hapus semua riwayat percakapan?',
+      message: 'Semua percakapan dengan AI akan dihapus permanen. File dan database proyekmu tidak ikut terhapus.',
+      buttons: [{ label: 'Hapus riwayat', value: true, primary: true, danger: true }, { label: 'Batal', value: null }],
+    });
+    if (!ok) return;
+    try {
+      await api('DELETE', '/api/ai/threads');
+    } catch (err) {
+      return toast(err.message, 'error');
+    }
+    ai.threadId = null;
+    ai.pendingCard = null;
+    storage.set('rakit.aiThread', 'new');
+    $('#aiMessages').replaceChildren();
+    renderAiEmpty();
+    toast('Riwayat percakapan dihapus');
+  }
+
+  // ---------- Prompt & job ----------
+
   async function sendPrompt() {
     const input = $('#aiInput');
     const prompt = input.value.trim();
     if (!prompt || ai.busy || ai.applying) return;
-    // Prompt baru = perubahan sebelumnya yang belum dikonfirmasi dianggap disimpan.
-    ai.pending?.keep();
+    // Prompt baru = perubahan sebelumnya yang belum dikonfirmasi dianggap disimpan (server juga begitu).
+    ai.pendingCard?.markKept();
 
     const box = $('#aiMessages');
     box.querySelector('.ai-empty')?.remove();
     const mode = ai.mode;
-    box.append(h('div', { class: 'msg user' }, mode === 'plan' ? h('span', { class: 'msg-mode' }, 'Plan') : null, prompt));
+    box.append(userBubble({ mode, content: prompt }));
     input.value = '';
     autoGrow();
+    aiScroll();
+    ai.busy = true;
+    updateAiComposer();
 
-    const status = h('span', {}, 'Membaca proyek…');
+    let started;
+    try {
+      await saveAll(); // pastikan AI membaca versi terbaru
+      started = await api('POST', '/api/ai/prompt', { prompt, mode, activePath: state.active, threadId: ai.threadId });
+    } catch (err) {
+      ai.busy = false;
+      updateAiComposer();
+      box.append(errorBubble(err.message, err.code));
+      if (err.code === 'no_credits') loadCredits();
+      aiScroll();
+      return;
+    }
+    ai.threadId = started.threadId;
+    storage.set('rakit.aiThread', ai.threadId);
+    ai.credits = started.credits;
+    renderCredits();
+    attachJob(started.assistantMessage);
+  }
+
+  // Ikuti progres job di server. Koneksi yang putus disambung lagi; job tetap jalan di server.
+  async function attachJob(message) {
+    const box = $('#aiMessages');
+    ai.busy = true;
+    ai.jobId = message.id;
+    updateAiComposer();
+
+    const status = h('span', {}, 'Menyiapkan…');
     // Status diperbarui tiap detik sesuai fase: antre → berpikir → menulis (atau menunggu coba ulang).
-    // Model reasoning bisa "berpikir" puluhan detik, jadi waktu berjalan ikut ditampilkan.
-    const promptStart = Date.now();
+    const started = message.createdAt || Date.now();
     let phase = { kind: 'prepare' };
     const renderStatus = () => {
-      const secs = Math.round((Date.now() - promptStart) / 1000);
+      const secs = Math.max(0, Math.round((Date.now() - started) / 1000));
       status.textContent = {
-        prepare: () => 'Membaca proyek…',
+        prepare: () => 'Menyiapkan…',
         queued: () => `Menunggu antrean AI… posisi ${phase.position} dari ${phase.total}`,
         thinking: () => `AI sedang berpikir… ${secs} dtk`,
         writing: () => `Menulis kode… ${(phase.chars / 1000).toFixed(1)}k karakter`,
@@ -957,65 +1092,82 @@
     };
     const statusTimer = setInterval(renderStatus, 1000);
     const setPhase = (next) => { phase = next; renderStatus(); };
-    const loading = h('div', { class: 'msg loading' },
-      h('span', { class: 'dots' }, h('i'), h('i'), h('i')), status,
-      h('button', { class: 'stop', type: 'button', onclick: () => ai.controller?.abort() }, 'Stop'));
+    const stopBtn = h('button', { class: 'stop', type: 'button' }, 'Stop');
+    stopBtn.onclick = async () => {
+      stopBtn.disabled = true;
+      stopBtn.textContent = 'Menghentikan…';
+      await api('POST', `/api/ai/jobs/${message.id}/cancel`).catch((err) => toast(err.message, 'error'));
+    };
+    const loading = h('div', { class: 'msg loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), status, stopBtn);
     box.append(loading);
     aiScroll();
 
-    ai.busy = true;
-    ai.controller = new AbortController();
-    updateAiComposer();
-
-    try {
-      await saveAll(); // pastikan AI membaca versi terbaru
-      const res = await fetch('/api/ai/prompt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, mode, activePath: state.active, history: ai.history }),
-        signal: ai.controller.signal,
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        const err = new Error(data.error || `Gagal (${res.status})`);
-        err.code = data.code;
-        throw err;
-      }
-
-      let result = null;
-      for await (const event of readEvents(res)) {
-        if (event.credits) { ai.credits = event.credits; renderCredits(); }
-        if (event.type === 'queued') setPhase({ kind: 'queued', position: event.position, total: event.total });
-        else if (event.type === 'running' || (event.type === 'thinking' && phase.kind !== 'writing')) setPhase({ kind: 'thinking' });
-        else if (event.type === 'retry') setPhase({ kind: 'retry', attempt: event.attempt, max: event.max });
-        else if (event.type === 'progress') setPhase({ kind: 'writing', chars: event.chars });
-        else if (event.type === 'error') throw new Error(event.error);
-        else if (event.type === 'done') result = event;
-      }
-      if (!result) throw new Error('Koneksi terputus sebelum AI selesai');
-
-      loading.remove();
-      ai.history.push({ role: 'user', content: prompt });
-      const changedList = result.changes.map((c) => (c.action === 'table' ? `tabel ${c.name}`
-        : `${c.action === 'delete' ? 'hapus' : 'tulis'} ${c.path}`)).join(', ');
-      ai.history.push({ role: 'assistant', content: result.message + (changedList ? `\n\n(Perubahan diusulkan: ${changedList})` : '') });
-      box.append(renderAiReply(result));
-    } catch (err) {
-      loading.remove();
-      const aborted = err.name === 'AbortError';
-      box.append(h('div', { class: 'msg error' },
-        aborted ? 'Dihentikan. Kredit dikembalikan.' : err.message,
-        err.code === 'no_credits' && ai.credits?.topupEnabled
-          ? h('button', { type: 'button', class: 'ai-topup-btn inline', onclick: openTopup }, 'Isi ulang kredit')
-          : null));
-      if (aborted || err.code === 'no_credits') setTimeout(loadCredits, 500);
-    } finally {
-      clearInterval(statusTimer);
-      ai.busy = false;
-      ai.controller = null;
-      updateAiComposer();
-      aiScroll();
+    let final = null;
+    for (let attempt = 0; attempt < 30 && !final; attempt++) {
+      ai.stream = new AbortController();
+      try {
+        const res = await fetch(`/api/ai/jobs/${message.id}/events`, { credentials: 'same-origin', signal: ai.stream.signal });
+        if (res.status === 401) {
+          location.href = '/';
+          return;
+        }
+        if (!res.ok) throw new Error(`Gagal (${res.status})`);
+        for await (const event of readEvents(res)) {
+          if (event.credits) { ai.credits = event.credits; renderCredits(); }
+          if (event.type === 'queued') setPhase({ kind: 'queued', position: event.position, total: event.total });
+          else if (event.type === 'running' || (event.type === 'thinking' && phase.kind !== 'writing')) setPhase({ kind: 'thinking' });
+          else if (event.type === 'retry') setPhase({ kind: 'retry', attempt: event.attempt, max: event.max });
+          else if (event.type === 'progress') setPhase({ kind: 'writing', chars: event.chars });
+          else if (event.type === 'done' || event.type === 'error') final = event;
+        }
+      } catch { /* koneksi putus: sambung lagi di bawah */ }
+      if (!final) await new Promise((r) => setTimeout(r, Math.min(1000 * (attempt + 1), 5000)));
     }
+
+    clearInterval(statusTimer);
+    loading.remove();
+    ai.busy = false;
+    ai.jobId = null;
+    ai.stream = null;
+    if (!final) {
+      box.append(errorBubble('Koneksi ke server terputus. Muat ulang halaman untuk melihat hasilnya.'));
+    } else if (final.type === 'done') {
+      box.append(renderAiReply(final.message));
+      if (final.touched?.length) await syncFromServer(final.touched, { openFirst: true });
+    } else {
+      box.append(errorBubble(final.error));
+    }
+    updateAiComposer();
+    aiScroll();
+  }
+
+  // Muat ulang file yang diubah server (oleh AI atau Batalkan) ke editor, pohon file, dan preview.
+  async function syncFromServer(paths, { openFirst = false } = {}) {
+    await loadTree();
+    for (const path of paths) {
+      const model = state.models.get(path);
+      if (!model) continue;
+      if (!state.entries.some((e) => e.path === path && e.type === 'file')) {
+        removeTabs((p) => p === path);
+        continue;
+      }
+      try {
+        const { content } = await api('GET', `/api/files/content?path=${encodeURIComponent(path)}`);
+        clearTimeout(state.saveTimers.get(path));
+        state.saved.set(path, content);
+        // Lewat model supaya Ctrl+Z tetap bisa; isinya sama dengan versi tersimpan, jadi tidak disimpan ulang.
+        if (model.getValue() !== content) model.pushEditOperations([], [{ range: model.getFullModelRange(), text: content }], () => null);
+      } catch { /* abaikan: file akan dimuat saat dibuka */ }
+    }
+    renderTabs();
+    renderTree();
+    const first = paths.find((p) => state.entries.some((e) => e.path === p && e.type === 'file'));
+    if (openFirst && first) {
+      expandTo(first);
+      await openFile(first);
+    }
+    if (!$('#dataView').hidden) dbLoad();
+    reloadPreview();
   }
 
   // Markdown sederhana (judul, list, **tebal**, `kode`, blok kode) dirender lewat DOM, tanpa innerHTML.
@@ -1073,9 +1225,9 @@
     return out;
   }
 
-  function renderAiReply(result) {
-    const wrap = h('div', { class: 'msg assistant' }, renderMarkdown(result.message || 'Selesai.'));
-    if (result.mode === 'plan') {
+  function renderAiReply(m) {
+    const wrap = h('div', { class: 'msg assistant' }, renderMarkdown(m.content || 'Selesai.'));
+    if (m.mode === 'plan') {
       wrap.classList.add('plan');
       wrap.prepend(h('div', { class: 'plan-label' }, 'Rencana'));
       const runBtn = h('button', { type: 'button', class: 'plan-run' }, '▶ Jalankan rencana ini');
@@ -1090,18 +1242,14 @@
       wrap.append(runBtn);
       return wrap;
     }
-    if (!result.changes.length) return wrap;
+    if (!m.changes.length) return wrap;
 
-    const existing = new Set(state.entries.filter((e) => e.type === 'file').map((e) => e.path));
-    const kind = (c) => (c.action === 'table' ? 'table' : c.action === 'delete' ? 'delete' : existing.has(c.path) ? 'edit' : 'new');
+    const kind = (c) => (c.action === 'table' ? 'table' : c.action === 'delete' ? 'delete' : m.before[c.path] == null ? 'new' : 'edit');
     const label = { new: 'baru', edit: 'ubah', delete: 'hapus', table: 'tabel' };
-    let snapshot = null;
-    const beforeOf = (path) => snapshot?.find((s) => s.path === path)?.before ?? '';
-
     const actions = h('div', { class: 'changes-actions' });
     const card = h('div', { class: 'changes' },
-      h('div', { class: 'changes-head' }, h('span', {}, `${result.changes.length} perubahan`)),
-      result.changes.map((c) => (c.action === 'table'
+      h('div', { class: 'changes-head' }, h('span', {}, `${m.changes.length} perubahan`)),
+      m.changes.map((c) => (c.action === 'table'
         ? h('button', {
           type: 'button',
           class: 'change-row',
@@ -1115,201 +1263,63 @@
           type: 'button',
           class: 'change-row',
           title: c.action === 'delete' ? c.path : 'Lihat perubahan',
-          onclick: () => (c.action === 'delete' ? null : showDiff(c, beforeOf(c.path))),
+          onclick: () => (c.action === 'delete' ? null : showDiff(c, m.before[c.path] ?? '')),
         },
         h('span', { class: `badge ${kind(c)}` }, label[kind(c)]),
         h('span', { class: 'path' }, c.path),
         c.action === 'delete' ? null : h('span', { class: 'view' }, 'lihat')))),
       actions);
     const setStatus = (text, cls = '') => actions.replaceChildren(h('span', { class: `changes-status ${cls}` }, text));
+    const STATES = {
+      kept: () => setStatus('✓ Perubahan disimpan'),
+      reverted: () => setStatus('↩ Dibatalkan — file dikembalikan ke versi sebelumnya', 'muted'),
+      failed: () => setStatus(m.error || 'Gagal menerapkan perubahan. File dikembalikan seperti semula.', 'error'),
+    };
 
-    // Perubahan langsung diterapkan (preview ikut berubah), lalu user memilih Simpan atau Batalkan.
-    const pending = {
-      settled: false,
-      keep() {
-        if (pending.settled) return;
-        pending.settled = true;
-        if (ai.pending === pending) ai.pending = null;
-        setStatus('✓ Perubahan disimpan');
+    if (m.applyState !== 'pending') {
+      STATES[m.applyState]?.();
+      wrap.append(card);
+      return wrap;
+    }
+
+    // Perubahan sudah diterapkan server (preview sudah berubah); tunggu Simpan atau Batalkan.
+    const keepBtn = h('button', { type: 'button', class: 'apply' }, '✓ Simpan');
+    const revertBtn = h('button', { type: 'button' }, 'Batalkan');
+    const pendingCard = {
+      markKept() {
+        STATES.kept();
+        if (ai.pendingCard === pendingCard) ai.pendingCard = null;
       },
     };
-
-    const showConfirm = () => {
-      const keepBtn = h('button', { type: 'button', class: 'apply' }, '✓ Simpan');
-      const revertBtn = h('button', { type: 'button' }, 'Batalkan');
-      keepBtn.onclick = pending.keep;
-      revertBtn.onclick = async () => {
-        keepBtn.disabled = revertBtn.disabled = true;
-        revertBtn.textContent = 'Mengembalikan…';
-        ai.applying = true;
-        updateAiComposer();
-        try {
-          await restoreSnapshot(snapshot);
-          pending.settled = true;
-          if (ai.pending === pending) ai.pending = null;
-          setStatus('↩ Dibatalkan — file dikembalikan ke versi sebelumnya', 'muted');
-        } catch (err) {
-          toast(`Gagal membatalkan: ${err.message}`, 'error');
-          keepBtn.disabled = revertBtn.disabled = false;
-          revertBtn.textContent = 'Batalkan';
-        } finally {
-          ai.applying = false;
-          updateAiComposer();
-        }
-      };
-      actions.replaceChildren(
-        h('span', { class: 'changes-question' }, 'Perubahan sudah tampil di preview. Simpan perubahan ini?'),
-        keepBtn,
-        revertBtn,
-      );
-    };
-
-    setStatus('Menerapkan perubahan…', 'muted');
-    ai.applying = true;
-    updateAiComposer();
-    applyChanges(result.changes)
-      .then((snap) => {
-        snapshot = snap;
-        ai.pending = pending;
-        showConfirm();
-      })
-      .catch((err) => setStatus(`Gagal menerapkan: ${err.message}. File dikembalikan seperti semula.`, 'error'))
-      .finally(() => {
+    ai.pendingCard = pendingCard;
+    const settle = async (action) => {
+      keepBtn.disabled = revertBtn.disabled = true;
+      if (action === 'revert') revertBtn.textContent = 'Mengembalikan…';
+      ai.applying = true;
+      updateAiComposer();
+      try {
+        const res = await api('POST', `/api/ai/messages/${m.id}/${action}`);
+        if (ai.pendingCard === pendingCard) ai.pendingCard = null;
+        STATES[res.message.applyState]?.();
+        if (action === 'revert') await syncFromServer(res.touched);
+      } catch (err) {
+        toast(err.message, 'error');
+        keepBtn.disabled = revertBtn.disabled = false;
+        revertBtn.textContent = 'Batalkan';
+      } finally {
         ai.applying = false;
         updateAiComposer();
-        aiScroll();
-      });
-
+      }
+    };
+    keepBtn.onclick = () => settle('keep');
+    revertBtn.onclick = () => settle('revert');
+    actions.replaceChildren(
+      h('span', { class: 'changes-question' }, 'Perubahan sudah tampil di preview. Simpan perubahan ini?'),
+      keepBtn,
+      revertBtn,
+    );
     wrap.append(card);
     return wrap;
-  }
-
-  async function currentContent(path) {
-    if (state.models.has(path)) return state.models.get(path).getValue();
-    const { content } = await api('GET', `/api/files/content?path=${encodeURIComponent(path)}`);
-    return content;
-  }
-
-  // Tulis isi file lewat model Monaco bila sedang terbuka (supaya Ctrl+Z tetap bisa), lalu simpan.
-  async function writeFileContent(path, content) {
-    const model = state.models.get(path);
-    if (model) {
-      model.pushEditOperations([], [{ range: model.getFullModelRange(), text: content }], () => null);
-      if (!(await save(path))) throw new Error(`Gagal menyimpan ${path}`);
-    } else {
-      await api('PUT', '/api/files/content', { path, content });
-    }
-  }
-
-  const fileExists = (path) => state.entries.some((e) => e.path === path && e.type === 'file');
-
-  async function applyChanges(changes) {
-    // Simpan isi semua file sebelum mengubah apa pun, supaya bisa dibatalkan seluruhnya.
-    const snapshot = [];
-    const fileChanges = changes.filter((c) => c.action !== 'table');
-    for (const change of fileChanges) {
-      snapshot.push({ path: change.path, before: fileExists(change.path) ? await currentContent(change.path) : null });
-    }
-    snapshot.dirsBefore = new Set(state.entries.filter((e) => e.type === 'dir').map((e) => e.path));
-
-    try {
-      // Tabel dulu, supaya halaman yang memakai datanya langsung berfungsi di preview.
-      for (const change of changes.filter((c) => c.action === 'table')) {
-        snapshot.push(await applyTableChange(change));
-      }
-      for (const change of fileChanges) {
-        const exists = fileExists(change.path);
-        if (change.action === 'delete') {
-          if (exists) {
-            await api('DELETE', `/api/files?path=${encodeURIComponent(change.path)}`);
-            removeTabs((p) => p === change.path);
-            state.entries = state.entries.filter((e) => e.path !== change.path);
-          }
-        } else {
-          if (!exists) {
-            await api('POST', '/api/files', { path: change.path, type: 'file' });
-            state.entries.push({ path: change.path, name: baseName(change.path), type: 'file', size: 0 });
-          }
-          await writeFileContent(change.path, change.content);
-        }
-      }
-    } catch (err) {
-      await restoreSnapshot(snapshot).catch(() => {});
-      throw err;
-    }
-
-    await loadTree();
-    if (!$('#dataView').hidden) dbLoad();
-    const firstWritten = changes.find((c) => c.action === 'write');
-    if (firstWritten) {
-      expandTo(firstWritten.path);
-      await openFile(firstWritten.path);
-    }
-    reloadPreview();
-    return snapshot;
-  }
-
-  async function restoreSnapshot(snapshot) {
-    for (const entry of [...snapshot].reverse()) {
-      if (entry.table) {
-        await revertTableChange(entry);
-        continue;
-      }
-      const { path, before } = entry;
-      const exists = fileExists(path);
-      if (before === null) {
-        if (exists) {
-          await api('DELETE', `/api/files?path=${encodeURIComponent(path)}`);
-          removeTabs((p) => p === path);
-          state.entries = state.entries.filter((e) => e.path !== path);
-        }
-      } else {
-        if (!exists) {
-          await api('POST', '/api/files', { path, type: 'file' });
-          state.entries.push({ path, name: baseName(path), type: 'file', size: 0 });
-        }
-        await writeFileContent(path, before);
-      }
-    }
-    await loadTree();
-    // Folder yang dibuat oleh perubahan AI dan kini kosong ikut dihapus (terdalam dulu).
-    if (snapshot.dirsBefore) {
-      const newDirs = state.entries
-        .filter((e) => e.type === 'dir' && !snapshot.dirsBefore.has(e.path))
-        .sort((a, b) => b.path.length - a.path.length);
-      for (const dir of newDirs) {
-        if (state.entries.some((e) => e.path.startsWith(`${dir.path}/`))) continue;
-        await api('DELETE', `/api/files?path=${encodeURIComponent(dir.path)}`);
-        state.entries = state.entries.filter((e) => e.path !== dir.path);
-      }
-      if (newDirs.length) await loadTree();
-    }
-    if (!$('#dataView').hidden) dbLoad();
-    reloadPreview();
-  }
-
-  // Buat tabel baru, atau tambah kolom/buka akses di tabel yang sudah ada. Mengembalikan catatan untuk dibatalkan.
-  async function applyTableChange(change) {
-    const { tables } = await api('GET', '/api/database/tables');
-    const existing = tables.find((t) => t.name === change.name);
-    const rules = Object.fromEntries(change.public.map((op) => [op, 'public']));
-    if (!existing) {
-      await api('POST', '/api/database/tables', { name: change.name, columns: change.columns, rules });
-      return { table: change.name, existed: false };
-    }
-    const addColumns = change.columns.filter((c) => !existing.columns.some((e) => e.name === c.name));
-    const widened = change.public.some((op) => existing.rules[op] !== 'public');
-    if (addColumns.length || widened) await api('PATCH', tableUrl(change.name), { addColumns, rules });
-    return { table: change.name, existed: true, addedColumns: addColumns.map((c) => c.name), beforeRules: existing.rules };
-  }
-
-  async function revertTableChange(entry) {
-    try {
-      if (!entry.existed) await api('DELETE', tableUrl(entry.table));
-      else await api('PATCH', tableUrl(entry.table), { dropColumns: entry.addedColumns, rules: entry.beforeRules });
-    } catch (err) {
-      if (!/tidak ditemukan/i.test(err.message)) throw err;
-    }
   }
 
   // `before` = isi file sebelum perubahan AI ('' untuk file baru).
@@ -1366,7 +1376,9 @@
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.onclick = () => setMode(btn.dataset.mode);
     });
-    $('#aiReset').onclick = resetAiChat;
+    $('#aiReset').onclick = newConversation;
+    $('#aiHistory').onclick = showHistoryMenu;
+    $('#aiClear').onclick = clearHistory;
     document.querySelectorAll('.mobile-nav [data-view]').forEach((btn) => {
       btn.onclick = () => setMobileView(btn.dataset.view);
     });
@@ -2144,6 +2156,9 @@
     if (first.length) activate(first[0]);
     else activate(null);
     setMode('ai'); // editor selalu dibuka di mode AI
+    // Tampilkan lagi percakapan terakhir (dan sambung ke job yang masih berjalan, bila ada).
+    if (!ai.credits) await loadCredits();
+    await initAiHistory();
   }
 
   init().catch((err) => {

@@ -1328,3 +1328,10 @@ button.credit-badge:disabled { cursor: default; }
 @container (max-width: 300px) {
   #aiReset { display: none; }
 }
+
+/* Menu riwayat percakapan: judul panjang dipotong */
+.ctxmenu.history-menu { max-width: min(360px, calc(100vw - 16px)); max-height: 60vh; overflow-y: auto; }
+.ctxmenu.history-menu button span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container (max-width: 360px) {
+  #aiClear { display: none; }
+}

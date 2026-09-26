@@ -30,23 +30,30 @@ export function creditInfo(userId) {
   };
 }
 
-// Potong kredit sebelum memanggil AI. Mengembalikan fungsi refund untuk sumber yang dipakai.
+// Potong kredit sebelum memanggil AI. Mengembalikan catatan reservasi { source, period, cost }
+// yang bisa disimpan, supaya kredit tetap bisa dikembalikan walau server sempat restart.
 export function reserveCredits(userId) {
   const period = currentPeriod();
   const cost = config.ai.creditsPerPrompt;
 
   q.ensureUsage.run(userId, period);
   if (q.reserveCredit.run(cost, userId, period, cost, config.ai.monthlyCredits).changes === 1) {
-    return () => q.refundCredit.run(cost, userId, period);
+    return { source: 'free', period, cost };
   }
   if (q.spendBalance.run(cost, userId, cost).changes === 1) {
-    return () => q.addBalance.run(userId, cost);
+    return { source: 'purchased', period, cost };
   }
   const err = new HttpError(402, config.billing.enabled
     ? 'Kredit AI kamu habis. Isi ulang kredit untuk lanjut memakai AI.'
     : 'Kredit AI bulan ini sudah habis. Kredit akan terisi lagi awal bulan depan.');
   err.code = 'no_credits';
   throw err;
+}
+
+export function refundCredits(userId, reservation) {
+  if (!reservation) return;
+  if (reservation.source === 'free') q.refundCredit.run(reservation.cost, userId, reservation.period);
+  else q.addBalance.run(userId, reservation.cost);
 }
 
 // Tambah saldo sekali per pembayaran; aman dipanggil berulang (webhook at-least-once + polling).

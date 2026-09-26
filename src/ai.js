@@ -1,9 +1,10 @@
 import express from 'express';
 import { config } from './config.js';
-import { q } from './db.js';
+import { db, q } from './db.js';
 import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
-import { creditInfo, reserveCredits } from './credits.js';
+import { creditInfo, refundCredits, reserveCredits } from './credits.js';
+import { applyChanges, revertChanges, touchedPaths } from './aiapply.js';
 import { cleanPath, isAllowedFile, LIMITS, listTree, readText, userRoot } from './files.js';
 import { COLUMN_TYPES, hasDatabase, listTables, OPERATIONS, schemaSummary } from './userdb.js';
 import { acquireSlot, countRetry, QueueError, reportBusy, reportSuccess } from './aiqueue.js';
@@ -470,52 +471,112 @@ async function runBuilder({ messages, existingTables, hooks }) {
 
 // ---------- Route ----------
 
-ai.use(requireAuth);
+// ---------- Riwayat percakapan & job ----------
+// Setiap prompt menjadi job di server: tetap berjalan walau browser di-refresh/ditutup, dan editor
+// bisa menyambung lagi ke progresnya. Hanya tombol Stop yang membatalkan.
 
-ai.get('/credits', (req, res) => {
-  res.json(creditInfo(req.user.id));
-});
+const MAX_THREADS_PER_USER = 50;
+const HISTORY_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+const THREAD_PAGE = 40; // pesan terakhir yang dimuat saat membuka percakapan
 
-const running = new Set(); // satu request AI aktif per user
+const sql = {
+  insertThread: db.prepare('INSERT INTO ai_threads (user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?)'),
+  thread: db.prepare('SELECT id, title, created_at AS createdAt, updated_at AS updatedAt FROM ai_threads WHERE id = ? AND user_id = ?'),
+  touchThread: db.prepare('UPDATE ai_threads SET updated_at = ? WHERE id = ?'),
+  threads: db.prepare('SELECT id, title, created_at AS createdAt, updated_at AS updatedAt FROM ai_threads WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?'),
+  deleteThreads: db.prepare('DELETE FROM ai_threads WHERE user_id = ?'),
+  pruneThreads: db.prepare(`
+    DELETE FROM ai_threads WHERE user_id = ? AND id NOT IN (
+      SELECT id FROM ai_threads WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?)
+  `),
+  pruneOld: db.prepare('DELETE FROM ai_threads WHERE updated_at < ?'),
+  insertMessage: db.prepare(`
+    INSERT INTO ai_messages (thread_id, user_id, role, mode, content, status, credit, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+  message: db.prepare('SELECT * FROM ai_messages WHERE id = ? AND user_id = ?'),
+  recentMessages: db.prepare('SELECT * FROM ai_messages WHERE thread_id = ? ORDER BY id DESC LIMIT ?'),
+  history: db.prepare(`
+    SELECT role, content, changes FROM ai_messages
+    WHERE thread_id = ? AND id < ? AND status IN ('sent', 'done') ORDER BY id DESC LIMIT ?
+  `),
+  setStatus: db.prepare('UPDATE ai_messages SET status = ? WHERE id = ?'),
+  finish: db.prepare('UPDATE ai_messages SET status = ?, content = ?, error = ?, changes = ?, apply_state = ?, snapshot = ? WHERE id = ?'),
+  setApplyState: db.prepare('UPDATE ai_messages SET apply_state = ? WHERE id = ?'),
+  keepPending: db.prepare(`UPDATE ai_messages SET apply_state = 'kept' WHERE user_id = ? AND apply_state = 'pending'`),
+  activeJob: db.prepare(`
+    SELECT id, thread_id AS threadId FROM ai_messages
+    WHERE user_id = ? AND role = 'assistant' AND status IN ('queued', 'running') ORDER BY id DESC LIMIT 1
+  `),
+  stuck: db.prepare(`SELECT id, user_id, credit FROM ai_messages WHERE role = 'assistant' AND status IN ('queued', 'running')`),
+};
 
-ai.post('/prompt', async (req, res) => {
-  if (!config.ai.enabled) throw new HttpError(503, 'Fitur AI belum dikonfigurasi di server');
-  const prompt = String(req.body?.prompt ?? '').trim();
-  const mode = req.body?.mode === 'plan' ? 'plan' : 'build';
-  if (!prompt) throw new HttpError(400, 'Prompt tidak boleh kosong');
-  if (prompt.length > MAX_PROMPT_CHARS) throw new HttpError(400, `Prompt maksimal ${MAX_PROMPT_CHARS} karakter`);
-  if (running.has(req.user.id)) throw new HttpError(429, 'Masih ada prompt yang sedang diproses');
+// Job yang terputus karena server mati/restart: tandai gagal dan kembalikan kreditnya.
+for (const row of sql.stuck.all()) {
+  refundCredits(row.user_id, row.credit ? JSON.parse(row.credit) : null);
+  sql.finish.run('error', '', 'Server dimulai ulang saat AI sedang bekerja. Kredit dikembalikan, silakan kirim ulang.', null, null, null, row.id);
+}
 
-  let activePath = null;
-  try {
-    activePath = req.body?.activePath ? cleanPath(req.body.activePath) : null;
-  } catch { /* abaikan path tidak valid */ }
+const pruneOldThreads = () => sql.pruneOld.run(Date.now() - HISTORY_RETENTION_MS);
+pruneOldThreads();
+setInterval(pruneOldThreads, 60 * 60 * 1000).unref();
 
-  const refund = reserveCredits(req.user.id);
-  running.add(req.user.id);
+function publicMessage(row) {
+  const snapshot = row.snapshot ? JSON.parse(row.snapshot) : null;
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    role: row.role,
+    mode: row.mode,
+    content: row.content,
+    status: row.status,
+    error: row.error,
+    changes: row.changes ? JSON.parse(row.changes) : [],
+    applyState: row.apply_state,
+    // Isi file sebelum perubahan, untuk tampilan "lihat" (diff). null = file baru.
+    before: snapshot ? Object.fromEntries(snapshot.files.map((f) => [f.path, f.before])) : {},
+    createdAt: row.created_at,
+  };
+}
 
-  // Respons berupa NDJSON: baris-baris event {type: ...} supaya klien bisa menampilkan progres.
-  res.status(200).set({
-    'Content-Type': 'application/x-ndjson; charset=utf-8',
-    'Cache-Control': 'no-store',
-    'X-Accel-Buffering': 'no',
+const changesSummary = (changes) => changes.map((c) => (c.action === 'table' ? `tabel ${c.name}`
+  : `${c.action === 'delete' ? 'hapus' : 'tulis'} ${c.path}`)).join(', ');
+
+function threadHistory(threadId, beforeId) {
+  const rows = sql.history.all(threadId, beforeId, MAX_HISTORY).reverse();
+  return rows.map((r) => {
+    const changes = r.changes ? JSON.parse(r.changes) : [];
+    return {
+      role: r.role,
+      content: r.content + (r.role === 'assistant' && changes.length ? `\n\n(Perubahan: ${changesSummary(changes)})` : ''),
+    };
   });
-  const send = (event) => res.write(`${JSON.stringify(event)}\n`);
-  send({ type: 'start', credits: creditInfo(req.user.id) });
+}
 
-  const abort = new AbortController();
-  res.on('close', () => { if (!res.writableFinished) abort.abort(); });
+// ---------- Job di memori (event untuk editor) ----------
 
+const jobs = new Map(); // id pesan AI -> { userId, events, listeners, abort, finished }
+const running = new Set(); // user yang sedang punya job, pelindung dari klik ganda
+
+function emit(job, event) {
+  // Event progres/antrean cukup disimpan yang terbaru, supaya buffer tidak membengkak.
+  const last = job.events.at(-1);
+  if (last && last.type === event.type && ['progress', 'queued'].includes(event.type)) job.events[job.events.length - 1] = event;
+  else job.events.push(event);
+  for (const listener of job.listeners) listener(event);
+}
+
+async function runJob(job, { user, messageId, threadId, prompt, mode, activePath, reservation }) {
+  const send = (event) => emit(job, event);
   let status = 'error';
   let usage = { input_tokens: 0, output_tokens: 0 };
   try {
-    const context = await projectContext(req.user.username, activePath);
-    const messages = [
-      ...sanitizeHistory(req.body?.history),
+    const context = await projectContext(user.username, activePath);
+    const merged = [
+      ...sanitizeHistory(threadHistory(threadId, messageId)),
       { role: 'user', content: `${context}\n\n---\n\nRequest:\n${prompt}` },
-    ];
-    // Riwayat bisa berakhir dengan pesan user; gabungkan agar role tetap bergantian.
-    const merged = messages.reduce((acc, m) => {
+    ].reduce((acc, m) => {
+      // Riwayat bisa berakhir dengan pesan user; gabungkan agar role tetap bergantian.
       const last = acc.at(-1);
       if (last && last.role === m.role) last.content += `\n\n${m.content}`;
       else acc.push({ ...m });
@@ -525,27 +586,28 @@ ai.post('/prompt', async (req, res) => {
     let chars = 0;
     let lastSent = 0;
     let thinkingSent = false;
-    const onThinking = () => {
-      if (thinkingSent) return;
-      thinkingSent = true;
-      send({ type: 'thinking' });
-    };
-    const onText = (delta) => {
-      chars += delta.length;
-      if (chars - lastSent > 400) {
-        lastSent = chars;
-        send({ type: 'progress', chars });
-      }
-    };
-    const convo = [{ role: 'system', content: PROMPTS[mode] }, ...merged];
     const hooks = {
-      signal: abort.signal,
-      onText,
-      onThinking,
+      signal: job.abort.signal,
+      onText: (delta) => {
+        chars += delta.length;
+        if (chars - lastSent > 400) {
+          lastSent = chars;
+          send({ type: 'progress', chars });
+        }
+      },
+      onThinking: () => {
+        if (thinkingSent) return;
+        thinkingSent = true;
+        send({ type: 'thinking' });
+      },
       onQueued: (position, total) => send({ type: 'queued', position, total }),
-      onRunning: () => send({ type: 'running' }),
+      onRunning: () => {
+        sql.setStatus.run('running', messageId);
+        send({ type: 'running' });
+      },
       onRetry: (attempt, seconds) => send({ type: 'retry', attempt, max: 3, seconds }),
     };
+    const convo = [{ role: 'system', content: PROMPTS[mode] }, ...merged];
 
     let result;
     if (mode === 'plan') {
@@ -556,36 +618,194 @@ ai.post('/prompt', async (req, res) => {
       const text = planMessage(reply.text);
       result = { message: text && reply.finishReason === 'length' ? text + TRUNCATED_NOTE : text, changes: [] };
     } else {
-      const existingTables = hasDatabase(req.user.username) ? listTables(req.user.username).map((t) => t.name) : [];
+      const existingTables = hasDatabase(user.username) ? listTables(user.username).map((t) => t.name) : [];
       result = await runBuilder({ messages: convo, existingTables, hooks });
       usage = result.usage;
     }
     if (!result.message && !result.changes.length) {
       throw aiFailure('bad_output', 502, 'AI tidak memberi jawaban. Coba lagi.');
     }
-
     status = 'ok';
+
+    // Terapkan perubahan Builder di server (dengan snapshot), lalu minta konfirmasi user.
+    let applyState = null;
+    let snapshot = null;
+    let applyError = null;
+    if (result.changes.length) {
+      try {
+        snapshot = await applyChanges(user.username, result.changes);
+        applyState = 'pending';
+      } catch (err) {
+        applyState = 'failed';
+        applyError = `Gagal menerapkan perubahan: ${err.message}. File dikembalikan seperti semula.`;
+      }
+    }
+    sql.finish.run('done', result.message || 'Perubahan sudah dibuat.', applyError, JSON.stringify(result.changes),
+      applyState, snapshot ? JSON.stringify(snapshot) : null, messageId);
     send({
       type: 'done',
-      mode,
-      message: result.message || 'Perubahan sudah dibuat.',
-      changes: result.changes,
-      credits: creditInfo(req.user.id),
+      message: publicMessage(sql.message.get(messageId, user.id)),
+      touched: applyState === 'pending' ? touchedPaths(result.changes) : [],
+      credits: creditInfo(user.id),
     });
   } catch (err) {
-    refund();
+    refundCredits(user.id, reservation);
     if (err.aiStatus) status = err.aiStatus;
-    if (abort.signal.aborted) {
+    let finalStatus = 'error';
+    let msg;
+    if (job.abort.signal.aborted) {
       status = 'aborted';
+      finalStatus = 'aborted';
+      msg = 'Dihentikan. Kredit dikembalikan.';
     } else {
-      let msg = err instanceof HttpError ? err.message : 'Terjadi kesalahan saat menghubungi AI. Kredit dikembalikan.';
+      msg = err instanceof HttpError ? err.message : 'Terjadi kesalahan saat menghubungi AI. Kredit dikembalikan.';
       if (err instanceof ProviderError && [429, 503].includes(err.status)) msg = 'AI sedang sibuk atau tidak tersedia. Coba lagi sebentar lagi. Kredit dikembalikan.';
       if (!(err instanceof HttpError)) console.error(err.message);
-      send({ type: 'error', error: msg, credits: creditInfo(req.user.id) });
     }
+    sql.finish.run(finalStatus, '', msg, null, null, null, messageId);
+    send({ type: 'error', error: msg, message: publicMessage(sql.message.get(messageId, user.id)), credits: creditInfo(user.id) });
   } finally {
-    running.delete(req.user.id);
-    q.logAiRequest.run(req.user.id, Date.now(), config.ai.model, status, usage.input_tokens ?? 0, usage.output_tokens ?? 0);
-    res.end();
+    running.delete(user.id);
+    q.logAiRequest.run(user.id, Date.now(), config.ai.model, status, usage.input_tokens ?? 0, usage.output_tokens ?? 0);
+    job.finished = true;
+    for (const listener of job.listeners) listener(null); // tanda selesai untuk stream yang tersambung
+    setTimeout(() => jobs.delete(messageId), 5 * 60 * 1000).unref(); // beri waktu editor menyambung ulang
   }
+}
+
+// ---------- Route ----------
+
+ai.use(requireAuth);
+
+ai.get('/credits', (req, res) => {
+  res.json(creditInfo(req.user.id));
+});
+
+ai.get('/threads', (req, res) => {
+  res.json({ threads: sql.threads.all(req.user.id, MAX_THREADS_PER_USER), activeJob: sql.activeJob.get(req.user.id) ?? null });
+});
+
+ai.get('/threads/:id', (req, res) => {
+  const thread = sql.thread.get(Number(req.params.id), req.user.id);
+  if (!thread) throw new HttpError(404, 'Percakapan tidak ditemukan');
+  const messages = sql.recentMessages.all(thread.id, THREAD_PAGE).reverse().map(publicMessage);
+  res.json({ thread, messages });
+});
+
+// Hapus seluruh riwayat percakapan user.
+ai.delete('/threads', (req, res) => {
+  if (running.has(req.user.id) || sql.activeJob.get(req.user.id)) {
+    throw new HttpError(409, 'Tunggu AI selesai (atau tekan Stop) sebelum menghapus riwayat.');
+  }
+  const { changes } = sql.deleteThreads.run(req.user.id);
+  res.json({ deleted: changes });
+});
+
+ai.post('/prompt', async (req, res) => {
+  if (!config.ai.enabled) throw new HttpError(503, 'Fitur AI belum dikonfigurasi di server');
+  const prompt = String(req.body?.prompt ?? '').trim();
+  const mode = req.body?.mode === 'plan' ? 'plan' : 'build';
+  if (!prompt) throw new HttpError(400, 'Prompt tidak boleh kosong');
+  if (prompt.length > MAX_PROMPT_CHARS) throw new HttpError(400, `Prompt maksimal ${MAX_PROMPT_CHARS} karakter`);
+  if (running.has(req.user.id) || sql.activeJob.get(req.user.id)) {
+    throw new HttpError(429, 'Masih ada prompt yang sedang diproses');
+  }
+
+  let activePath = null;
+  try {
+    activePath = req.body?.activePath ? cleanPath(req.body.activePath) : null;
+  } catch { /* abaikan path tidak valid */ }
+
+  let threadId = Number(req.body?.threadId) || null;
+  if (threadId && !sql.thread.get(threadId, req.user.id)) threadId = null;
+
+  const reservation = reserveCredits(req.user.id);
+  running.add(req.user.id);
+
+  const now = Date.now();
+  // Prompt baru = perubahan sebelumnya yang belum dikonfirmasi dianggap disimpan.
+  sql.keepPending.run(req.user.id);
+  if (!threadId) {
+    threadId = Number(sql.insertThread.run(req.user.id, prompt.replace(/\s+/g, ' ').slice(0, 80), now, now).lastInsertRowid);
+    sql.pruneThreads.run(req.user.id, req.user.id, MAX_THREADS_PER_USER);
+  } else {
+    sql.touchThread.run(now, threadId);
+  }
+  const userMessageId = Number(sql.insertMessage.run(threadId, req.user.id, 'user', mode, prompt, 'sent', null, now).lastInsertRowid);
+  const messageId = Number(sql.insertMessage.run(threadId, req.user.id, 'assistant', mode, '', 'queued', JSON.stringify(reservation), now).lastInsertRowid);
+
+  const job = { userId: req.user.id, events: [], listeners: new Set(), abort: new AbortController(), finished: false };
+  jobs.set(messageId, job);
+  runJob(job, { user: req.user, messageId, threadId, prompt, mode, activePath, reservation });
+
+  res.status(201).json({
+    threadId,
+    userMessage: publicMessage(sql.message.get(userMessageId, req.user.id)),
+    assistantMessage: publicMessage(sql.message.get(messageId, req.user.id)),
+    credits: creditInfo(req.user.id),
+  });
+});
+
+// Ikuti progres job (NDJSON). Bisa disambung ulang kapan saja; event yang sudah lewat dikirim ulang.
+ai.get('/jobs/:id/events', (req, res) => {
+  const id = Number(req.params.id);
+  const row = sql.message.get(id, req.user.id);
+  if (!row || row.role !== 'assistant') throw new HttpError(404, 'Job tidak ditemukan');
+
+  res.status(200).set({
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Accel-Buffering': 'no',
+  });
+  const write = (event) => res.write(`${JSON.stringify(event)}\n`);
+
+  const job = jobs.get(id);
+  if (!job) {
+    // Sudah lama selesai (atau server sempat restart): kirim keadaan akhir dari database.
+    const message = publicMessage(row);
+    if (row.status === 'done') write({ type: 'done', message, touched: [], credits: creditInfo(req.user.id) });
+    else write({ type: 'error', error: row.error || 'Job tidak berjalan lagi. Silakan kirim ulang.', message, credits: creditInfo(req.user.id) });
+    return res.end();
+  }
+
+  for (const event of job.events) write(event);
+  if (job.finished) return res.end();
+  const listener = (event) => {
+    if (event === null) {
+      job.listeners.delete(listener);
+      res.end();
+    } else {
+      write(event);
+    }
+  };
+  job.listeners.add(listener);
+  res.on('close', () => job.listeners.delete(listener)); // editor ditutup: job tetap jalan
+});
+
+ai.post('/jobs/:id/cancel', (req, res) => {
+  const job = jobs.get(Number(req.params.id));
+  if (!job || job.userId !== req.user.id) throw new HttpError(404, 'Job tidak ditemukan');
+  if (!job.finished) job.abort.abort();
+  res.json({ ok: true });
+});
+
+function pendingMessage(req) {
+  const row = sql.message.get(Number(req.params.id), req.user.id);
+  if (!row || row.role !== 'assistant') throw new HttpError(404, 'Pesan tidak ditemukan');
+  if (row.apply_state !== 'pending') throw new HttpError(409, 'Perubahan ini sudah dikonfirmasi sebelumnya');
+  return row;
+}
+
+ai.post('/messages/:id/keep', (req, res) => {
+  const row = pendingMessage(req);
+  sql.setApplyState.run('kept', row.id);
+  res.json({ message: publicMessage(sql.message.get(row.id, req.user.id)) });
+});
+
+ai.post('/messages/:id/revert', async (req, res) => {
+  const row = pendingMessage(req);
+  await revertChanges(req.user.username, JSON.parse(row.snapshot));
+  sql.setApplyState.run('reverted', row.id);
+  const changes = JSON.parse(row.changes);
+  res.json({ message: publicMessage(sql.message.get(row.id, req.user.id)), touched: touchedPaths(changes) });
 });

@@ -59,6 +59,36 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS payments_user ON payments(user_id, created_at);
 
+  -- Riwayat percakapan AI per user.
+  CREATE TABLE IF NOT EXISTS ai_threads (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title      TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS ai_threads_user ON ai_threads(user_id, updated_at);
+
+  -- Pesan dalam percakapan. Pesan AI sekaligus menjadi "job": statusnya berjalan dari
+  -- queued → running → done/error/aborted, dan hasil Builder disimpan beserta snapshot untuk Batalkan.
+  CREATE TABLE IF NOT EXISTS ai_messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id   INTEGER NOT NULL REFERENCES ai_threads(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role        TEXT NOT NULL,              -- user | assistant
+    mode        TEXT NOT NULL,              -- build | plan
+    content     TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL,              -- user: sent · assistant: queued | running | done | error | aborted
+    error       TEXT,
+    changes     TEXT,                       -- JSON daftar perubahan Builder
+    apply_state TEXT,                       -- pending | kept | reverted | failed
+    snapshot    TEXT,                       -- JSON isi sebelum perubahan (untuk Batalkan)
+    credit      TEXT,                       -- JSON reservasi kredit (untuk refund)
+    created_at  INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS ai_messages_thread ON ai_messages(thread_id, id);
+  CREATE INDEX IF NOT EXISTS ai_messages_status ON ai_messages(status);
+
   -- Log setiap request AI, untuk memantau biaya.
   CREATE TABLE IF NOT EXISTS ai_requests (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

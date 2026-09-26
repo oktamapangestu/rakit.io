@@ -34,6 +34,7 @@ src/
   siteapi.js   API publik /api/db/* di domain user
   admin.js     dashboard pemilik: statistik platform (khusus ADMIN_EMAILS)
   aiqueue.js   antrean & batas concurrency adaptif untuk panggilan ke provider AI
+  aiapply.js   menerapkan & membatalkan perubahan Builder di server (dengan snapshot)
   db.js        skema SQLite
 public/        landing page + editor (Monaco dari CDN jsDelivr)
 templates/     file awal untuk user baru
@@ -69,6 +70,12 @@ Konfigurasi di `.env`:
   jadi antrean menyesuaikan diri dengan batas provider tanpa perlu tahu angkanya. Antrean penuh, terlalu lama,
   atau dihentikan user → kredit dikembalikan. Statistiknya ada di dashboard pemilik. Antrean disimpan di memori
   (satu proses server); bila nanti memakai beberapa server, pindahkan ke Redis.
+- **Riwayat & job:** percakapan AI disimpan di server (tabel `ai_threads`/`ai_messages`) dan muncul lagi saat editor
+  dibuka; ada daftar percakapan, percakapan baru, dan hapus semua riwayat. Setiap prompt berjalan sebagai job di
+  server — refresh atau tutup tab tidak membatalkannya; editor menyambung lagi ke progresnya. Perubahan Builder
+  diterapkan server beserta snapshot, jadi Simpan/Batalkan tetap bisa setelah refresh. Job yang terputus karena
+  server restart ditandai gagal dan kreditnya dikembalikan. Riwayat disimpan maks. 50 percakapan per user dan
+  dihapus otomatis setelah 90 hari tidak dipakai.
 - Kredit dipotong di awal dan **dikembalikan** kalau request gagal, dihentikan, atau ditolak.
 - Setiap request dicatat di tabel `ai_requests` (token input/output) untuk memantau biaya:
   ```sql
