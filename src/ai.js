@@ -218,10 +218,10 @@ function aiFailure(status, httpStatus, message) {
 
 function checkFinish(reply) {
   if (reply.finishReason === 'content_filter') throw aiFailure('refusal', 422, 'Permintaan ini tidak bisa diproses oleh AI.');
-  if (reply.finishReason === 'length') {
-    throw aiFailure('max_tokens', 422, 'Jawaban AI terlalu panjang. Coba pecah permintaan jadi lebih kecil.');
-  }
 }
+
+const TRUNCATED_NOTE = '\n\n_(Jawaban terpotong karena terlalu panjang.)_';
+const MAX_TRUNCATED_ROUNDS = 3;
 
 // Plan hanya menghasilkan teks; buang sisa blok <file>/<db-table> kalau model tetap menulisnya.
 function planMessage(text) {
@@ -322,12 +322,16 @@ function knownTables(existingTables, staged) {
 }
 
 // Catat satu panggilan tool sebagai perubahan (belum ditulis ke disk). Hasilnya dikirim balik ke model.
-function stageToolCall(call, staged, existingTables) {
+function stageToolCall(call, staged, existingTables, truncated) {
   let args;
   try {
     args = JSON.parse(call.arguments || '{}');
   } catch {
-    return 'Error: argumen bukan JSON yang valid. Panggil tool ini lagi dengan JSON yang benar.';
+    return truncated
+      ? 'Error: panggilan ini terpotong karena jawabanmu melebihi batas panjang, jadi tidak disimpan. '
+        + 'Panggil tool ini lagi dengan isi lengkap. Kalau filenya sangat besar, pecah jadi beberapa file lebih kecil '
+        + '(misalnya CSS atau JS terpisah) dan tulis satu file per panggilan.'
+      : 'Error: argumen bukan JSON yang valid. Panggil tool ini lagi dengan JSON yang benar.';
   }
   const change = {
     write_file: () => ({ action: 'write', path: args.path, content: args.content }),
@@ -364,6 +368,7 @@ async function runBuilder({ messages, existingTables, signal, onText, onThinking
   const staged = new Map();
   const usage = { input_tokens: 0, output_tokens: 0 };
   let message = '';
+  let truncatedRounds = 0;
 
   for (let round = 0; round < MAX_BUILD_ROUNDS; round++) {
     const reply = await chatCompletion({ messages: convo, tools: TOOLS, signal, onText, onThinking });
@@ -374,7 +379,13 @@ async function runBuilder({ messages, existingTables, signal, onText, onThinking
         + reply.toolCalls.map((c) => `  -> ${c.name} ${c.arguments.slice(0, 200)}`).join('\n'));
     }
     checkFinish(reply);
-    if (reply.text.trim()) message = reply.text;
+    // Terpotong karena batas token: simpan yang sudah lengkap, lalu minta model melanjutkan.
+    const truncated = reply.finishReason === 'length';
+    truncatedRounds = truncated ? truncatedRounds + 1 : 0;
+    if (truncatedRounds >= MAX_TRUNCATED_ROUNDS) {
+      throw aiFailure('max_tokens', 422, 'Jawaban AI terus terpotong karena terlalu panjang. Coba pecah permintaan jadi lebih kecil.');
+    }
+    if (reply.text.trim()) message = reply.text + (truncated && !reply.toolCalls.length ? TRUNCATED_NOTE : '');
 
     if (!reply.toolCalls.length) {
       // Pemeriksaan akhir: minta model memperbaiki pemakaian API database yang salah.
@@ -388,14 +399,20 @@ async function runBuilder({ messages, existingTables, signal, onText, onThinking
       continue;
     }
 
+    const isValidJson = (text) => { try { JSON.parse(text || '{}'); return true; } catch { return false; } };
     convo.push({
       role: 'assistant',
       content: reply.text,
-      tool_calls: reply.toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.arguments } })),
+      // Argumen yang terpotong bukan JSON valid; kirim "{}" supaya provider tidak menolak riwayatnya.
+      tool_calls: reply.toolCalls.map((c) => ({
+        id: c.id,
+        type: 'function',
+        function: { name: c.name, arguments: isValidJson(c.arguments) ? c.arguments : '{}' },
+      })),
       ...(reply.reasoning ? { reasoning_content: reply.reasoning } : {}),
     });
     for (const call of reply.toolCalls) {
-      convo.push({ role: 'tool', tool_call_id: call.id, content: stageToolCall(call, staged, existingTables) });
+      convo.push({ role: 'tool', tool_call_id: call.id, content: stageToolCall(call, staged, existingTables, truncated) });
     }
   }
   return { message: planMessage(message), changes: [...staged.values()], usage };
@@ -478,7 +495,8 @@ ai.post('/prompt', async (req, res) => {
       usage = { input_tokens: reply.usage?.prompt_tokens ?? 0, output_tokens: reply.usage?.completion_tokens ?? 0 };
       if (process.env.AI_DEBUG) console.log(`----- AI plan (${reply.finishReason}) -----\n${reply.text}`);
       checkFinish(reply);
-      result = { message: planMessage(reply.text), changes: [] };
+      const text = planMessage(reply.text);
+      result = { message: text && reply.finishReason === 'length' ? text + TRUNCATED_NOTE : text, changes: [] };
     } else {
       const existingTables = hasDatabase(req.user.username) ? listTables(req.user.username).map((t) => t.name) : [];
       result = await runBuilder({ messages: convo, existingTables, signal: abort.signal, onText, onThinking });

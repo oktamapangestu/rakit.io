@@ -51,7 +51,7 @@ Konfigurasi di `.env`:
 | `AI_BASE_URL` | — | Wajib. Contoh: `https://api.kelontongai.id/v1` |
 | `AI_API_KEY` | — | Wajib. Tanpa ini fitur AI nonaktif. |
 | `AI_MODEL` | `deepseek-v4-pro` | Nama model di provider. |
-| `AI_MAX_TOKENS` | `32000` | Batas token output per prompt. |
+| `AI_MAX_TOKENS` | `64000` | Batas token output per putaran AI (termasuk token "berpikir" model reasoning). |
 | `AI_DEBUG` | — | Isi `1` untuk mencetak jawaban mentah AI ke log (berisi kode user — jangan di production). |
 | `AI_MONTHLY_CREDITS` | `30` | Kredit gratis per user per bulan (reset tanggal 1, UTC). |
 | `AI_CREDITS_PER_PROMPT` | `1` | Kredit yang dipakai per prompt. |
