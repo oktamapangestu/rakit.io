@@ -39,8 +39,7 @@
     const name = usernameInput.value || 'namamu';
     $('#previewDomain').textContent = `${name}.${baseDomain}`;
     $('#heroUser').textContent = name;
-    $('#mockUrl').textContent = `${name}.${baseDomain}`;
-    document.querySelector('.domain .base').textContent = baseDomain;
+    $('.domain .base').textContent = baseDomain;
   }
   usernameInput.addEventListener('input', () => {
     const cleaned = usernameInput.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
