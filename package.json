@@ -1,0 +1,17 @@
+{
+  "name": "rakit-icu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Editor kode online ala VS Code dengan hosting HTML/CSS/JS di *.rakit.icu",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --watch --env-file-if-exists=.env src/server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

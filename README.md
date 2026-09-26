@@ -1,0 +1,100 @@
+# rakit.icu
+
+Editor kode online ala VS Code (Monaco) dengan live preview. Setiap user yang mendaftar
+otomatis mendapat website di `https://<username>.rakit.icu`. Hanya file **.html, .css, .js**.
+
+## Jalankan lokal
+
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
+- Aplikasi: http://localhost:3000
+- Website user: http://<username>.localhost:3000
+  (Chrome & Firefox otomatis mengarahkan `*.localhost` ke 127.0.0.1. Safari tidak — pakai Chrome.)
+
+Butuh Node.js ≥ 22.13 (memakai SQLite bawaan `node:sqlite`).
+
+## Struktur
+
+```
+src/
+  server.js    routing berdasarkan host: rakit.icu -> aplikasi, <user>.rakit.icu -> website user
+  api.js       REST API: register/login/logout/me + CRUD file
+  auth.js      hash password (scrypt), sesi di SQLite, cek Origin (anti-CSRF), rate limit
+  files.js     penyimpanan file per user di disk, validasi path, kuota
+  sites.js     menyajikan website user (index.html, URL bersih, 404.html kustom, ETag)
+  ai.js        asisten AI: kredit bulanan, konteks proyek, panggilan ke provider AI
+  db.js        skema SQLite
+public/        landing page + editor (Monaco dari CDN jsDelivr)
+templates/     file awal untuk user baru
+data/          database & file user (dibuat otomatis, jangan di-commit)
+```
+
+## Asisten AI
+
+Panel AI di editor (tombol **✦ AI** atau `Ctrl/⌘+I`) membuat/mengubah kode lewat provider AI
+yang kompatibel dengan API chat completions OpenAI. AI membaca semua file proyek, lalu mengusulkan
+perubahan yang bisa dilihat (diff) sebelum diterapkan, dan bisa dibatalkan setelahnya.
+
+Konfigurasi di `.env`:
+
+| Variabel | Default | Keterangan |
+|---|---|---|
+| `AI_BASE_URL` | — | Wajib. Contoh: `https://api.kelontongai.id/v1` |
+| `AI_API_KEY` | — | Wajib. Tanpa ini fitur AI nonaktif. |
+| `AI_MODEL` | `deepseek-v4.1-flash` | Nama model di provider. |
+| `AI_MAX_TOKENS` | `32000` | Batas token output per prompt. |
+| `AI_MONTHLY_CREDITS` | `30` | Kredit gratis per user per bulan (reset tanggal 1, UTC). |
+| `AI_CREDITS_PER_PROMPT` | `1` | Kredit yang dipakai per prompt. |
+
+- Kredit dipotong di awal dan **dikembalikan** kalau request gagal, dihentikan, atau ditolak.
+- Setiap request dicatat di tabel `ai_requests` (token input/output) untuk memantau biaya:
+  ```sql
+  SELECT substr(datetime(created_at/1000,'unixepoch'),1,7) AS bulan,
+         COUNT(*), SUM(input_tokens), SUM(output_tokens)
+  FROM ai_requests WHERE status = 'ok' GROUP BY bulan;
+  ```
+
+## Batasan (ubah di `src/files.js` → `LIMITS`)
+
+- 512 KB per file, 20 MB & 500 file/folder per user, kedalaman folder 8.
+
+## Deploy ke VPS
+
+1. **DNS** — arahkan dua record ke IP VPS:
+   - `A  rakit.icu    -> <IP>`
+   - `A  *.rakit.icu  -> <IP>`
+2. **Aplikasi**
+   ```bash
+   git clone ... /opt/rakit.icu && cd /opt/rakit.icu
+   npm ci --omit=dev
+   cat > .env <<'ENV'
+   PORT=3000
+   BASE_DOMAIN=rakit.icu
+   PROTOCOL=https
+   PUBLIC_PORT=
+   NODE_ENV=production
+   DATA_DIR=/opt/rakit.icu/data
+   ENV
+   sudo cp deploy/rakit.service /etc/systemd/system/ && sudo systemctl enable --now rakit
+   ```
+3. **HTTPS wildcard** — pakai `deploy/Caddyfile`. Sertifikat `*.rakit.icu` wajib lewat
+   DNS challenge, jadi Caddy perlu plugin DNS provider tempat domain dikelola (contoh: Cloudflare).
+4. **Backup** folder `data/` secara berkala.
+
+## Catatan keamanan
+
+Website user berjalan di subdomain `rakit.icu` dan bisa menjalankan JavaScript bebas, jadi:
+
+- Cookie sesi **host-only** (tanpa atribut `Domain`) dan memakai prefix `__Host-` di HTTPS,
+  sehingga tidak terkirim ke / tidak bisa ditimpa oleh `*.rakit.icu`.
+- Semua request API yang mengubah data wajib punya `Origin` = `https://rakit.icu`
+  (subdomain dianggap "same-site" oleh browser, jadi SameSite=Lax saja tidak cukup).
+- Halaman aplikasi mengirim `X-Frame-Options: DENY`.
+- **Disarankan:** daftarkan `rakit.icu` ke [Public Suffix List](https://publicsuffix.org/)
+  supaya browser memperlakukan tiap subdomain sebagai situs terpisah (seperti github.io).
+  Kalau belum, pertimbangkan menaruh website user di domain terpisah (mis. `*.rakit.site`).
+- Website user bisa dipakai untuk phishing — siapkan cara melaporkan & menonaktifkan akun.
