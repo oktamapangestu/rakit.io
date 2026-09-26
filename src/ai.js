@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { q } from './db.js';
 import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
+import { creditInfo, reserveCredits } from './credits.js';
 import { cleanPath, isAllowedFile, LIMITS, listTree, readText, userRoot } from './files.js';
 
 export const ai = express.Router();
@@ -116,36 +117,6 @@ function parseReply(text) {
 
   if (!message && !changes.length) throw new Error('empty reply');
   return { message, changes };
-}
-
-// ---------- Kredit ----------
-
-const currentPeriod = () => new Date().toISOString().slice(0, 7); // 'YYYY-MM' (UTC)
-
-function nextResetAt() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
-}
-
-function creditInfo(userId) {
-  const used = q.usage.get(userId, currentPeriod())?.used ?? 0;
-  return {
-    enabled: config.ai.enabled,
-    limit: config.ai.monthlyCredits,
-    used,
-    remaining: Math.max(0, config.ai.monthlyCredits - used),
-    costPerPrompt: config.ai.creditsPerPrompt,
-    resetsAt: nextResetAt(),
-  };
-}
-
-function reserveCredits(userId) {
-  const period = currentPeriod();
-  const cost = config.ai.creditsPerPrompt;
-  q.ensureUsage.run(userId, period);
-  const { changes } = q.reserveCredit.run(cost, userId, period, cost, config.ai.monthlyCredits);
-  if (changes !== 1) throw new HttpError(402, 'Kredit AI bulan ini sudah habis. Kredit akan terisi lagi awal bulan depan.');
-  return () => q.refundCredit.run(cost, userId, period);
 }
 
 // ---------- Konteks proyek ----------

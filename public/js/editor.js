@@ -566,6 +566,7 @@
     showMenu(rect.right - 220, rect.bottom + 8, [
       { label: 'Salin URL website', run: () => copyText(state.me.siteUrl) },
       { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
+      ai.credits?.topupEnabled && { label: 'Isi ulang kredit AI', run: openTopup },
       '-',
       { label: 'Keluar', danger: true, run: logout },
     ]);
@@ -741,10 +742,22 @@
     const badge = $('#aiCredits');
     const c = ai.credits;
     if (!c || !c.enabled) return badge.replaceChildren();
-    badge.textContent = `${c.remaining}/${c.limit} kredit`;
-    badge.classList.toggle('empty', c.remaining < c.costPerPrompt);
+    const empty = c.remaining < c.costPerPrompt;
     const reset = new Date(c.resetsAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
-    badge.title = `${c.costPerPrompt} kredit per prompt · terisi ulang ${reset}`;
+    badge.textContent = `${c.remaining} kredit`;
+    badge.classList.toggle('empty', empty);
+    badge.disabled = !c.topupEnabled;
+    badge.title = [
+      `Gratis bulan ini: ${c.freeRemaining}/${c.limit} (terisi ulang ${reset})`,
+      c.purchased ? `Dibeli: ${c.purchased}` : null,
+      c.topupEnabled ? 'Klik untuk isi ulang' : null,
+    ].filter(Boolean).join(' · ');
+
+    $('#aiTopupBanner').hidden = !empty;
+    $('#aiTopupText').textContent = c.topupEnabled
+      ? 'Kredit AI kamu habis.'
+      : `Kredit AI habis. Terisi lagi ${reset}.`;
+    $('#aiTopupBtn').hidden = !c.topupEnabled;
     updateAiComposer();
   }
 
@@ -865,7 +878,9 @@
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Gagal (${res.status})`);
+        const err = new Error(data.error || `Gagal (${res.status})`);
+        err.code = data.code;
+        throw err;
       }
 
       let result = null;
@@ -886,8 +901,12 @@
     } catch (err) {
       loading.remove();
       const aborted = err.name === 'AbortError';
-      box.append(h('div', { class: 'msg error' }, aborted ? 'Dihentikan. Kredit dikembalikan.' : err.message));
-      if (aborted) setTimeout(loadCredits, 500);
+      box.append(h('div', { class: 'msg error' },
+        aborted ? 'Dihentikan. Kredit dikembalikan.' : err.message,
+        err.code === 'no_credits' && ai.credits?.topupEnabled
+          ? h('button', { type: 'button', class: 'ai-topup-btn inline', onclick: openTopup }, 'Isi ulang kredit')
+          : null));
+      if (aborted || err.code === 'no_credits') setTimeout(loadCredits, 500);
     } finally {
       ai.busy = false;
       ai.controller = null;
@@ -1118,6 +1137,8 @@
       btn.onclick = () => setMode(btn.dataset.mode);
     });
     $('#aiReset').onclick = resetAiChat;
+    $('#aiCredits').onclick = openTopup;
+    $('#aiTopupBtn').onclick = openTopup;
     $('#aiForm').onsubmit = (e) => { e.preventDefault(); sendPrompt(); };
     const input = $('#aiInput');
     input.addEventListener('input', () => { autoGrow(); updateAiComposer(); });
@@ -1127,6 +1148,180 @@
         sendPrompt();
       }
     });
+  }
+
+  // ---------- Isi ulang kredit (QRIS) ----------
+  const rupiah = (n) => `Rp${n.toLocaleString('id-ID')}`;
+
+  function openTopup() {
+    const root = $('#modal');
+    const body = h('div', { class: 'modal topup-modal', role: 'dialog', 'aria-label': 'Isi ulang kredit AI' });
+    let pollTimer;
+    let countdownTimer;
+    let closed = false;
+
+    const stopTimers = () => {
+      clearTimeout(pollTimer);
+      clearInterval(countdownTimer);
+    };
+    const close = () => {
+      closed = true;
+      stopTimers();
+      root.hidden = true;
+      root.replaceChildren();
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+
+    root.replaceChildren(body);
+    root.hidden = false;
+    root.onmousedown = (e) => { if (e.target === root) close(); };
+    document.addEventListener('keydown', onKey, true);
+
+    const head = (title, subtitle) => h('div', { class: 'topup-head' },
+      h('div', {}, h('h3', {}, title), subtitle ? h('p', {}, subtitle) : null),
+      h('button', { class: 'icon-btn', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close)));
+    const loadingView = (text) => h('div', { class: 'topup-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), text);
+    const errorView = (message) => [
+      h('p', { class: 'topup-error' }, message),
+      h('div', { class: 'modal-buttons' }, h('button', { type: 'button', class: 'primary', onclick: showPackages }, 'Coba lagi')),
+    ];
+
+    async function showPackages() {
+      stopTimers();
+      body.replaceChildren(head('Isi ulang kredit AI'), loadingView('Memuat paket…'));
+      let data;
+      try {
+        data = await api('GET', '/api/billing/packages');
+      } catch (err) {
+        return body.replaceChildren(head('Isi ulang kredit AI'), ...errorView(err.message));
+      }
+      if (closed) return;
+      if (!data.enabled || !data.packages.length) {
+        return body.replaceChildren(head('Isi ulang kredit AI'),
+          h('p', { class: 'topup-error' }, 'Isi ulang kredit belum tersedia saat ini.'));
+      }
+
+      let selected = data.packages[Math.min(1, data.packages.length - 1)];
+      const cards = data.packages.map((pkg) => h('button', {
+        type: 'button',
+        class: 'pkg',
+        onclick: () => { selected = pkg; mark(); },
+      },
+      h('span', { class: 'pkg-credits' }, String(pkg.credits)),
+      h('span', { class: 'pkg-label' }, 'kredit'),
+      h('span', { class: 'pkg-price' }, rupiah(pkg.price)),
+      h('span', { class: 'pkg-per' }, `${rupiah(Math.round(pkg.price / pkg.credits))} / prompt`)));
+      const mark = () => cards.forEach((card, i) => card.classList.toggle('selected', data.packages[i] === selected));
+      mark();
+
+      const c = data.credits;
+      body.replaceChildren(
+        head('Isi ulang kredit AI', 'Kredit yang dibeli tidak hangus, dan dipakai setelah kredit gratis bulananmu habis.'),
+        h('div', { class: 'topup-balance' },
+          h('span', {}, 'Sisa kredit sekarang'),
+          h('strong', {}, `${c.remaining} kredit`)),
+        h('div', { class: 'pkg-grid' }, cards),
+        data.livemode ? null : h('p', { class: 'topup-test' }, 'Mode uji coba — tidak ada uang sungguhan yang ditarik.'),
+        h('div', { class: 'modal-buttons' },
+          h('button', { type: 'button', onclick: close }, 'Batal'),
+          h('button', { type: 'button', class: 'primary', onclick: () => startPayment(selected) }, 'Bayar dengan QRIS')),
+      );
+    }
+
+    async function startPayment(pkg) {
+      body.replaceChildren(head('Isi ulang kredit AI'), loadingView('Membuat kode QRIS…'));
+      try {
+        const { payment } = await api('POST', '/api/billing/topup', { packageId: pkg.id });
+        if (!closed) showPayment(payment);
+      } catch (err) {
+        if (!closed) body.replaceChildren(head('Isi ulang kredit AI'), ...errorView(err.message));
+      }
+    }
+
+    function showPayment(payment) {
+      const timer = h('strong', {}, '');
+      const status = h('div', { class: 'pay-status' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Menunggu pembayaran…');
+      const qr = payment.qr
+        ? h('img', { class: 'qr', src: payment.qr, alt: 'Kode QRIS' })
+        : h('div', { class: 'qr qr-missing' }, 'Kode QR tidak tersedia. Gunakan halaman pembayaran.');
+
+      body.replaceChildren(
+        head('Scan untuk membayar', `${payment.credits} kredit AI`),
+        h('div', { class: 'pay-body' },
+          h('div', { class: 'qr-card' },
+            h('div', { class: 'qris-label' }, 'QRIS'),
+            qr,
+            h('div', { class: 'pay-amount' }, rupiah(payment.amount)),
+            h('div', { class: 'pay-timer' }, 'Bayar dalam ', timer)),
+          h('div', { class: 'pay-side' },
+            h('p', { class: 'pay-title' }, payment.instructions?.title || 'Cara membayar'),
+            h('ol', { class: 'pay-steps' }, (payment.instructions?.steps?.length
+              ? payment.instructions.steps
+              : ['Buka aplikasi e-wallet atau mobile banking yang mendukung QRIS.', 'Scan kode QR di samping.', 'Periksa nominal, lalu konfirmasi pembayaran.']
+            ).map((step) => h('li', {}, step))),
+            status,
+            payment.checkoutUrl ? h('a', { class: 'pay-link', href: payment.checkoutUrl, target: '_blank', rel: 'noopener' }, 'Buka halaman pembayaran ↗') : null)),
+        h('div', { class: 'modal-buttons' },
+          h('button', { type: 'button', onclick: showPackages }, 'Ganti paket'),
+          h('button', { type: 'button', onclick: close }, 'Tutup')),
+      );
+
+      const tick = () => {
+        const ms = Date.parse(payment.expiresAt) - Date.now();
+        if (Number.isNaN(ms)) return (timer.textContent = '—');
+        if (ms <= 0) return showEnded('expired');
+        const m = Math.floor(ms / 60000);
+        const s = Math.floor((ms % 60000) / 1000);
+        timer.textContent = `${m}:${String(s).padStart(2, '0')}`;
+      };
+      tick();
+      countdownTimer = setInterval(tick, 1000);
+
+      const poll = async () => {
+        if (closed) return;
+        try {
+          const res = await api('GET', `/api/billing/payments/${encodeURIComponent(payment.id)}`);
+          if (closed) return;
+          if (res.credits) { ai.credits = res.credits; renderCredits(); }
+          if (res.payment.status === 'succeeded') return showSuccess(res.payment, res.credits);
+          if (res.payment.status !== 'pending') return showEnded(res.payment.status);
+        } catch { /* coba lagi di putaran berikutnya */ }
+        pollTimer = setTimeout(poll, 3000);
+      };
+      pollTimer = setTimeout(poll, 3000);
+    }
+
+    function showSuccess(payment, credits) {
+      stopTimers();
+      body.replaceChildren(
+        head('Pembayaran berhasil'),
+        h('div', { class: 'topup-result ok' },
+          h('div', { class: 'result-icon' }, '✓'),
+          h('h4', {}, `+${payment.credits} kredit ditambahkan`),
+          h('p', {}, `Sisa kreditmu sekarang ${credits?.remaining ?? ''} kredit. Terima kasih!`)),
+        h('div', { class: 'modal-buttons' },
+          h('button', { type: 'button', class: 'primary', onclick: () => { close(); setMode('ai'); } }, 'Lanjut pakai AI')),
+      );
+    }
+
+    function showEnded(status) {
+      stopTimers();
+      const text = {
+        expired: 'Waktu pembayaran habis. Buat kode QRIS baru untuk mencoba lagi.',
+        failed: 'Pembayaran gagal. Silakan coba lagi.',
+        canceled: 'Pembayaran dibatalkan.',
+      }[status] ?? 'Pembayaran tidak dapat diproses.';
+      body.replaceChildren(
+        head('Pembayaran tidak selesai'),
+        h('div', { class: 'topup-result' }, h('div', { class: 'result-icon' }, '!'), h('p', {}, text)),
+        h('div', { class: 'modal-buttons' },
+          h('button', { type: 'button', onclick: close }, 'Tutup'),
+          h('button', { type: 'button', class: 'primary', onclick: showPackages }, 'Coba lagi')),
+      );
+    }
+
+    showPackages();
   }
 
   // Tema warna editor, disamakan dengan palet UI.

@@ -26,7 +26,9 @@ src/
   auth.js      hash password (scrypt), sesi di SQLite, cek Origin (anti-CSRF), rate limit
   files.js     penyimpanan file per user di disk, validasi path, kuota
   sites.js     menyajikan website user (index.html, URL bersih, 404.html kustom, ETag)
-  ai.js        asisten AI: kredit bulanan, konteks proyek, panggilan ke provider AI
+  ai.js        asisten AI: konteks proyek, panggilan ke provider AI
+  credits.js   kredit AI: jatah gratis bulanan + saldo yang dibeli
+  billing.js   isi ulang kredit via QRIS (Kasera Pay) + webhook
   db.js        skema SQLite
 public/        landing page + editor (Monaco dari CDN jsDelivr)
 templates/     file awal untuk user baru
@@ -57,6 +59,25 @@ Konfigurasi di `.env`:
          COUNT(*), SUM(input_tokens), SUM(output_tokens)
   FROM ai_requests WHERE status = 'ok' GROUP BY bulan;
   ```
+
+## Isi ulang kredit (QRIS via Kasera Pay)
+
+Kalau kredit habis, user bisa membeli paket kredit dan membayar dengan QRIS langsung dari editor.
+Kredit yang dibeli tidak hangus dan dipakai setelah kredit gratis bulanan habis.
+
+| Variabel | Keterangan |
+|---|---|
+| `KASERA_API_KEY` | Dari dashboard Kasera → Developer. `kp_test_...` untuk uji coba, `kp_live_...` untuk produksi. Tanpa ini fitur isi ulang nonaktif. |
+| `KASERA_WEBHOOK_SECRET` | Signing secret endpoint webhook di dashboard Kasera. |
+| `CREDIT_PACKAGES` | Paket `kredit:harga`, dipisah koma. Default `20:10000,50:20000,150:50000`. |
+
+Di dashboard Kasera, daftarkan URL webhook: `https://rakit.icu/api/billing/webhook`.
+
+- Kredit ditambahkan saat webhook `payment.paid` masuk (tanda tangan `Kasera-Signature-V1` diverifikasi,
+  nominal dicocokkan). Selama modal pembayaran terbuka, status juga dicek langsung ke API Kasera, jadi
+  tetap berfungsi di localhost tanpa webhook.
+- Setiap pembayaran hanya menambah kredit sekali, walaupun webhook terkirim berulang.
+- Riwayat pembayaran ada di tabel `payments`.
 
 ## Batasan (ubah di `src/files.js` → `LIMITS`)
 

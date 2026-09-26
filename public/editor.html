@@ -75,7 +75,7 @@
               <svg viewBox="0 0 16 16"><path d="M8 0l1.6 4.4L14 6l-4.4 1.6L8 12 6.4 7.6 2 6l4.4-1.6zM13 10l.8 2.2L16 13l-2.2.8L13 16l-.8-2.2L10 13l2.2-.8z"/></svg>
               Asisten AI
             </span>
-            <span class="credit-badge" id="aiCredits" title="Kredit AI bulan ini"></span>
+            <button type="button" class="credit-badge" id="aiCredits" title="Kredit AI"></button>
             <button class="icon-btn" id="aiReset" title="Percakapan baru">
               <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 7 7h-1a6 6 0 1 1-1.76-4.24L10.5 5.5H15V1l-1.76 1.76A6.98 6.98 0 0 0 8 1"/></svg>
             </button>
@@ -136,6 +136,10 @@
 
         <div class="ai-view" id="aiPanel" hidden>
           <div class="ai-messages" id="aiMessages"></div>
+          <div class="ai-topup" id="aiTopupBanner" hidden>
+            <span id="aiTopupText">Kredit AI kamu habis.</span>
+            <button type="button" class="ai-topup-btn" id="aiTopupBtn">Isi ulang kredit</button>
+          </div>
           <form class="ai-composer" id="aiForm">
             <textarea id="aiInput" rows="3" maxlength="4000"
                       placeholder="Minta AI membuat atau mengubah kode… (Enter kirim, Shift+Enter baris baru)"></textarea>

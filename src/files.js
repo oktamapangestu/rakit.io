@@ -181,6 +181,9 @@ export async function seedTemplate(username) {
     const filled = text
       .replaceAll('{{username}}', username)
       .replaceAll('{{host}}', config.siteHost(username));
-    await fs.writeFile(path.join(root, name), filled, 'utf8');
+    // 'wx' = jangan pernah menimpa file yang sudah ada.
+    await fs.writeFile(path.join(root, name), filled, { encoding: 'utf8', flag: 'wx' }).catch((err) => {
+      if (err.code !== 'EEXIST') throw err;
+    });
   }
 }

@@ -27,6 +27,17 @@ export const config = {
     monthlyCredits: Number(env.AI_MONTHLY_CREDITS || 30),
     creditsPerPrompt: Number(env.AI_CREDITS_PER_PROMPT || 1),
   },
+  billing: {
+    enabled: Boolean(env.KASERA_API_KEY),
+    apiKey: env.KASERA_API_KEY || '',
+    webhookSecret: env.KASERA_WEBHOOK_SECRET || '',
+    livemode: (env.KASERA_API_KEY || '').startsWith('kp_live_'),
+    // Format: "kredit:harga,kredit:harga" (harga dalam rupiah).
+    packages: (env.CREDIT_PACKAGES || '20:10000,50:20000,150:50000').split(',').map((entry) => {
+      const [credits, price] = entry.split(':').map(Number);
+      return { id: `p${credits}`, credits, price };
+    }).filter((p) => p.credits > 0 && p.price > 0),
+  },
   siteHost: (username) => `${username}.${baseDomain}`,
   siteUrl: (username) => `${protocol}://${username}.${baseDomain}${portSuffix}`,
 };
