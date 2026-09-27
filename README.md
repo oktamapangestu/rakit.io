@@ -35,6 +35,7 @@ src/
   admin.js     dashboard pemilik: statistik platform (khusus ADMIN_EMAILS)
   projects.js  project/workspace per subdomain: buat, pilih (header X-Project), hapus
   google.js    login & daftar dengan Google (OAuth 2.0 + PKCE)
+  diagrams.js  bahan diagram otomatis: ERD, peta halaman, alur data
   aiqueue.js   antrean & batas concurrency adaptif untuk panggilan ke provider AI
   aiapply.js   menerapkan & membatalkan perubahan Builder di server (dengan snapshot)
   db.js        skema SQLite
@@ -149,6 +150,21 @@ pendaftar terbaru, serta ukuran penyimpanan. Periode bisa dipilih 7/30/90 hari (
 
 Hanya akun dengan email di `ADMIN_EMAILS` (dipisah koma) yang bisa membukanya; link-nya muncul di
 menu avatar editor. Pengguna lain diarahkan kembali ke editor, dan API `/api/admin/*` menolak dengan 403.
+
+## Diagram otomatis
+
+Tab **Diagram** di editor (di samping Data) menggambar diagram dari file & database project aktif, tanpa AI:
+
+- **ERD** — tabel, kolom, tipe, wajib/privat. Relasi ditebak dari nama kolom (`produk_id` → tabel `produk`),
+  karena database belum menyimpan relasi resmi. Menandai tabel yang bisa diubah/dihapus siapa pun.
+- **Peta halaman** — halaman HTML, link antar halaman, dan file CSS/JS yang dimuat. Menandai **link rusak**,
+  file yang hilang, dan halaman yang tidak ditautkan dari mana pun.
+- **Alur data** — halaman → script → tabel beserta operasinya. Menandai request yang **pasti ditolak**
+  (akses tabel masih "Hanya kamu") dan tabel yang belum ada.
+
+Setiap temuan punya tombol aksi (Atur akses, Buat tabel, Minta AI perbaiki). Diagram digambar dengan Mermaid
+(dimuat dari CDN hanya saat tab dibuka); kodenya bisa disalin dan hasilnya diunduh sebagai SVG. Pemakaian
+`/api/db/...` dideteksi dari kode, jadi URL yang dibuat dinamis bisa terlewat.
 
 ## Batasan (ubah di `src/files.js` → `LIMITS`)
 

@@ -998,11 +998,14 @@
     $('#codeView').hidden = mode !== 'code';
     $('#aiPanel').hidden = mode !== 'ai';
     $('#dataView').hidden = mode !== 'data';
+    $('#diagramView').hidden = mode !== 'diagram';
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.setAttribute('aria-selected', String(btn.dataset.mode === mode));
     });
     if (mode === 'data') {
       dbLoad();
+    } else if (mode === 'diagram') {
+      diagramLoad();
     } else if (mode === 'ai') {
       renderAiEmpty();
       updateAiComposer();
@@ -1810,9 +1813,9 @@
     form.querySelector('input, textarea')?.focus();
   }
 
-  function openCreateTable() {
+  function openCreateTable(presetName = '') {
     const { body, close } = openPanel('db-modal wide');
-    const nameInput = h('input', { placeholder: 'contoh: ucapan', spellcheck: 'false', autocomplete: 'off' });
+    const nameInput = h('input', { placeholder: 'contoh: ucapan', spellcheck: 'false', autocomplete: 'off', value: typeof presetName === 'string' ? presetName : '' });
     const columnList = h('div', { class: 'db-col-list' });
     const addColumnRow = (preset = {}) => {
       const name = h('input', { placeholder: 'nama_kolom', spellcheck: 'false', autocomplete: 'off', value: preset.name ?? '' });
@@ -1985,6 +1988,281 @@
       body.scrollTop = scroll;
     }
     render();
+  }
+
+  // ---------- Diagram (ERD, peta halaman, alur data) ----------
+  // Dibuat otomatis dari file & database project, digambar dengan Mermaid (dimuat hanya saat tab dibuka).
+  const MERMAID_URL = 'https://cdn.jsdelivr.net/npm/mermaid@12.0.0/dist/mermaid.esm.min.mjs';
+  const diagram = { kind: storage.get('rakit.diagram', 'erd'), data: null, code: '', zoom: 1, mermaid: null, seq: 0 };
+  const OP_LABEL = { list: 'baca daftar', view: 'baca', create: 'tambah', update: 'ubah', delete: 'hapus' };
+  const OP_RULE = { list: 'Lihat daftar', view: 'Lihat satu baris', create: 'Tambah', update: 'Ubah', delete: 'Hapus' };
+
+  // Teks aman untuk label Mermaid (judul halaman bisa berisi karakter apa saja).
+  const mmText = (text) => String(text).replace(/["`<>{}[\]|#;\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+
+  async function loadMermaid() {
+    if (diagram.mermaid) return diagram.mermaid;
+    const { default: mermaid } = await import(MERMAID_URL);
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      fontFamily: 'Inter, -apple-system, "Segoe UI", system-ui, sans-serif',
+      themeVariables: {
+        darkMode: true,
+        background: '#11151f',
+        primaryColor: '#1b2130',
+        primaryTextColor: '#f5f7fb',
+        primaryBorderColor: '#8b5cf6',
+        secondaryColor: '#161b27',
+        tertiaryColor: '#161b27',
+        lineColor: '#7c869b',
+        textColor: '#d8dde8',
+        fontSize: '14px',
+        attributeBackgroundColorOdd: '#161b27',
+        attributeBackgroundColorEven: '#11151f',
+        edgeLabelBackground: '#11151f',
+      },
+      er: { useMaxWidth: false },
+      flowchart: { useMaxWidth: false, curve: 'basis', htmlLabels: false },
+    });
+    diagram.mermaid = mermaid;
+    return mermaid;
+  }
+
+  const askAi = (text) => {
+    setMode('ai');
+    setAiMode('build');
+    $('#aiInput').value = text;
+    autoGrow();
+    updateAiComposer();
+    $('#aiInput').focus();
+  };
+  const openTableAccess = (name) => { dbState.active = name; setMode('data'); setTimeout(() => openTableSettings(name), 300); };
+
+  function erdDiagram(d) {
+    if (!d.tables.length) {
+      return { empty: ['Belum ada tabel', 'Buat tabel di tab Data, atau minta AI membuat form yang menyimpan data.'], findings: [] };
+    }
+    const lines = ['erDiagram'];
+    for (const t of d.tables) {
+      lines.push(`  ${t.name} {`, '    number id PK', '    date created_at');
+      for (const c of t.columns) {
+        const fk = d.relations.some((r) => r.from === t.name && r.column === c.name) ? ' FK' : '';
+        const notes = [c.required && 'wajib', c.private && 'privat'].filter(Boolean).join(', ');
+        lines.push(`    ${c.type} ${c.name}${fk}${notes ? ` "${notes}"` : ''}`);
+      }
+      lines.push('  }');
+    }
+    for (const r of d.relations) lines.push(`  ${r.to} ||--o{ ${r.from} : "${r.column}"`);
+
+    const findings = [];
+    for (const t of d.tables) {
+      const open = Object.entries(t.rules).filter(([, v]) => v === 'public').map(([op]) => OP_LABEL[op]);
+      const risky = ['update', 'delete'].filter((op) => t.rules[op] === 'public').map((op) => OP_LABEL[op]);
+      if (risky.length) {
+        findings.push({ level: 'warn', text: `Siapa pun bisa ${risky.join(' & ')} data di tabel "${t.name}". Pastikan ini memang disengaja.`, actions: [['Atur akses', () => openTableAccess(t.name)]] });
+      }
+      findings.push({ level: 'info', text: `${t.name}: ${t.rowCount} baris · ${open.length ? `publik: ${open.join(', ')}` : 'privat (hanya kamu)'}` });
+    }
+    if (d.relations.length) findings.push({ level: 'info', text: 'Garis relasi ditebak dari nama kolom (mis. produk_id → produk).' });
+    return { code: lines.join('\n'), findings };
+  }
+
+  function siteDiagram(d) {
+    if (!d.pages.length) return { empty: ['Belum ada halaman', 'Buat file .html untuk melihat peta halamanmu.'], findings: [] };
+    const ids = new Map();
+    const id = (key) => { if (!ids.has(key)) ids.set(key, `n${ids.size}`); return ids.get(key); };
+    const lines = ['flowchart LR'];
+    for (const p of d.pages) {
+      lines.push(`  ${id(p.path)}["${mmText(p.path)}${p.title ? `\\n${mmText(p.title)}` : ''}"]:::${p.path === 'index.html' ? 'home' : p.orphan ? 'orphan' : 'page'}`);
+    }
+    for (const l of d.links) {
+      if (l.broken) lines.push(`  ${id(`x:${l.to}`)}["${mmText(l.to)}\\ntidak ada"]:::broken`, `  ${id(l.from)} -. rusak .-> ${id(`x:${l.to}`)}`);
+      else lines.push(`  ${id(l.from)} --> ${id(l.to)}`);
+    }
+    for (const a of d.assets) {
+      lines.push(`  ${id(`a:${a.to}`)}["${mmText(a.to)}${a.missing ? '\\ntidak ada' : ''}"]:::${a.missing ? 'broken' : 'asset'}`);
+      lines.push(`  ${id(a.from)} -.- ${id(`a:${a.to}`)}`);
+    }
+    lines.push(
+      '  classDef home fill:#2a1f4d,stroke:#a78bfa,stroke-width:2px,color:#f5f7fb',
+      '  classDef page fill:#1b2130,stroke:#8b5cf6,color:#f5f7fb',
+      '  classDef orphan fill:#1b2130,stroke:#7c869b,stroke-dasharray:4 3,color:#d8dde8',
+      '  classDef asset fill:#11151f,stroke:#3a4560,color:#8b93a7',
+      '  classDef broken fill:#3b1219,stroke:#f87171,color:#fecaca',
+    );
+
+    const findings = [];
+    for (const l of d.links.filter((x) => x.broken)) {
+      findings.push({ level: 'error', text: `Link rusak: ${l.from} → ${l.to} (halaman tidak ada)`, actions: [['Minta AI perbaiki', () => askAi(`Perbaiki link rusak di ${l.from} yang mengarah ke ${l.to}. Buat halamannya atau arahkan ke halaman yang benar.`)]] });
+    }
+    for (const a of d.assets.filter((x) => x.missing)) {
+      findings.push({ level: 'error', text: `${a.from} memuat ${a.to}, tapi file itu tidak ada`, actions: [['Minta AI perbaiki', () => askAi(`${a.from} memuat ${a.to} yang tidak ada. Perbaiki atau buat file tersebut.`)]] });
+    }
+    for (const p of d.pages.filter((x) => x.orphan)) findings.push({ level: 'warn', text: `${p.path} tidak ditautkan dari halaman mana pun, jadi pengunjung sulit menemukannya.` });
+    if (d.external) findings.push({ level: 'info', text: `${d.external} link ke website luar (tidak digambar).` });
+    if (!findings.length) findings.push({ level: 'ok', text: 'Semua link dan file CSS/JS ditemukan.' });
+    return { code: lines.join('\n'), findings };
+  }
+
+  function flowDiagram(d) {
+    if (!d.calls.length) {
+      return { empty: ['Belum ada kode yang memakai database', "Diagram ini muncul setelah halaman atau script memakai fetch('/api/db/...')."], findings: [] };
+    }
+    const ids = new Map();
+    const id = (key) => { if (!ids.has(key)) ids.set(key, `n${ids.size}`); return ids.get(key); };
+    const lines = ['flowchart LR'];
+    const edgeStyles = [];
+    let edge = 0;
+    const tables = new Set(d.tables.map((t) => t.name));
+    const files = [...new Set(d.calls.map((c) => c.file))];
+    // Halaman yang memuat script pemakai database, supaya terlihat halaman mana yang terdampak.
+    for (const a of d.assets.filter((x) => x.kind === 'js' && files.includes(x.to))) {
+      lines.push(`  ${id(a.from)}["${mmText(a.from)}"]:::page`, `  ${id(a.from)} -. memuat .-> ${id(a.to)}`);
+      edgeStyles.push(`  linkStyle ${edge++} stroke:#3a4560`);
+    }
+    for (const f of files) lines.push(`  ${id(f)}["${mmText(f)}"]:::${f.endsWith('.js') ? 'script' : 'page'}`);
+    for (const t of new Set(d.calls.map((c) => c.table))) {
+      lines.push(`  ${id(`t:${t}`)}[("${mmText(t)}${tables.has(t) ? '' : '\\nbelum ada'}")]:::${tables.has(t) ? 'table' : 'broken'}`);
+    }
+    for (const c of d.calls) {
+      lines.push(`  ${id(c.file)} -->|${OP_LABEL[c.op]}| ${id(`t:${c.table}`)}`);
+      if (c.status !== 'ok') edgeStyles.push(`  linkStyle ${edge} stroke:#f87171,stroke-width:2px`);
+      edge++;
+    }
+    lines.push(
+      ...edgeStyles,
+      '  classDef page fill:#1b2130,stroke:#8b5cf6,color:#f5f7fb',
+      '  classDef script fill:#2b2410,stroke:#facc15,color:#f5f7fb',
+      '  classDef table fill:#0f2a22,stroke:#10b981,color:#f5f7fb',
+      '  classDef broken fill:#3b1219,stroke:#f87171,color:#fecaca',
+    );
+
+    const findings = [];
+    for (const c of d.calls.filter((x) => x.status === 'owner_only')) {
+      findings.push({
+        level: 'error',
+        text: `${c.file} mencoba ${OP_LABEL[c.op]} data di tabel "${c.table}", tapi akses "${OP_RULE[c.op]}" masih Hanya kamu. Pengunjung akan mendapat error 403.`,
+        actions: [['Atur akses', () => openTableAccess(c.table)]],
+      });
+    }
+    for (const c of d.calls.filter((x) => x.status === 'missing')) {
+      findings.push({
+        level: 'error',
+        text: `${c.file} memakai tabel "${c.table}" yang belum ada.`,
+        actions: [['Buat tabel', () => { setMode('data'); setTimeout(() => openCreateTable(c.table), 300); }],
+          ['Minta AI perbaiki', () => askAi(`${c.file} memakai tabel database "${c.table}" yang belum ada. Buat tabelnya dengan kolom yang sesuai kode.`)]],
+      });
+    }
+    const ok = d.calls.filter((x) => x.status === 'ok').length;
+    if (ok) findings.push({ level: 'ok', text: `${ok} pemakaian database sudah sesuai aturan akses.` });
+    findings.push({ level: 'info', text: 'Garis merah = request yang akan ditolak server. Dideteksi dari kode, jadi URL yang dibuat dinamis bisa terlewat.' });
+    return { code: lines.join('\n'), findings };
+  }
+
+  const DIAGRAMS = { erd: erdDiagram, site: siteDiagram, flow: flowDiagram };
+
+  function renderFindings(findings) {
+    const icon = { error: '✕', warn: '!', info: 'i', ok: '✓' };
+    $('#diagramFindings').replaceChildren(
+      h('h4', {}, 'Temuan'),
+      findings.length ? h('ul', {}, findings.map((f) => h('li', { class: f.level },
+        h('span', { class: 'f-icon' }, icon[f.level]),
+        h('div', {}, h('p', {}, f.text),
+          f.actions ? h('div', { class: 'f-actions' }, f.actions.map(([label, run]) => h('button', { type: 'button', onclick: run }, label))) : null))))
+        : h('p', { class: 'f-empty' }, 'Tidak ada catatan.'));
+  }
+
+  function applyZoom() {
+    const stage = $('#diagramCanvas .diagram-stage');
+    if (stage) stage.style.transform = `scale(${diagram.zoom})`;
+    $('#diagramZoomFit').textContent = `${Math.round(diagram.zoom * 100)}%`;
+  }
+
+  function fitDiagram() {
+    const svg = $('#diagramCanvas svg');
+    if (!svg) return;
+    const box = $('#diagramCanvas');
+    const width = svg.viewBox.baseVal?.width || svg.getBoundingClientRect().width / diagram.zoom;
+    const height = svg.viewBox.baseVal?.height || svg.getBoundingClientRect().height / diagram.zoom;
+    diagram.zoom = Math.max(0.2, Math.min(1.5, (box.clientWidth - 48) / width, (box.clientHeight - 48) / height));
+    applyZoom();
+  }
+
+  async function renderDiagram() {
+    document.querySelectorAll('[data-diagram]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.diagram === diagram.kind)));
+    const canvas = $('#diagramCanvas');
+    if (!diagram.data) return;
+    const { code = '', empty, findings } = DIAGRAMS[diagram.kind](diagram.data);
+    diagram.code = code;
+    renderFindings(findings);
+    if (empty) {
+      canvas.replaceChildren(h('div', { class: 'db-empty' },
+        h('div', { class: 'db-empty-icon diagram-empty-icon' }, svg(ICON.table)), h('h3', {}, empty[0]), h('p', {}, empty[1])));
+      return;
+    }
+    canvas.replaceChildren(h('div', { class: 'diagram-loading' }, 'Menggambar diagram…'));
+    try {
+      const mermaid = await loadMermaid();
+      const { svg: markup } = await mermaid.render(`diagram-${++diagram.seq}`, code);
+      // Parse di dokumen terpisah lalu pindahkan elemen SVG-nya (tanpa innerHTML). Parser HTML dipakai karena
+      // label Mermaid berisi HTML (mis. <br>) yang tidak valid sebagai XML murni.
+      const svgEl = new DOMParser().parseFromString(markup, 'text/html').querySelector('svg');
+      if (!svgEl) throw new Error('Mermaid tidak menghasilkan SVG');
+      const stage = h('div', { class: 'diagram-stage' });
+      const imported = document.importNode(svgEl, true);
+      // Mermaid memberi width="100%": ganti dengan ukuran aslinya supaya zoom & scroll bekerja.
+      const vb = imported.viewBox?.baseVal;
+      // Inline style, karena aturan global `svg { width: 16px }` (untuk ikon) mengalahkan atribut width/height.
+      if (vb?.width) {
+        Object.assign(imported.style, { width: `${vb.width}px`, height: `${vb.height}px`, maxWidth: 'none' });
+      }
+      stage.append(imported);
+      canvas.replaceChildren(stage);
+      fitDiagram();
+    } catch (err) {
+      console.error(err);
+      canvas.replaceChildren(h('div', { class: 'db-empty' }, h('h3', {}, 'Diagram gagal digambar'), h('p', {}, err.message || String(err))));
+    }
+  }
+
+  async function diagramLoad() {
+    $('#diagramCanvas').replaceChildren(h('div', { class: 'diagram-loading' }, 'Membaca file & database…'));
+    try {
+      await saveAll(); // diagram dibaca dari server, jadi simpan perubahan dulu
+      diagram.data = await api('GET', '/api/diagrams');
+    } catch (err) {
+      $('#diagramCanvas').replaceChildren(h('div', { class: 'db-empty' }, h('h3', {}, 'Gagal memuat diagram'), h('p', {}, err.message)));
+      return;
+    }
+    renderDiagram();
+  }
+
+  function downloadDiagram() {
+    const svgEl = $('#diagramCanvas svg');
+    if (!svgEl) return toast('Belum ada diagram untuk diunduh', 'error');
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.style.background = '#11151f';
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: `${state.project.slug}-${diagram.kind}.svg` });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function bindDiagramEvents() {
+    document.querySelectorAll('[data-diagram]').forEach((btn) => {
+      btn.onclick = () => { diagram.kind = btn.dataset.diagram; storage.set('rakit.diagram', diagram.kind); renderDiagram(); };
+    });
+    $('#diagramZoomIn').onclick = () => { diagram.zoom = Math.min(3, diagram.zoom * 1.25); applyZoom(); };
+    $('#diagramZoomOut').onclick = () => { diagram.zoom = Math.max(0.2, diagram.zoom / 1.25); applyZoom(); };
+    $('#diagramZoomFit').onclick = fitDiagram;
+    $('#diagramRefresh').onclick = diagramLoad;
+    $('#diagramCopy').onclick = () => (diagram.code ? copyText(diagram.code, 'Kode Mermaid disalin') : toast('Belum ada diagram', 'error'));
+    $('#diagramDownload').onclick = downloadDiagram;
   }
 
   // ---------- Isi ulang kredit (QRIS) ----------
@@ -2248,6 +2526,7 @@
     initSplitters();
     bindEvents();
     bindAiEvents();
+    bindDiagramEvents();
     loadCredits();
 
     monaco = await loadMonaco();

@@ -6,6 +6,7 @@ import { usernameError } from './username.js';
 import { ai } from './ai.js';
 import { billing } from './billing.js';
 import { database } from './database.js';
+import { diagrams } from './diagrams.js';
 import { admin, isAdmin } from './admin.js';
 import { createProject, loadProject, projects, publicProject, slugTaken } from './projects.js';
 import {
@@ -138,6 +139,7 @@ api.delete('/files', async (req, res) => {
 api.use('/ai', ai);
 api.use('/billing', billing);
 api.use('/database', database);
+api.use('/diagrams', diagrams);
 api.use('/admin', admin);
 
 api.use((req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan' }));
