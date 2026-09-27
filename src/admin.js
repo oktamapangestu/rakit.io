@@ -165,6 +165,48 @@ admin.get('/stats', async (req, res) => {
   const recentUsers = all('SELECT username, email, created_at AS createdAt FROM users ORDER BY created_at DESC LIMIT 10')
     .map((u) => ({ ...u, siteUrl: config.siteUrl(u.username) }));
 
+  // Kredit & token per pengguna: jatah gratis bulan ini, saldo beli, total tersedia, dan pemakaian token.
+  const creditUsers = all(`
+    SELECT u.id, u.username, u.email,
+           COALESCE(usage.used, 0) AS used,
+           COALESCE(bal.balance, 0) AS purchased,
+           COALESCE(agg.inTokens, 0) AS inTokens,
+           COALESCE(agg.outTokens, 0) AS outTokens,
+           COALESCE(agg.requests, 0) AS aiRequests,
+           agg.lastAt AS lastAt
+    FROM users u
+    LEFT JOIN ai_usage usage ON usage.user_id = u.id AND usage.period = ?
+    LEFT JOIN credit_balance bal ON bal.user_id = u.id
+    LEFT JOIN (
+      SELECT user_id,
+             SUM(input_tokens) AS inTokens,
+             SUM(output_tokens) AS outTokens,
+             COUNT(*) AS requests,
+             MAX(created_at) AS lastAt
+      FROM ai_requests GROUP BY user_id
+    ) agg ON agg.user_id = u.id
+    ORDER BY (COALESCE(usage.used, 0) + COALESCE(bal.balance, 0)) DESC, (COALESCE(agg.inTokens, 0) + COALESCE(agg.outTokens, 0)) DESC, u.username
+  `, period).map((u) => {
+    const freeLimit = config.ai.monthlyCredits;
+    const freeRemaining = Math.max(0, freeLimit - u.used);
+    const totalTokens = u.inTokens + u.outTokens;
+    return {
+      username: u.username,
+      email: u.email,
+      used: u.used,
+      freeLimit,
+      freeRemaining,
+      purchased: u.purchased,
+      remaining: freeRemaining + u.purchased,
+      aiRequests: u.aiRequests,
+      inTokens: u.inTokens,
+      outTokens: u.outTokens,
+      tokens: totalTokens,
+      lastAt: u.lastAt ? new Date(u.lastAt).toISOString() : null,
+      siteUrl: config.siteUrl(u.username),
+    };
+  });
+
   res.json({
     generatedAt: new Date().toISOString(),
     days,
@@ -172,6 +214,7 @@ admin.get('/stats', async (req, res) => {
     signupsByDay,
     ai: { ...aiTotals, byStatus: aiByStatus, byDay: aiByDay, models: aiModels, currentModel: config.ai.model },
     credits,
+    creditUsers,
     revenue,
     revenueByDay,
     recentPayments,

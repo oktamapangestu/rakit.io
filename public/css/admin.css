@@ -179,6 +179,13 @@ td a:hover { color: var(--white); text-decoration: underline; }
 .pill.succeeded { color: #4ade80; }
 .pill.pending { color: #fcd34d; }
 .pill.failed, .pill.expired, .pill.canceled { color: #fca5a5; }
+
+/* Kredit per pengguna: bar tersusun (terpakai / gratis sisa / saldo beli) */
+.creditbar { display: inline-flex; width: 120px; height: 8px; border-radius: 999px; overflow: hidden; background: var(--panel-2); vertical-align: middle; }
+.creditbar .seg { height: 100%; }
+.creditbar .seg.used { background: var(--serious); }
+.creditbar .seg.free { background: var(--series-ai); }
+.creditbar .seg.paid { background: var(--good); }
 .empty-row { padding: 20px 10px; text-align: center; color: var(--faint); }
 
 @media (max-width: 760px) {

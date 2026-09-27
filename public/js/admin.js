@@ -253,6 +253,28 @@
       { label: 'Belanja', num: true, value: (u) => (u.spent ? rupiah(u.spent) : h('span', { class: 'muted' }, '—')) },
     ], st.topUsers, 'Belum ada pemakaian AI.'));
 
+    // Bar kecil untuk menunjukkan sisa kredit relatif terhadap jatah + saldo.
+    const creditBar = (u) => {
+      const total = u.freeRemaining + u.purchased;
+      const cap = u.used + total || 1;
+      const seg = (n, cls) => (n > 0 ? h('span', { class: `seg ${cls}`, style: `width:${(n / cap) * 100}%` }) : null);
+      return h('span', { class: 'creditbar', title: `Terpakai ${num(u.used)} · gratis sisa ${num(u.freeRemaining)} · saldo ${num(u.purchased)}` },
+        seg(u.used, 'used'), seg(u.freeRemaining, 'free'), seg(u.purchased, 'paid'));
+    };
+
+    const creditUsers = card('Kredit & token per pengguna',
+      `Jatah gratis ${num(st.credits.freePerUser)}/bulan · total ${num(st.creditUsers.length)} pengguna`,
+      table([
+        { label: 'Pengguna', value: userLink },
+        { label: 'Gratis terpakai', num: true, value: (u) => `${num(u.used)} / ${num(u.freeLimit)}` },
+        { label: 'Gratis sisa', num: true, value: (u) => num(u.freeRemaining) },
+        { label: 'Saldo beli', num: true, value: (u) => (u.purchased ? num(u.purchased) : h('span', { class: 'muted' }, '—')) },
+        { label: 'Total tersedia', num: true, value: (u) => h('strong', {}, num(u.remaining)) },
+        { label: 'Bar', value: creditBar },
+        { label: 'Token (in/out)', num: true, value: (u) => `${compact(u.inTokens)} / ${compact(u.outTokens)}` },
+        { label: 'AI terakhir', value: (u) => (u.lastAt ? shortTime(u.lastAt) : h('span', { class: 'muted' }, '—')) },
+      ], st.creditUsers, 'Belum ada pengguna.'));
+
     const storage = card('Penyimpanan', `Dihitung ${dateTime(st.storage.computedAt)}`, h('dl', { class: 'kv flush' },
       h('dt', {}, 'File website'), h('dd', {}, `${bytes(st.storage.siteBytes)} · ${num(st.storage.siteFiles)} file`),
       h('dt', {}, 'Database proyek'), h('dd', {}, `${bytes(st.storage.dbBytes)} · ${num(st.storage.projectsWithDatabase)} proyek`),
@@ -287,6 +309,7 @@
       tiles,
       charts,
       h('div', { class: 'grid three' }, health, topUsers, h('div', { class: 'stack' }, queueCard, storage)),
+      creditUsers,
       h('div', { class: 'grid two' }, payments, signups));
   }
 
