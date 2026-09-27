@@ -33,6 +33,8 @@ src/
   database.js  API editor database (khusus pemilik)
   siteapi.js   API publik /api/db/* di domain user
   admin.js     dashboard pemilik: statistik platform (khusus ADMIN_EMAILS)
+  projects.js  project/workspace per subdomain: buat, pilih (header X-Project), hapus
+  google.js    login & daftar dengan Google (OAuth 2.0 + PKCE)
   aiqueue.js   antrean & batas concurrency adaptif untuk panggilan ke provider AI
   aiapply.js   menerapkan & membatalkan perubahan Builder di server (dengan snapshot)
   db.js        skema SQLite
@@ -40,6 +42,19 @@ public/        landing page + editor (Monaco dari CDN jsDelivr)
 templates/     file awal untuk user baru
 data/          database & file user (dibuat otomatis, jangan di-commit)
 ```
+
+## Akun & project
+
+- **Akun** bisa dibuat dengan username + email + password, atau **Lanjutkan dengan Google**
+  (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`; redirect URI `<domain>/auth/google/callback`). Akun Google baru
+  mendapat username dari email. Email yang sudah terdaftar dengan password **tidak** ditautkan otomatis ke Google
+  (pendaftaran password tidak memverifikasi email), jadi pemiliknya masuk memakai password.
+- **Project = workspace**: setiap project punya subdomain sendiri (`<slug>.rakit.icu`), file (`data/sites/<slug>`),
+  database (`data/db/<slug>.db`), dan riwayat AI sendiri. Maksimal `MAX_PROJECTS` (default 5) per akun; kuota
+  file & database dihitung per project. Ganti, buat, ganti nama, atau hapus project lewat tombol folder di chip
+  alamat website (atau menu avatar di HP). Project terakhir tidak bisa dihapus.
+- **Kredit AI milik akun** dan dipakai bersama semua project; satu prompt berjalan per akun di project mana pun.
+- Akun lama (sebelum ada project) otomatis mendapat project pertama dengan slug = username, jadi URL-nya tetap.
 
 ## Asisten AI
 

@@ -203,7 +203,7 @@
         hero: true,
         label: 'Pengguna',
         value: num(st.users.total),
-        detail: [h('strong', {}, `+${num(st.users.inPeriod)}`), ` dalam ${period} · ${num(st.users.today)} hari ini`],
+        detail: [h('strong', {}, `+${num(st.users.inPeriod)}`), ` dalam ${period} · ${num(st.users.today)} hari ini · ${num(st.users.projects ?? 0)} project`],
       }),
       tile({
         label: 'Pendapatan',

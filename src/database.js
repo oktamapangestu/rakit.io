@@ -1,12 +1,13 @@
 import express from 'express';
 import { requireAuth } from './auth.js';
+import { loadProject } from './projects.js';
 import * as userdb from './userdb.js';
 
 // API editor database — hanya untuk pemilik proyek (sesi login di rakit.icu).
 export const database = express.Router();
 
-database.use(requireAuth);
-const owner = (req) => req.user.username;
+database.use(requireAuth, loadProject);
+const owner = (req) => req.project.slug;
 
 database.get('/tables', (req, res) => {
   res.json({ tables: userdb.listTables(owner(req)), usage: userdb.usage(owner(req)) });

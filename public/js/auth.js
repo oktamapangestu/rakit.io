@@ -10,9 +10,17 @@
     .then((r) => r.json())
     .then((cfg) => {
       baseDomain = cfg.baseDomain;
+      $('#googleBox').hidden = !cfg.googleEnabled;
       updateDomain();
     })
     .catch(() => {});
+
+  // Pesan dari alur login Google (mis. dibatalkan atau email sudah terdaftar).
+  const oauthError = new URLSearchParams(location.search).get('error');
+  if (oauthError) {
+    $('#oauthError').textContent = oauthError;
+    history.replaceState(null, '', location.pathname);
+  }
 
   function showTab(name) {
     document.querySelectorAll('[data-tab]').forEach((btn) => {

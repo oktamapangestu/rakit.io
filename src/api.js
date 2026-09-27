@@ -7,13 +7,13 @@ import { ai } from './ai.js';
 import { billing } from './billing.js';
 import { database } from './database.js';
 import { admin, isAdmin } from './admin.js';
+import { createProject, loadProject, projects, publicProject, slugTaken } from './projects.js';
 import {
   clearSessionCookie, createSession, destroySession, hashPassword, rateLimit,
   requireAuth, requireSameOrigin, setSessionCookie, verifyPassword,
 } from './auth.js';
 import {
-  createDir, listTree, readText, removeEntry, renameEntry, seedTemplate, usageOf,
-  userRoot, writeText,
+  createDir, listTree, readText, removeEntry, renameEntry, usageOf, userRoot, writeText,
 } from './files.js';
 
 export const api = express.Router();
@@ -34,15 +34,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Hash dummy supaya waktu respons login sama walau user tidak ada.
 const DUMMY_HASH = await hashPassword('dummy-password');
 
-const publicUser = (u) => ({
-  username: u.username,
-  email: u.email,
-  siteUrl: config.siteUrl(u.username),
-  siteHost: config.siteHost(u.username),
-});
+const publicUser = (u) => ({ username: u.username, email: u.email });
 
 api.get('/config', (req, res) => {
-  res.json({ baseDomain: config.baseDomain, siteUrlPattern: config.siteUrl('{username}') });
+  res.json({ baseDomain: config.baseDomain, siteUrlPattern: config.siteUrl('{username}'), googleEnabled: config.google.enabled });
 });
 
 api.post('/register', authLimiter, async (req, res) => {
@@ -54,7 +49,8 @@ api.post('/register', authLimiter, async (req, res) => {
   if (err) throw new HttpError(400, err);
   if (!EMAIL_RE.test(email) || email.length > 254) throw new HttpError(400, 'Email tidak valid');
   if (password.length < 8 || password.length > 200) throw new HttpError(400, 'Password minimal 8 karakter');
-  if (q.userByUsername.get(username)) throw new HttpError(409, 'Username sudah dipakai');
+  // Project pertama memakai username sebagai subdomain, jadi keduanya harus belum dipakai.
+  if (slugTaken(username)) throw new HttpError(409, 'Username sudah dipakai');
   if (q.userByEmail.get(email)) throw new HttpError(409, 'Email sudah terdaftar');
 
   let info;
@@ -64,17 +60,21 @@ api.post('/register', authLimiter, async (req, res) => {
     if (String(e.message).includes('UNIQUE')) throw new HttpError(409, 'Username atau email sudah dipakai');
     throw e;
   }
-  await seedTemplate(username);
+  const user = q.userByUsername.get(username);
+  await createProject(user, { slug: username, name: username });
 
-  setSessionCookie(res, createSession(info.lastInsertRowid));
-  res.status(201).json({ user: publicUser({ username, email }) });
+  setSessionCookie(res, createSession(user.id));
+  res.status(201).json({ user: publicUser(user) });
 });
 
 api.post('/login', authLimiter, async (req, res) => {
   const login = String(req.body?.login ?? '').trim().toLowerCase();
   const password = String(req.body?.password ?? '');
   const user = login ? q.userByLogin.get(login, login) : null;
-  const ok = await verifyPassword(password, user?.password_hash ?? DUMMY_HASH);
+  if (user && !user.password_hash) {
+    throw new HttpError(400, 'Akun ini dibuat dengan Google. Silakan masuk dengan tombol "Lanjutkan dengan Google".');
+  }
+  const ok = await verifyPassword(password, user?.password_hash || DUMMY_HASH);
   if (!user || !ok) throw new HttpError(401, 'Username/email atau password salah');
 
   setSessionCookie(res, createSession(user.id));
@@ -87,14 +87,22 @@ api.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-api.get('/me', requireAuth, (req, res) => {
-  res.json({ user: { ...publicUser(req.user), isAdmin: isAdmin(req.user) } });
+// Akun + project aktif (dari header X-Project) + daftar semua project milik akun.
+api.get('/me', requireAuth, loadProject, (req, res) => {
+  res.json({
+    user: { ...publicUser(req.user), isAdmin: isAdmin(req.user) },
+    project: publicProject(req.project),
+    projects: q.projectsOf.all(req.user.id).map(publicProject),
+    maxProjects: config.maxProjects,
+  });
 });
 
-// ---- File ----
+api.use('/projects', projects);
 
-api.use('/files', requireAuth);
-const rootOf = (req) => userRoot(req.user.username);
+// ---- File (milik project aktif) ----
+
+api.use('/files', requireAuth, loadProject);
+const rootOf = (req) => userRoot(req.project.slug);
 
 api.get('/files', async (req, res) => {
   const files = await listTree(rootOf(req));

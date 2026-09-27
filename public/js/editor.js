@@ -77,7 +77,10 @@
   async function api(method, url, body) {
     const res = await fetch(url, {
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(state.projectSlug ? { 'X-Project': state.projectSlug } : {}),
+      },
       body: body ? JSON.stringify(body) : undefined,
       credentials: 'same-origin',
     });
@@ -298,7 +301,8 @@
     }));
     $('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     $('#title').textContent = state.active ?? '';
-    document.title = `${state.active ? `${isDirty(state.active) ? '● ' : ''}${baseName(state.active)} · ` : ''}rakit.icu`;
+    const projectName = state.project ? `${state.project.name} · ` : '';
+    document.title = `${state.active ? `${isDirty(state.active) ? '● ' : ''}${baseName(state.active)} · ` : ''}${projectName}rakit.icu`;
   }
 
   function renderBreadcrumbs() {
@@ -532,7 +536,7 @@
   // ---------- Preview ----------
   function urlFor(path) {
     const clean = path === 'index.html' ? '' : path.endsWith('/index.html') ? path.slice(0, -'index.html'.length) : path;
-    return `${state.me.siteUrl}/${clean}`;
+    return `${state.project.siteUrl}/${clean}`;
   }
 
   function reloadPreview() {
@@ -575,7 +579,9 @@
   function showAccountMenu() {
     const rect = $('#avatarBtn').getBoundingClientRect();
     showMenu(rect.right - 220, rect.bottom + 8, [
-      { label: 'Salin URL website', run: () => copyText(state.me.siteUrl) },
+      { label: `Project: ${state.project.name}`, hint: 'ganti ›', run: () => setTimeout(() => showProjectMenu($('#avatarBtn')), 0) },
+      '-',
+      { label: 'Salin URL website', run: () => copyText(state.project.siteUrl) },
       { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
       ai.credits?.topupEnabled && { label: 'Isi ulang kredit AI', run: openTopup },
       state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
@@ -607,6 +613,116 @@
     editor?.updateOptions(mobileQuery.matches
       ? { minimap: { enabled: false }, fontSize: 13, wordWrap: 'on', lineNumbersMinChars: 3, folding: false, glyphMargin: false }
       : { minimap: { enabled: true }, fontSize: 14, wordWrap: 'off', lineNumbersMinChars: 5, folding: true });
+  }
+
+  // ---------- Project (workspace) ----------
+  // Setiap project punya subdomain, file, database, dan riwayat AI sendiri. Ganti project = muat ulang editor.
+
+  function projectUrl(slug) {
+    return `/editor?project=${encodeURIComponent(slug)}`;
+  }
+
+  async function switchProject(slug) {
+    if (slug === state.project.slug) return;
+    await saveAll();
+    location.href = projectUrl(slug);
+  }
+
+  function showProjectMenu(anchor) {
+    const rect = anchor.getBoundingClientRect();
+    const canAdd = state.projects.length < state.maxProjects;
+    showMenu(rect.left, rect.bottom + 6, [
+      ...state.projects.map((p) => ({
+        label: `${p.slug === state.project.slug ? '● ' : ''}${p.name}`,
+        hint: p.siteHost,
+        run: () => switchProject(p.slug),
+      })),
+      '-',
+      canAdd
+        ? { label: '+ Project baru', run: openNewProject }
+        : { label: `Maksimal ${state.maxProjects} project`, run: () => toast(`Maksimal ${state.maxProjects} project per akun. Hapus project lama untuk membuat yang baru.`, 'error') },
+      { label: 'Ganti nama project…', run: renameProject },
+      state.projects.length > 1 ? { label: 'Hapus project ini…', danger: true, run: deleteProject } : null,
+    ]);
+    $('#ctxmenu').classList.add('history-menu');
+  }
+
+  function openNewProject() {
+    const { body, close } = openPanel('db-modal');
+    const base = state.project.siteHost.slice(state.project.slug.length); // ".rakit.icu"
+    const slugInput = h('input', { placeholder: 'tokokue', spellcheck: 'false', autocomplete: 'off', maxlength: '30' });
+    const nameInput = h('input', { placeholder: 'Toko Kue Bu Sari', maxlength: '60' });
+    const preview = h('strong', {}, `namamu${base}`);
+    slugInput.addEventListener('input', () => {
+      const cleaned = slugInput.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+      if (cleaned !== slugInput.value) slugInput.value = cleaned;
+      preview.textContent = `${cleaned || 'namamu'}${base}`;
+    });
+    const error = h('p', { class: 'db-form-error' });
+    const submit = h('button', { type: 'submit', class: 'primary' }, 'Buat project');
+    const form = h('form', {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        submit.disabled = true;
+        try {
+          const { project } = await api('POST', '/api/projects', { slug: slugInput.value, name: nameInput.value });
+          close();
+          await saveAll();
+          location.href = projectUrl(project.slug);
+        } catch (err) {
+          error.textContent = err.message;
+          submit.disabled = false;
+        }
+      },
+    },
+    h('h3', {}, 'Project baru'),
+    h('p', { class: 'db-note' }, 'Setiap project adalah website terpisah dengan alamat, file, database, dan riwayat AI sendiri. Kredit AI dipakai bersama untuk semua project.'),
+    h('label', { class: 'db-field' }, h('span', { class: 'db-field-label' }, 'Alamat website'), slugInput),
+    h('p', { class: 'project-preview' }, 'Websitemu: ', preview),
+    h('label', { class: 'db-field' }, h('span', { class: 'db-field-label' }, 'Nama project', h('span', { class: 'col-type' }, 'opsional')), nameInput),
+    error,
+    h('div', { class: 'modal-buttons' }, h('button', { type: 'button', onclick: close }, 'Batal'), submit));
+    body.append(form);
+    slugInput.focus();
+  }
+
+  async function renameProject() {
+    const name = await ask('Ganti nama project', 'Nama project', state.project.name);
+    if (!name || name === state.project.name) return;
+    try {
+      const { project } = await api('PATCH', `/api/projects/${state.project.slug}`, { name });
+      state.project = project;
+      state.projects = state.projects.map((p) => (p.slug === project.slug ? project : p));
+      renderProjectInfo();
+      toast('Nama project diganti');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  async function deleteProject() {
+    const typed = await ask(`Hapus project ${state.project.siteHost}?`,
+      `Ketik "${state.project.slug}" untuk konfirmasi`, '');
+    if (typed === null) return;
+    if (typed !== state.project.slug) return toast('Nama yang diketik tidak cocok. Project tidak dihapus.', 'error');
+    try {
+      await api('DELETE', `/api/projects/${state.project.slug}`);
+    } catch (err) {
+      return toast(err.message, 'error');
+    }
+    const next = state.projects.find((p) => p.slug !== state.project.slug);
+    storage.set('rakit.project', next.slug);
+    location.href = projectUrl(next.slug);
+  }
+
+  function renderProjectInfo() {
+    const p = state.project;
+    $('#projectName').textContent = p.siteHost;
+    $('#siteLink').textContent = p.siteHost;
+    $('#siteLink').href = p.siteUrl;
+    $('#visitSite').href = p.siteUrl;
+    $('#projectSwitch').title = `Project: ${p.name} — ganti atau buat project`;
+    document.title = `${p.name} · rakit.icu`;
   }
 
   // ---------- Status bar ----------
@@ -729,7 +845,8 @@
     };
 
     $('#avatarBtn').onclick = (e) => { e.stopPropagation(); showAccountMenu(); };
-    $('#copySite').onclick = () => copyText(state.me.siteUrl);
+    $('#copySite').onclick = () => copyText(state.project.siteUrl);
+    $('#projectSwitch').onclick = (e) => { e.stopPropagation(); showProjectMenu($('#projectSwitch')); };
     document.querySelectorAll('.device-switch button').forEach((btn) => {
       btn.onclick = () => setDevice(btn.dataset.device);
     });
@@ -942,7 +1059,7 @@
     if (guardBusy()) return;
     ai.threadId = null;
     ai.pendingCard = null;
-    storage.set('rakit.aiThread', 'new');
+    storage.set(`rakit.aiThread.${state.projectSlug}`, 'new');
     $('#aiMessages').replaceChildren();
     renderAiEmpty();
     $('#aiInput').focus();
@@ -965,7 +1082,7 @@
     }
     ai.threadId = data.thread.id;
     ai.pendingCard = null;
-    storage.set('rakit.aiThread', ai.threadId);
+    storage.set(`rakit.aiThread.${state.projectSlug}`, ai.threadId);
     $('#aiMessages').replaceChildren();
     data.messages.forEach(renderMessage);
     renderAiEmpty();
@@ -981,8 +1098,16 @@
     } catch {
       return;
     }
-    const saved = storage.get('rakit.aiThread', null);
-    const target = data.activeJob?.threadId
+    const saved = storage.get(`rakit.aiThread.${state.projectSlug}`, null);
+    const job = data.activeJob;
+    if (job && job.projectSlug !== state.projectSlug) {
+      // Satu prompt berjalan per akun; beri tahu kalau sedang dipakai di project lain.
+      $('#aiMessages').replaceChildren(h('div', { class: 'ai-notice' },
+        `AI sedang mengerjakan prompt di project ${job.projectSlug}. `,
+        h('a', { href: projectUrl(job.projectSlug) }, 'Buka project itu'),
+        ' — atau tunggu selesai untuk mengirim prompt di sini.'));
+    }
+    const target = (job?.projectSlug === state.projectSlug ? job.threadId : null)
       ?? (saved === 'new' ? null : data.threads.find((t) => t.id === saved)?.id ?? data.threads[0]?.id);
     if (target) await openThread(target);
   }
@@ -1025,7 +1150,7 @@
     }
     ai.threadId = null;
     ai.pendingCard = null;
-    storage.set('rakit.aiThread', 'new');
+    storage.set(`rakit.aiThread.${state.projectSlug}`, 'new');
     $('#aiMessages').replaceChildren();
     renderAiEmpty();
     toast('Riwayat percakapan dihapus');
@@ -1063,7 +1188,7 @@
       return;
     }
     ai.threadId = started.threadId;
-    storage.set('rakit.aiThread', ai.threadId);
+    storage.set(`rakit.aiThread.${state.projectSlug}`, ai.threadId);
     ai.credits = started.credits;
     renderCredits();
     attachJob(started.assistantMessage);
@@ -2096,13 +2221,24 @@
   }
 
   async function init() {
-    const { user } = await api('GET', '/api/me');
-    state.me = user;
-    $('#projectName').textContent = user.siteHost;
-    $('#siteLink').textContent = user.siteHost;
-    $('#siteLink').href = user.siteUrl;
-    $('#visitSite').href = user.siteUrl;
-    $('#avatarBtn').textContent = user.username[0];
+    // Project aktif: dari URL (?project=), atau yang terakhir dibuka, atau project pertama.
+    state.projectSlug = new URLSearchParams(location.search).get('project') || storage.get('rakit.project', null);
+    let me;
+    try {
+      me = await api('GET', '/api/me');
+    } catch {
+      state.projectSlug = null; // project tidak ada / bukan milik akun ini
+      me = await api('GET', '/api/me');
+    }
+    state.me = me.user;
+    state.project = me.project;
+    state.projects = me.projects;
+    state.maxProjects = me.maxProjects;
+    state.projectSlug = me.project.slug;
+    storage.set('rakit.project', state.projectSlug);
+    history.replaceState(null, '', projectUrl(state.projectSlug));
+    renderProjectInfo();
+    $('#avatarBtn').textContent = state.me.username[0];
     $('#statusUser').textContent = 'HTML · CSS · JS';
 
     $('#toggleSidebar').classList.add('active');

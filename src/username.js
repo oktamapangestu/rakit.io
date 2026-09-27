@@ -10,6 +10,11 @@ const RESERVED = new Set([
   'dev', 'test', 'staging', 'preview', 'demo', 'internal', 'localhost',
 ]);
 
+export function slugError(slug) {
+  const err = usernameError(slug);
+  return err && err.replace('Username ini', 'Subdomain ini').replace('Username', 'Subdomain');
+}
+
 export function usernameError(username) {
   if (username.length < 3 || username.length > 30) return 'Username harus 3–30 karakter';
   if (!USERNAME_RE.test(username)) {

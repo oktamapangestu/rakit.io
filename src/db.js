@@ -26,6 +26,16 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires_at);
 
+  -- Project = workspace dengan subdomain sendiri: <slug>.rakit.icu. File di sites/<slug>, database di db/<slug>.db.
+  CREATE TABLE IF NOT EXISTS projects (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    slug       TEXT NOT NULL UNIQUE,
+    name       TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS projects_user ON projects(user_id, created_at);
+
   -- Kredit AI terpakai per user per bulan (period = 'YYYY-MM', UTC).
   CREATE TABLE IF NOT EXISTS ai_usage (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -101,6 +111,23 @@ db.exec(`
   );
 `);
 
+// ---------- Migrasi untuk database yang dibuat versi sebelumnya ----------
+
+const hasColumn = (table, column) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+if (!hasColumn('users', 'google_id')) db.exec('ALTER TABLE users ADD COLUMN google_id TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google ON users(google_id) WHERE google_id IS NOT NULL');
+if (!hasColumn('ai_threads', 'project_id')) db.exec('ALTER TABLE ai_threads ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE');
+// Dulu 1 akun = 1 website di <username>.rakit.icu: jadikan itu project pertamanya (URL tetap sama).
+db.exec(`
+  INSERT INTO projects (user_id, slug, name, created_at)
+  SELECT u.id, u.username, u.username, u.created_at FROM users u
+  WHERE NOT EXISTS (SELECT 1 FROM projects p WHERE p.user_id = u.id)
+    AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.slug = u.username);
+  UPDATE ai_threads SET project_id = (
+    SELECT p.id FROM projects p WHERE p.user_id = ai_threads.user_id ORDER BY p.created_at, p.id LIMIT 1
+  ) WHERE project_id IS NULL;
+`);
+
 export const q = {
   insertUser: db.prepare(
     'INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
@@ -108,6 +135,15 @@ export const q = {
   userByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
   userByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
   userByLogin: db.prepare('SELECT * FROM users WHERE username = ? OR email = ?'),
+  userByGoogle: db.prepare('SELECT * FROM users WHERE google_id = ?'),
+  linkGoogle: db.prepare('UPDATE users SET google_id = ? WHERE id = ?'),
+
+  insertProject: db.prepare('INSERT INTO projects (user_id, slug, name, created_at) VALUES (?, ?, ?, ?)'),
+  projectBySlug: db.prepare('SELECT * FROM projects WHERE slug = ?'),
+  projectsOf: db.prepare('SELECT * FROM projects WHERE user_id = ? ORDER BY created_at, id'),
+  projectCount: db.prepare('SELECT COUNT(*) AS n FROM projects WHERE user_id = ?'),
+  renameProject: db.prepare('UPDATE projects SET name = ? WHERE id = ?'),
+  deleteProject: db.prepare('DELETE FROM projects WHERE id = ?'),
 
   insertSession: db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)'),
   sessionUser: db.prepare(`

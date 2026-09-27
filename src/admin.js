@@ -38,6 +38,8 @@ function fillDays(days, rows, fields) {
 }
 
 const one = (sql, ...params) => db.prepare(sql).get(...params);
+// Subdomain project pertama milik user (untuk link "lihat situs").
+const PRIMARY_SLUG = '(SELECT p.slug FROM projects p WHERE p.user_id = u.id ORDER BY p.created_at, p.id LIMIT 1)';
 const all = (sql, ...params) => db.prepare(sql).all(...params);
 
 // ---------- Ukuran penyimpanan (dihitung ulang paling sering 5 menit sekali) ----------
@@ -97,6 +99,7 @@ admin.get('/stats', async (req, res) => {
   // Pengguna
   const users = {
     total: one('SELECT COUNT(*) AS n FROM users').n,
+    projects: one('SELECT COUNT(*) AS n FROM projects').n,
     inPeriod: one('SELECT COUNT(*) AS n FROM users WHERE created_at >= ?', since).n,
     today: one(`SELECT COUNT(*) AS n FROM users WHERE ${localDay('created_at')} = ?`, today).n,
     activeSessions: one('SELECT COUNT(DISTINCT user_id) AS n FROM sessions WHERE expires_at > ?', Date.now()).n,
@@ -155,19 +158,22 @@ admin.get('/stats', async (req, res) => {
 
   // Pengguna teraktif (AI) dan pendaftar terbaru
   const topUsers = all(`
-    SELECT u.username, u.created_at AS createdAt,
+    SELECT u.username, u.created_at AS createdAt, ${PRIMARY_SLUG} AS slug,
            COUNT(r.id) AS aiRequests,
            COALESCE(SUM(r.input_tokens + r.output_tokens), 0) AS tokens,
            (SELECT COALESCE(SUM(amount), 0) FROM payments p WHERE p.user_id = u.id AND p.status = 'succeeded') AS spent
     FROM users u JOIN ai_requests r ON r.user_id = u.id AND r.created_at >= ?
     GROUP BY u.id ORDER BY aiRequests DESC, tokens DESC LIMIT 10
-  `, since).map((u) => ({ ...u, siteUrl: config.siteUrl(u.username) }));
-  const recentUsers = all('SELECT username, email, created_at AS createdAt FROM users ORDER BY created_at DESC LIMIT 10')
-    .map((u) => ({ ...u, siteUrl: config.siteUrl(u.username) }));
+  `, since).map((u) => ({ ...u, siteUrl: config.siteUrl(u.slug ?? u.username) }));
+  const recentUsers = all(`
+    SELECT username, email, created_at AS createdAt, ${PRIMARY_SLUG} AS slug,
+           (SELECT COUNT(*) FROM projects p WHERE p.user_id = u.id) AS projects
+    FROM users u ORDER BY created_at DESC LIMIT 10
+  `).map((u) => ({ ...u, siteUrl: config.siteUrl(u.slug ?? u.username) }));
 
   // Kredit & token per pengguna: jatah gratis bulan ini, saldo beli, total tersedia, dan pemakaian token.
   const creditUsers = all(`
-    SELECT u.id, u.username, u.email,
+    SELECT u.id, u.username, u.email, ${PRIMARY_SLUG} AS slug,
            COALESCE(usage.used, 0) AS used,
            COALESCE(bal.balance, 0) AS purchased,
            COALESCE(agg.inTokens, 0) AS inTokens,
@@ -203,7 +209,7 @@ admin.get('/stats', async (req, res) => {
       outTokens: u.outTokens,
       tokens: totalTokens,
       lastAt: u.lastAt ? new Date(u.lastAt).toISOString() : null,
-      siteUrl: config.siteUrl(u.username),
+      siteUrl: config.siteUrl(u.slug ?? u.username),
     };
   });
 

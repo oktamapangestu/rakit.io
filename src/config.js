@@ -42,6 +42,13 @@ export const config = {
       return { id: `p${credits}`, credits, price };
     }).filter((p) => p.credits > 0 && p.price > 0),
   },
+  google: {
+    // OAuth client dari Google Cloud Console (tipe "Web application").
+    enabled: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+    clientId: env.GOOGLE_CLIENT_ID || '',
+    clientSecret: env.GOOGLE_CLIENT_SECRET || '',
+  },
+  maxProjects: Math.max(1, Number(env.MAX_PROJECTS || 5)),
   // Email pemilik platform yang boleh membuka dashboard /admin (dipisah koma).
   adminEmails: (env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
   siteHost: (username) => `${username}.${baseDomain}`,

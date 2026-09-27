@@ -5,6 +5,7 @@ import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
 import { creditInfo, refundCredits, reserveCredits } from './credits.js';
 import { applyChanges, revertChanges, touchedPaths } from './aiapply.js';
+import { loadProject } from './projects.js';
 import { cleanPath, isAllowedFile, LIMITS, listTree, readText, userRoot } from './files.js';
 import { COLUMN_TYPES, hasDatabase, listTables, OPERATIONS, schemaSummary } from './userdb.js';
 import { acquireSlot, countRetry, QueueError, reportBusy, reportSuccess } from './aiqueue.js';
@@ -19,7 +20,7 @@ const MAX_CONTEXT_CHARS = 200_000; // batas isi file proyek yang dikirim ke mode
 const BASE_PROMPT = `You are the AI assistant built into rakit.icu, an online code editor where people build websites.
 
 Environment:
-- Every project is a website at https://<username>.${config.baseDomain}. Its .html, .css and .js files are served as static files — there is no custom server-side code, no build step, and no npm; external libraries can only be loaded from a CDN via <script> or <link> tags.
+- Every project is a website at https://<project>.${config.baseDomain}. Its .html, .css and .js files are served as static files — there is no custom server-side code, no build step, and no npm; external libraries can only be loaded from a CDN via <script> or <link> tags.
 - The project DOES have a built-in database with an HTTP API for storing and reading data (see "Database" below). It is always available — you create its tables yourself.
 - Only .html, .css and .js files are allowed. Paths are relative to the site root, use letters, digits, ".", "-" and "_", may contain folders, and must not start with a dot.
 - Each file can be at most ${LIMITS.fileSize / 1024} KB.
@@ -284,9 +285,9 @@ function planMessage(text) {
 
 // ---------- Konteks proyek ----------
 
-async function projectContext(username, activePath) {
-  const schema = schemaSummary(username);
-  const root = userRoot(username);
+async function projectContext(slug, activePath) {
+  const schema = schemaSummary(slug);
+  const root = userRoot(slug);
   const files = (await listTree(root)).filter((e) => e.type === 'file' && isAllowedFile(e.path));
   // File yang sedang dibuka didahulukan, lalu yang kecil-kecil.
   files.sort((a, b) => (a.path === activePath ? -1 : b.path === activePath ? 1 : a.size - b.size));
@@ -480,14 +481,14 @@ const HISTORY_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 const THREAD_PAGE = 40; // pesan terakhir yang dimuat saat membuka percakapan
 
 const sql = {
-  insertThread: db.prepare('INSERT INTO ai_threads (user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?)'),
-  thread: db.prepare('SELECT id, title, created_at AS createdAt, updated_at AS updatedAt FROM ai_threads WHERE id = ? AND user_id = ?'),
+  insertThread: db.prepare('INSERT INTO ai_threads (user_id, project_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'),
+  thread: db.prepare('SELECT id, title, created_at AS createdAt, updated_at AS updatedAt FROM ai_threads WHERE id = ? AND user_id = ? AND project_id = ?'),
   touchThread: db.prepare('UPDATE ai_threads SET updated_at = ? WHERE id = ?'),
-  threads: db.prepare('SELECT id, title, created_at AS createdAt, updated_at AS updatedAt FROM ai_threads WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?'),
-  deleteThreads: db.prepare('DELETE FROM ai_threads WHERE user_id = ?'),
+  threads: db.prepare('SELECT id, title, created_at AS createdAt, updated_at AS updatedAt FROM ai_threads WHERE user_id = ? AND project_id = ? ORDER BY updated_at DESC LIMIT ?'),
+  deleteThreads: db.prepare('DELETE FROM ai_threads WHERE user_id = ? AND project_id = ?'),
   pruneThreads: db.prepare(`
-    DELETE FROM ai_threads WHERE user_id = ? AND id NOT IN (
-      SELECT id FROM ai_threads WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?)
+    DELETE FROM ai_threads WHERE project_id = ? AND id NOT IN (
+      SELECT id FROM ai_threads WHERE project_id = ? ORDER BY updated_at DESC LIMIT ?)
   `),
   pruneOld: db.prepare('DELETE FROM ai_threads WHERE updated_at < ?'),
   insertMessage: db.prepare(`
@@ -504,9 +505,15 @@ const sql = {
   finish: db.prepare('UPDATE ai_messages SET status = ?, content = ?, error = ?, changes = ?, apply_state = ?, snapshot = ? WHERE id = ?'),
   setApplyState: db.prepare('UPDATE ai_messages SET apply_state = ? WHERE id = ?'),
   keepPending: db.prepare(`UPDATE ai_messages SET apply_state = 'kept' WHERE user_id = ? AND apply_state = 'pending'`),
+  // Kredit & jatah 1 prompt berjalan berlaku per akun, jadi job aktif dicari di semua project.
   activeJob: db.prepare(`
-    SELECT id, thread_id AS threadId FROM ai_messages
-    WHERE user_id = ? AND role = 'assistant' AND status IN ('queued', 'running') ORDER BY id DESC LIMIT 1
+    SELECT m.id, m.thread_id AS threadId, p.slug AS projectSlug FROM ai_messages m
+    JOIN ai_threads t ON t.id = m.thread_id JOIN projects p ON p.id = t.project_id
+    WHERE m.user_id = ? AND m.role = 'assistant' AND m.status IN ('queued', 'running') ORDER BY m.id DESC LIMIT 1
+  `),
+  messageProject: db.prepare(`
+    SELECT p.slug FROM ai_messages m JOIN ai_threads t ON t.id = m.thread_id JOIN projects p ON p.id = t.project_id
+    WHERE m.id = ?
   `),
   stuck: db.prepare(`SELECT id, user_id, credit FROM ai_messages WHERE role = 'assistant' AND status IN ('queued', 'running')`),
 };
@@ -566,12 +573,12 @@ function emit(job, event) {
   for (const listener of job.listeners) listener(event);
 }
 
-async function runJob(job, { user, messageId, threadId, prompt, mode, activePath, reservation }) {
+async function runJob(job, { user, slug, messageId, threadId, prompt, mode, activePath, reservation }) {
   const send = (event) => emit(job, event);
   let status = 'error';
   let usage = { input_tokens: 0, output_tokens: 0 };
   try {
-    const context = await projectContext(user.username, activePath);
+    const context = await projectContext(slug, activePath);
     const merged = [
       ...sanitizeHistory(threadHistory(threadId, messageId)),
       { role: 'user', content: `${context}\n\n---\n\nRequest:\n${prompt}` },
@@ -618,7 +625,7 @@ async function runJob(job, { user, messageId, threadId, prompt, mode, activePath
       const text = planMessage(reply.text);
       result = { message: text && reply.finishReason === 'length' ? text + TRUNCATED_NOTE : text, changes: [] };
     } else {
-      const existingTables = hasDatabase(user.username) ? listTables(user.username).map((t) => t.name) : [];
+      const existingTables = hasDatabase(slug) ? listTables(slug).map((t) => t.name) : [];
       result = await runBuilder({ messages: convo, existingTables, hooks });
       usage = result.usage;
     }
@@ -633,7 +640,7 @@ async function runJob(job, { user, messageId, threadId, prompt, mode, activePath
     let applyError = null;
     if (result.changes.length) {
       try {
-        snapshot = await applyChanges(user.username, result.changes);
+        snapshot = await applyChanges(slug, result.changes);
         applyState = 'pending';
       } catch (err) {
         applyState = 'failed';
@@ -681,27 +688,30 @@ ai.get('/credits', (req, res) => {
   res.json(creditInfo(req.user.id));
 });
 
-ai.get('/threads', (req, res) => {
-  res.json({ threads: sql.threads.all(req.user.id, MAX_THREADS_PER_USER), activeJob: sql.activeJob.get(req.user.id) ?? null });
+ai.get('/threads', loadProject, (req, res) => {
+  res.json({
+    threads: sql.threads.all(req.user.id, req.project.id, MAX_THREADS_PER_USER),
+    activeJob: sql.activeJob.get(req.user.id) ?? null,
+  });
 });
 
-ai.get('/threads/:id', (req, res) => {
-  const thread = sql.thread.get(Number(req.params.id), req.user.id);
+ai.get('/threads/:id', loadProject, (req, res) => {
+  const thread = sql.thread.get(Number(req.params.id), req.user.id, req.project.id);
   if (!thread) throw new HttpError(404, 'Percakapan tidak ditemukan');
   const messages = sql.recentMessages.all(thread.id, THREAD_PAGE).reverse().map(publicMessage);
   res.json({ thread, messages });
 });
 
-// Hapus seluruh riwayat percakapan user.
-ai.delete('/threads', (req, res) => {
+// Hapus seluruh riwayat percakapan di project aktif.
+ai.delete('/threads', loadProject, (req, res) => {
   if (running.has(req.user.id) || sql.activeJob.get(req.user.id)) {
     throw new HttpError(409, 'Tunggu AI selesai (atau tekan Stop) sebelum menghapus riwayat.');
   }
-  const { changes } = sql.deleteThreads.run(req.user.id);
+  const { changes } = sql.deleteThreads.run(req.user.id, req.project.id);
   res.json({ deleted: changes });
 });
 
-ai.post('/prompt', async (req, res) => {
+ai.post('/prompt', loadProject, async (req, res) => {
   if (!config.ai.enabled) throw new HttpError(503, 'Fitur AI belum dikonfigurasi di server');
   const prompt = String(req.body?.prompt ?? '').trim();
   const mode = req.body?.mode === 'plan' ? 'plan' : 'build';
@@ -717,7 +727,7 @@ ai.post('/prompt', async (req, res) => {
   } catch { /* abaikan path tidak valid */ }
 
   let threadId = Number(req.body?.threadId) || null;
-  if (threadId && !sql.thread.get(threadId, req.user.id)) threadId = null;
+  if (threadId && !sql.thread.get(threadId, req.user.id, req.project.id)) threadId = null;
 
   const reservation = reserveCredits(req.user.id);
   running.add(req.user.id);
@@ -726,8 +736,8 @@ ai.post('/prompt', async (req, res) => {
   // Prompt baru = perubahan sebelumnya yang belum dikonfirmasi dianggap disimpan.
   sql.keepPending.run(req.user.id);
   if (!threadId) {
-    threadId = Number(sql.insertThread.run(req.user.id, prompt.replace(/\s+/g, ' ').slice(0, 80), now, now).lastInsertRowid);
-    sql.pruneThreads.run(req.user.id, req.user.id, MAX_THREADS_PER_USER);
+    threadId = Number(sql.insertThread.run(req.user.id, req.project.id, prompt.replace(/\s+/g, ' ').slice(0, 80), now, now).lastInsertRowid);
+    sql.pruneThreads.run(req.project.id, req.project.id, MAX_THREADS_PER_USER);
   } else {
     sql.touchThread.run(now, threadId);
   }
@@ -736,7 +746,7 @@ ai.post('/prompt', async (req, res) => {
 
   const job = { userId: req.user.id, events: [], listeners: new Set(), abort: new AbortController(), finished: false };
   jobs.set(messageId, job);
-  runJob(job, { user: req.user, messageId, threadId, prompt, mode, activePath, reservation });
+  runJob(job, { user: req.user, slug: req.project.slug, messageId, threadId, prompt, mode, activePath, reservation });
 
   res.status(201).json({
     threadId,
@@ -804,7 +814,9 @@ ai.post('/messages/:id/keep', (req, res) => {
 
 ai.post('/messages/:id/revert', async (req, res) => {
   const row = pendingMessage(req);
-  await revertChanges(req.user.username, JSON.parse(row.snapshot));
+  const project = sql.messageProject.get(row.id);
+  if (!project) throw new HttpError(404, 'Project untuk perubahan ini sudah dihapus');
+  await revertChanges(project.slug, JSON.parse(row.snapshot));
   sql.setApplyState.run('reverted', row.id);
   const changes = JSON.parse(row.changes);
   res.json({ message: publicMessage(sql.message.get(row.id, req.user.id)), touched: touchedPaths(changes) });

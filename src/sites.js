@@ -59,15 +59,15 @@ function notFoundPage(res, title, message) {
 <p><a href="${config.appOrigin}">Buat website gratis di ${config.baseDomain}</a></p></main></body></html>`);
 }
 
-export async function serveSite(req, res, username) {
+export async function serveSite(req, res, slug) {
   if (!['GET', 'HEAD'].includes(req.method)) {
     return res.status(405).set('Allow', 'GET, HEAD').end();
   }
-  if (!q.userByUsername.get(username)) {
-    return notFoundPage(res, 'Situs tidak ditemukan', `${config.siteHost(username)} belum dipakai siapa pun.`);
+  if (!q.projectBySlug.get(slug)) {
+    return notFoundPage(res, 'Situs tidak ditemukan', `${config.siteHost(slug)} belum dipakai siapa pun.`);
   }
 
-  const root = userRoot(username);
+  const root = userRoot(slug);
   let pathname;
   try {
     pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname);

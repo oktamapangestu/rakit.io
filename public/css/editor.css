@@ -1335,3 +1335,24 @@ button.credit-badge:disabled { cursor: default; }
 @container (max-width: 360px) {
   #aiClear { display: none; }
 }
+
+/* Pemilih project di chip alamat website */
+.project-chip { padding-left: 4px; }
+.project-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text);
+  cursor: pointer;
+}
+.project-switch:hover { background: var(--accent-soft); color: var(--white); }
+.project-switch svg { width: 14px; height: 14px; }
+.project-switch .caret { width: 10px; height: 10px; color: var(--muted); }
+.project-preview { margin: -4px 0 12px; color: var(--muted); font-size: 12.5px; }
+.project-preview strong { color: var(--white); font-family: var(--mono); }
+.ai-notice a { color: #c4b5fd; }

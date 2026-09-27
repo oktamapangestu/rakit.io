@@ -9,6 +9,7 @@ import { kaseraWebhook } from './billing.js';
 import { serveSite } from './sites.js';
 import { siteApi } from './siteapi.js';
 import { isAdmin } from './admin.js';
+import { google } from './google.js';
 import { USERNAME_RE } from './username.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
@@ -48,6 +49,7 @@ app.use((req, res, next) => {
 app.post('/api/billing/webhook', express.raw({ type: '*/*', limit: '1mb' }), kaseraWebhook);
 
 app.use(loadUser);
+app.use('/auth/google', google);
 app.use('/api', api);
 
 app.get('/', (req, res) => {

@@ -67,6 +67,16 @@ function open(username) {
   return db;
 }
 
+/** Tutup koneksi & hapus file database project (dipakai saat project dihapus). */
+export function removeDatabase(slug) {
+  const db = pool.get(slug);
+  if (db) {
+    pool.delete(slug);
+    db.close();
+  }
+  for (const suffix of ['', '-wal', '-shm']) fs.rmSync(`${dbPath(slug)}${suffix}`, { force: true });
+}
+
 function transaction(db, fn) {
   db.exec('BEGIN IMMEDIATE');
   try {
