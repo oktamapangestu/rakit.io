@@ -4,7 +4,8 @@ import { config } from './config.js';
 import { db, q } from './db.js';
 import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
-import { seedTemplate, userRoot } from './files.js';
+import { seedTemplate, TEMPLATES, userRoot } from './files.js';
+import { vueRuntimeUrl } from './vuesfc.js';
 import { removeDatabase } from './userdb.js';
 import { slugError } from './username.js';
 
@@ -29,7 +30,7 @@ export function normalizeSlug(value) {
 export const slugTaken = (slug) => Boolean(q.projectBySlug.get(slug) || q.userByUsername.get(slug));
 
 /** Buat project baru beserta file awalnya. */
-export async function createProject(user, { slug: rawSlug, name }) {
+export async function createProject(user, { slug: rawSlug, name, template = 'default' }) {
   const slug = normalizeSlug(rawSlug);
   if (q.projectCount.get(user.id).n >= config.maxProjects) {
     throw new HttpError(403, `Maksimal ${config.maxProjects} project per akun. Hapus project lama untuk membuat yang baru.`);
@@ -45,7 +46,8 @@ export async function createProject(user, { slug: rawSlug, name }) {
     if (String(err.message).includes('UNIQUE')) throw new HttpError(409, `${config.siteHost(slug)} sudah dipakai`);
     throw err;
   }
-  await seedTemplate(slug);
+  // Template: 'default' (HTML/CSS/JS) atau 'vue' (komponen .vue, Vue dari CDN).
+  await seedTemplate(slug, TEMPLATES.includes(template) ? template : 'default', { name: title, vueUrl: vueRuntimeUrl });
   return q.projectBySlug.get(slug);
 }
 

@@ -43,16 +43,36 @@ siteApi.post('/api/db/:table', (req, res) => {
   res.status(201).json(userdb.insertRow(req.siteUser, table.name, req.body, { publicView: true }));
 });
 
-siteApi.patch('/api/db/:table/:id', (req, res) => {
-  const table = publicTable(req, 'update');
-  res.json(userdb.updateRow(req.siteUser, table.name, req.params.id, req.body, { publicView: true }));
-});
+// id biasanya di URL (/api/db/<tabel>/<id>), tapi ?id= atau "id" di body JSON juga diterima,
+// karena itu gaya REST yang umum dipakai orang (dan AI).
+function rowIdFrom(req) {
+  const id = req.params.id ?? req.query.id ?? req.body?.id;
+  if (id === undefined || id === '') throw new HttpError(400, 'Sertakan id baris, contoh /api/db/<tabel>/<id>');
+  return id;
+}
+const withoutId = (body) => {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+  const { id, created_at: createdAt, ...rest } = body;
+  return rest;
+};
 
-siteApi.delete('/api/db/:table/:id', (req, res) => {
+function updateHandler(req, res) {
+  const table = publicTable(req, 'update');
+  res.json(userdb.updateRow(req.siteUser, table.name, rowIdFrom(req), withoutId(req.body), { publicView: true }));
+}
+// PUT diperlakukan sama seperti PATCH (hanya kolom yang dikirim yang diubah).
+siteApi.patch('/api/db/:table/:id', updateHandler);
+siteApi.put('/api/db/:table/:id', updateHandler);
+siteApi.patch('/api/db/:table', updateHandler);
+siteApi.put('/api/db/:table', updateHandler);
+
+function deleteHandler(req, res) {
   const table = publicTable(req, 'delete');
-  userdb.deleteRow(req.siteUser, table.name, req.params.id);
+  userdb.deleteRow(req.siteUser, table.name, rowIdFrom(req));
   res.json({ ok: true });
-});
+}
+siteApi.delete('/api/db/:table/:id', deleteHandler);
+siteApi.delete('/api/db/:table', deleteHandler);
 
 // Seluruh /api/ di domain user dicadangkan untuk sistem (tahap berikutnya: serverless function).
 siteApi.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan' }));

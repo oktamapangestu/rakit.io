@@ -36,10 +36,12 @@ src/
   projects.js  project/workspace per subdomain: buat, pilih (header X-Project), hapus
   google.js    login & daftar dengan Google (OAuth 2.0 + PKCE)
   diagrams.js  bahan diagram otomatis: ERD, peta halaman, alur data
+  vuesfc.js    kompilasi file .vue menjadi modul JavaScript saat diminta browser
   aiqueue.js   antrean & batas concurrency adaptif untuk panggilan ke provider AI
   aiapply.js   menerapkan & membatalkan perubahan Builder di server (dengan snapshot)
   db.js        skema SQLite
 public/        landing page + editor (Monaco dari CDN jsDelivr)
+templates/     template project: default (HTML/CSS/JS) dan vue
 templates/     file awal untuk user baru
 data/          database & file user (dibuat otomatis, jangan di-commit)
 ```
@@ -139,6 +141,8 @@ Website user memakainya lewat API otomatis di domainnya sendiri:
 - Tipe kolom: teks, angka, ya/tidak, tanggal. Kolom `id` dan `created_at` otomatis.
 - Batas per proyek: 10 MB, 20 tabel, 30 kolom per tabel (`DB_LIMITS` di `src/userdb.js`).
 - Rate limit API publik per situs per IP: 300 baca dan 60 tulis per menit.
+- Untuk ubah/hapus, `id` sebaiknya di URL (`/api/db/<tabel>/<id>`), tapi `?id=` atau `"id"` di body JSON juga
+  diterima, dan `PUT` diperlakukan sama seperti `PATCH`.
 - Path `/api/` di domain user dicadangkan untuk sistem.
 - Di mode Builder, AI bisa membuat tabel sendiri; perubahannya ikut dikonfirmasi (Simpan/Batalkan).
 
@@ -150,6 +154,20 @@ pendaftar terbaru, serta ukuran penyimpanan. Periode bisa dipilih 7/30/90 hari (
 
 Hanya akun dengan email di `ADMIN_EMAILS` (dipisah koma) yang bisa membukanya; link-nya muncul di
 menu avatar editor. Pengguna lain diarahkan kembali ke editor, dan API `/api/admin/*` menolak dengan 403.
+
+## Vue.js (tanpa build)
+
+Buat project baru dengan template **Vue** (atau tambahkan file `.vue` ke project mana pun):
+
+- File `.vue` (Single File Component) **dikompilasi otomatis oleh server** saat diminta browser, memakai
+  `@vue/compiler-sfc` resmi — tidak ada Vite/npm. `<script setup>`, Options API, dan `<style scoped>` didukung.
+  Hasil kompilasi di-cache per file; tambahkan `?raw` di URL untuk melihat sumber aslinya.
+- `index.html` memetakan `vue` ke Vue dari CDN lewat import map, dengan **versi yang sama persis** dengan compiler
+  (`@vue/compiler-sfc` dipin di `package.json`). Import komponen lain dengan path relatif berakhiran `.vue`.
+- File `.vue` yang error menampilkan kotak error (nama file + nomor baris) di halaman; komponen lain tetap jalan.
+- AI tahu cara menulis project Vue. Setiap `.vue` yang ditulis AI dikompilasi dulu di server, dan error-nya
+  dikirim balik ke AI untuk diperbaiki.
+- Belum didukung: TypeScript (`lang="ts"`), Sass/SCSS, dan paket npm (pakai URL CDN ES module + import map).
 
 ## Diagram otomatis
 

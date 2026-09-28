@@ -41,7 +41,7 @@ function pageTitle(html) {
 }
 
 // Cari pemakaian API database di kode: /api/db/<tabel>[/<id>] dan metode fetch di dekatnya.
-function dbCalls(text) {
+export function dbCalls(text) {
   const calls = [];
   for (const m of text.matchAll(/\/api\/db\/([a-z][a-z0-9_]*)(\/[^'"`?\s)]*)?/g)) {
     // Cari opsi method hanya di pemanggilan ini: berhenti di fetch( atau /api/db/ berikutnya.
@@ -51,7 +51,7 @@ function dbCalls(text) {
     const method = around.match(/method\s*:\s*['"`](GET|POST|PATCH|PUT|DELETE)['"`]/i)?.[1].toUpperCase() ?? 'GET';
     const hasId = Boolean(m[2] && m[2] !== '/');
     const op = { POST: 'create', PATCH: 'update', PUT: 'update', DELETE: 'delete' }[method] ?? (hasId ? 'view' : 'list');
-    calls.push({ table: m[1], op });
+    calls.push({ table: m[1], op, method, hasId });
   }
   return calls;
 }
@@ -117,7 +117,7 @@ diagrams.get('/', async (req, res) => {
   // ---- Alur data: file mana memakai tabel apa, dan apakah aksesnya mengizinkan ----
   const callMap = new Map();
   for (const f of files) {
-    if (!/\.(js|html)$/.test(f.path)) continue;
+    if (!/\.(js|html|vue)$/.test(f.path)) continue;
     for (const call of dbCalls(contents.get(f.path))) {
       const key = `${f.path}|${call.table}|${call.op}`;
       if (callMap.has(key)) continue;

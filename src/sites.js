@@ -3,11 +3,13 @@ import path from 'node:path';
 import { config } from './config.js';
 import { q } from './db.js';
 import { cleanPath, isAllowedFile, resolveIn, statOrNull, userRoot } from './files.js';
+import { compileVueFile, VUE_VERSION } from './vuesfc.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.vue': 'text/javascript; charset=utf-8', // dikompilasi menjadi modul JS (lihat vuesfc.js)
 };
 
 async function findFile(root, rel) {
@@ -16,7 +18,7 @@ async function findFile(root, rel) {
     if (!isAllowedFile(clean)) return null;
     const abs = resolveIn(root, clean);
     const st = await statOrNull(abs);
-    return st?.isFile() ? { abs, st, ext: path.extname(clean).toLowerCase() } : null;
+    return st?.isFile() ? { abs, st, rel: clean, ext: path.extname(clean).toLowerCase() } : null;
   } catch {
     return null;
   }
@@ -28,6 +30,24 @@ async function isDir(root, rel) {
   } catch {
     return false;
   }
+}
+
+async function sendVue(req, res, file, slug) {
+  // ?raw = lihat sumber aslinya; selain itu kirim hasil kompilasi sebagai modul JavaScript.
+  const raw = 'raw' in req.query;
+  const etag = `W/"vue${VUE_VERSION}-${raw ? 'raw' : 'js'}-${file.st.size.toString(16)}-${file.st.mtimeMs.toString(16)}"`;
+  res.set({
+    'Content-Type': raw ? 'text/plain; charset=utf-8' : MIME['.vue'],
+    'Cache-Control': 'no-cache',
+    ETag: etag,
+    'X-Content-Type-Options': 'nosniff',
+  });
+  if (req.get('if-none-match') === etag) return res.status(304).end();
+  const source = await fs.promises.readFile(file.abs, 'utf8');
+  const body = raw ? source : compileVueFile({ slug, path: file.rel, source, mtimeMs: file.st.mtimeMs, size: file.st.size });
+  res.status(200);
+  if (req.method === 'HEAD') return res.end();
+  res.send(body);
 }
 
 function sendFile(req, res, file, status = 200) {
@@ -81,6 +101,7 @@ export async function serveSite(req, res, slug) {
   let file = await findFile(root, rel);
   // URL bersih: /about -> about.html
   if (!file && !path.extname(rel)) file = await findFile(root, `${rel}.html`);
+  if (file?.ext === '.vue') return sendVue(req, res, file, slug);
   if (file) return sendFile(req, res, file);
 
   if (!pathname.endsWith('/') && (await isDir(root, rel))) {

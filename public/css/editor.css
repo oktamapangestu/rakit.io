@@ -1412,3 +1412,22 @@ button.credit-badge:disabled { cursor: default; }
   .diagram-body { flex-direction: column; }
   .diagram-findings { width: auto; max-height: 40%; border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* File .vue & pilihan template project */
+.ficon.vue { color: #42b883; background: rgb(66 184 131 / 0.14); }
+.template-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.template-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--panel);
+  text-align: left;
+  cursor: pointer;
+}
+.template-card strong { color: var(--white); font-size: 13px; }
+.template-card span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.template-card:hover { border-color: var(--faint); }
+.template-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+@media (max-width: 420px) { .template-cards { grid-template-columns: 1fr; } }

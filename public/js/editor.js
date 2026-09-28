@@ -162,7 +162,7 @@
   function fileIcon(entry, open) {
     if (entry.type === 'dir') return h('span', { class: 'ficon dir' }, svg(open ? ICON.folderOpen : ICON.folder));
     const ext = extOf(entry.path);
-    const label = { html: '<>', css: '#', js: 'JS' }[ext] ?? '•';
+    const label = { html: '<>', css: '#', js: 'JS', vue: 'V' }[ext] ?? '•';
     return h('span', { class: `ficon ${ext}` }, label);
   }
 
@@ -232,7 +232,9 @@
   const isDirty = (path) => state.models.has(path) && state.models.get(path).getValue() !== state.saved.get(path);
 
   function createModel(path, content, savedContent = content) {
-    const model = monaco.editor.createModel(content, undefined, monaco.Uri.parse(`file:///${path}`));
+    // Monaco tidak punya mode Vue bawaan; mode HTML cukup untuk <template>, <script>, dan <style>.
+    const language = extOf(path) === 'vue' ? 'html' : undefined;
+    const model = monaco.editor.createModel(content, language, monaco.Uri.parse(`file:///${path}`));
     model.onDidChangeContent(() => onContentChange(path));
     state.models.set(path, model);
     state.saved.set(path, savedContent);
@@ -408,7 +410,7 @@
   async function createEntry(type, dir = targetDir()) {
     const name = await ask(
       type === 'file' ? 'File baru' : 'Folder baru',
-      type === 'file' ? 'nama-file.html / .css / .js' : 'nama-folder',
+      type === 'file' ? 'nama-file.html / .css / .js / .vue' : 'nama-folder',
     );
     if (!name) return;
     const path = joinPath(dir, name);
@@ -658,6 +660,19 @@
       if (cleaned !== slugInput.value) slugInput.value = cleaned;
       preview.textContent = `${cleaned || 'namamu'}${base}`;
     });
+    let template = 'default';
+    const templateCards = [
+      ['default', 'HTML, CSS & JS', 'Website biasa: index.html, style.css, script.js.'],
+      ['vue', 'Vue', 'Komponen .vue dengan <script setup>, dikompilasi otomatis tanpa build.'],
+    ].map(([value, title, desc]) => h('button', {
+      type: 'button',
+      class: 'template-card',
+      'aria-pressed': String(value === template),
+      onclick: (e) => {
+        template = value;
+        e.currentTarget.parentElement.querySelectorAll('.template-card').forEach((b) => b.setAttribute('aria-pressed', String(b === e.currentTarget)));
+      },
+    }, h('strong', {}, title), h('span', {}, desc)));
     const error = h('p', { class: 'db-form-error' });
     const submit = h('button', { type: 'submit', class: 'primary' }, 'Buat project');
     const form = h('form', {
@@ -665,7 +680,7 @@
         e.preventDefault();
         submit.disabled = true;
         try {
-          const { project } = await api('POST', '/api/projects', { slug: slugInput.value, name: nameInput.value });
+          const { project } = await api('POST', '/api/projects', { slug: slugInput.value, name: nameInput.value, template });
           close();
           await saveAll();
           location.href = projectUrl(project.slug);
@@ -680,6 +695,8 @@
     h('label', { class: 'db-field' }, h('span', { class: 'db-field-label' }, 'Alamat website'), slugInput),
     h('p', { class: 'project-preview' }, 'Websitemu: ', preview),
     h('label', { class: 'db-field' }, h('span', { class: 'db-field-label' }, 'Nama project', h('span', { class: 'col-type' }, 'opsional')), nameInput),
+    h('div', { class: 'db-field-label' }, 'Template'),
+    h('div', { class: 'template-cards' }, templateCards),
     error,
     h('div', { class: 'modal-buttons' }, h('button', { type: 'button', onclick: close }, 'Batal'), submit));
     body.append(form);
@@ -735,7 +752,8 @@
     }
     const pos = editor.getPosition();
     $('#statusCursor').textContent = pos ? `Ln ${pos.lineNumber}, Col ${pos.column}` : '';
-    $('#statusLang').textContent = { html: 'HTML', css: 'CSS', javascript: 'JavaScript' }[model.getLanguageId()] ?? model.getLanguageId();
+    $('#statusLang').textContent = extOf(state.active) === 'vue' ? 'Vue'
+      : ({ html: 'HTML', css: 'CSS', javascript: 'JavaScript' }[model.getLanguageId()] ?? model.getLanguageId());
   }
 
   // ---------- Splitter ----------
@@ -1474,7 +1492,7 @@
     root.onmousedown = (e) => { if (e.target === root) close(); };
     document.addEventListener('keydown', onKey, true);
 
-    const language = { html: 'html', css: 'css', js: 'javascript' }[extOf(change.path)];
+    const language = { html: 'html', css: 'css', js: 'javascript', vue: 'html' }[extOf(change.path)];
     diffEditor = monaco.editor.createDiffEditor(body, {
       theme: 'rakit',
       readOnly: true,
@@ -2122,7 +2140,7 @@
       lines.push(`  ${id(a.from)}["${mmText(a.from)}"]:::page`, `  ${id(a.from)} -. memuat .-> ${id(a.to)}`);
       edgeStyles.push(`  linkStyle ${edge++} stroke:#3a4560`);
     }
-    for (const f of files) lines.push(`  ${id(f)}["${mmText(f)}"]:::${f.endsWith('.js') ? 'script' : 'page'}`);
+    for (const f of files) lines.push(`  ${id(f)}["${mmText(f)}"]:::${/\.(js|vue)$/.test(f) ? 'script' : 'page'}`);
     for (const t of new Set(d.calls.map((c) => c.table))) {
       lines.push(`  ${id(`t:${t}`)}[("${mmText(t)}${tables.has(t) ? '' : '\\nbelum ada'}")]:::${tables.has(t) ? 'table' : 'broken'}`);
     }

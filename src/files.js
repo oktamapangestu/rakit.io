@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { HttpError } from './http-error.js';
 
-export const ALLOWED_EXT = new Set(['.html', '.css', '.js']);
+export const ALLOWED_EXT = new Set(['.html', '.css', '.js', '.vue']);
 export const LIMITS = {
   fileSize: 512 * 1024, // per file
   totalSize: 20 * 1024 * 1024, // per user
@@ -14,7 +14,8 @@ export const LIMITS = {
 
 // Tidak boleh diawali titik: menolak ".", "..", dan dotfile.
 const SEGMENT_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}$/;
-const TEMPLATE_DIR = fileURLToPath(new URL('../templates/default', import.meta.url));
+const TEMPLATES_DIR = fileURLToPath(new URL('../templates', import.meta.url));
+export const TEMPLATES = ['default', 'vue'];
 
 export const userRoot = (username) => path.join(config.dataDir, 'sites', username);
 export const isAllowedFile = (rel) => ALLOWED_EXT.has(path.extname(rel).toLowerCase());
@@ -35,7 +36,7 @@ export function cleanPath(input) {
 }
 
 function assertAllowedFile(rel) {
-  if (!isAllowedFile(rel)) throw new HttpError(400, 'Hanya file .html, .css, dan .js yang diizinkan');
+  if (!isAllowedFile(rel)) throw new HttpError(400, 'Hanya file .html, .css, .js, dan .vue yang diizinkan');
 }
 
 export function resolveIn(root, rel) {
@@ -173,17 +174,27 @@ export async function removeEntry(root, input) {
   await fs.rm(abs, { recursive: true, force: true });
 }
 
-export async function seedTemplate(username) {
-  const root = userRoot(username);
-  await fs.mkdir(root, { recursive: true });
-  for (const name of await fs.readdir(TEMPLATE_DIR)) {
-    const text = await fs.readFile(path.join(TEMPLATE_DIR, name), 'utf8');
-    const filled = text
-      .replaceAll('{{username}}', username)
-      .replaceAll('{{host}}', config.siteHost(username));
-    // 'wx' = jangan pernah menimpa file yang sudah ada.
-    await fs.writeFile(path.join(root, name), filled, { encoding: 'utf8', flag: 'wx' }).catch((err) => {
-      if (err.code !== 'EEXIST') throw err;
-    });
+/** Salin template project (rekursif) ke folder project. `vars` mengisi placeholder {{nama}} di file teks. */
+export async function seedTemplate(slug, template = 'default', vars = {}) {
+  const source = path.join(TEMPLATES_DIR, TEMPLATES.includes(template) ? template : 'default');
+  const root = userRoot(slug);
+  const values = { username: slug, host: config.siteHost(slug), name: slug, ...vars };
+  async function copy(rel) {
+    for (const item of await fs.readdir(path.join(source, rel), { withFileTypes: true })) {
+      const relPath = rel ? `${rel}/${item.name}` : item.name;
+      if (item.isDirectory()) {
+        await fs.mkdir(path.join(root, relPath), { recursive: true });
+        await copy(relPath);
+        continue;
+      }
+      let text = await fs.readFile(path.join(source, relPath), 'utf8');
+      for (const [key, value] of Object.entries(values)) text = text.replaceAll(`{{${key}}}`, value);
+      // 'wx' = jangan pernah menimpa file yang sudah ada.
+      await fs.writeFile(path.join(root, relPath), text, { encoding: 'utf8', flag: 'wx' }).catch((err) => {
+        if (err.code !== 'EEXIST') throw err;
+      });
+    }
   }
+  await fs.mkdir(root, { recursive: true });
+  await copy('');
 }
