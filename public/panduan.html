@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cheat Sheet Prompt — rakit.icu</title>
+<style>
+  :root{
+    --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --brand:#2563eb;
+    --brand-soft:#eff6ff; --bg:#f8fafc; --card:#ffffff;
+    --ok:#16a34a; --ok-soft:#ecfdf5; --warn:#d97706; --warn-soft:#fffbeb;
+    --tip:#7c3aed; --tip-soft:#f5f3ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  header{text-align:center;padding:28px 0 8px}
+  .back{display:inline-block;font-size:13px;color:var(--muted);text-decoration:none;
+    margin-bottom:14px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;
+    background:var(--card)}
+  .back:hover{color:var(--brand);border-color:var(--brand)}
+  .logo{display:inline-flex;align-items:center;gap:10px;font-weight:700;color:var(--brand);
+    background:var(--brand-soft);padding:6px 14px;border-radius:999px;font-size:13px;letter-spacing:.3px}
+  h1{font-size:30px;margin:14px 0 6px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:15px;margin:0}
+  .toc{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:22px 0 8px}
+  .toc a{font-size:13px;text-decoration:none;color:var(--ink);background:var(--card);
+    border:1px solid var(--line);padding:5px 11px;border-radius:999px}
+  .toc a:hover{border-color:var(--brand);color:var(--brand)}
+  h2{font-size:19px;margin:38px 0 4px;padding-top:16px;border-top:2px solid var(--line);letter-spacing:-.01em}
+  h2 .n{color:var(--brand);font-weight:800;margin-right:8px}
+  .lead{color:var(--muted);margin:0 0 14px;font-size:14px}
+  h3{font-size:15px;margin:22px 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;margin:12px 0;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+  .prompt{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:13px 15px;margin:8px 0;
+    font:13.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;
+    position:relative;border-left:3px solid var(--brand)}
+  .prompt .lbl{display:block;color:#94a3b8;font-size:11px;text-transform:uppercase;
+    letter-spacing:.08em;margin-bottom:6px;font-family:inherit}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  ul{margin:8px 0;padding-left:20px}
+  li{margin:4px 0}
+  code{background:#f1f5f9;color:#0f172a;padding:1.5px 6px;border-radius:5px;
+    font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;border:1px solid var(--line)}
+  .prompt code{background:transparent;color:#7dd3fc;border:0;padding:0}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f1f5f9;font-weight:600}
+  .badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px}
+  .b-ok{background:var(--ok-soft);color:var(--ok)}
+  .b-no{background:#fef2f2;color:#dc2626}
+  .b-warn{background:var(--warn-soft);color:var(--warn)}
+  .note{border-left:3px solid var(--brand);background:var(--brand-soft);padding:10px 14px;
+    border-radius:8px;margin:12px 0;font-size:13.5px}
+  .tip{border-left:3px solid var(--tip);background:var(--tip-soft);padding:10px 14px;
+    border-radius:8px;margin:12px 0;font-size:13.5px}
+  .warn{border-left:3px solid var(--warn);background:var(--warn-soft);padding:10px 14px;
+    border-radius:8px;margin:12px 0;font-size:13.5px}
+  .kw{color:var(--brand);font-weight:600}
+  footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:12.5px;text-align:center}
+  .pill{font-size:11px;background:#eef2ff;color:#4f46e5;padding:2px 7px;border-radius:5px;
+    font-weight:600;margin-left:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <a class="back" href="/">← Kembali ke rakit.icu</a>
+  <span class="logo">⚡ rakit.icu</span>
+  <h1>Cheat Sheet Prompt</h1>
+  <p class="sub">Panduan menulis perintah ke AI Builder untuk membangun website</p>
+  <nav class="toc">
+    <a href="#dasar">Dasar</a>
+    <a href="#struktur">Struktur</a>
+    <a href="#desain">Desain</a>
+    <a href="#database">Database</a>
+    <a href="#interaksi">Interaksi</a>
+    <a href="#contoh">Contoh Lengkap</a>
+    <a href="#lanjutan">Perbaikan</a>
+    <a href="#batasan">Batasan</a>
+  </nav>
+</header>
+
+<!-- ══════════════ 1. DASAR ══════════════ -->
+<h2 id="dasar"><span class="n">1</span>Dasar — Cara AI Bekerja</h2>
+<p class="lead">Pahami dua mode &amp; tiga aturan emas agar hasilnya tepat sejak percobaan pertama.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">🧭 Mode <span class="pill">Plan</span></h3>
+    <p style="margin:6px 0">AI <b>hanya menyusun rencana</b> — tidak menyentuh file. Cocok untuk proyek baru atau ide yang masih kabur. Akhiri dengan menekan <b>“Jalankan rencana ini”</b>.</p>
+    <div class="prompt"><span class="lbl">Mode Plan</span>Rencanakan website portfolio fotografi
+untuk fotografer pernikahan.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">🔨 Mode <span class="pill">Builder</span></h3>
+    <p style="margin:6px 0">AI <b>langsung membuat/mengubah file</b> dan tabel database. Cocok untuk membangun, mengubah, atau memperbaiki.</p>
+    <div class="prompt"><span class="lbl">Mode Builder</span>Buat website portfolio fotografi
+pernikahan dengan galeri, halaman
+tentang, dan form kontak.</div>
+  </div>
+</div>
+
+<h3>Tiga aturan emas</h3>
+<div class="card">
+  <ul>
+    <li><b>Sebut tujuan, bukan cuma nama.</b> “Website untuk <i>toko kue rumahan yang terima pesanan online</i>” jauh lebih baik daripada “website toko kue”.</li>
+    <li><b>Sebut bagiannya satu per satu.</b> Halaman apa, isi tiap bagian, data apa yang disimpan.</li>
+    <li><b>Satu prompt = satu perubahan besar.</b> Untuk hal berbeda, kirim prompt terpisah agar mudah diperbaiki dan hemat kredit.</li>
+  </ul>
+</div>
+
+<div class="note">
+  💡 <b>Rumus prompt yang baik:</b> <code>[Jenis situs] untuk [siapa/tujuan], dengan [bagian-bagian], gaya [warna/suasana], dan [data yang perlu disimpan]</code>
+</div>
+
+<!-- ══════════════ 2. STRUKTUR ══════════════ -->
+<h2 id="struktur"><span class="n">2</span>Struktur &amp; Halaman</h2>
+<p class="lead">Menentukan file, halaman, dan navigasi.</p>
+
+<div class="prompt"><span class="lbl">Halaman lengkap</span>Buat website profil perusahaan dengan halaman:
+- index.html — hero, layanan, keunggulan, testimoni
+- tentang.html — sejarah, visi misi, tim
+- layanan.html — daftar layanan lengkap
+- kontak.html — form + peta + info
+Buat menu navigasi yang sama di semua halaman.</div>
+
+<div class="prompt"><span class="lbl">Struktur folder</span>Pisahkan CSS ke folder css/style.css
+dan JavaScript ke js/app.js.
+Gunakan file terpisah, jangan inline.</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Layout dari awal</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat layout grid: header lengket di atas,
+konten 3 kolom responsif, footer
+dengan 4 kolom tautan.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Menambah halaman</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tambahkan halaman galeri.html dengan
+judul "Galeri", galeri foto grid
+masonry, dan tautkan ke menu.</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>Responsif &amp; aksesibilitas</b> sudah jadi bawaan AI. Untuk memastikan, tulis: <i>“pastikan responsif di HP dan semua gambar punya alt”</i>.</div>
+
+<!-- ══════════════ 3. DESAIN ══════════════ -->
+<h2 id="desain"><span class="n">3</span>Desain &amp; Gaya Visual</h2>
+<p class="lead">Cara menyebut warna, font, dan suasana dengan efektif.</p>
+
+<div class="prompt"><span class="lbl">Gaya visual</span>Gunakan desain modern minimalis:
+- Warna utama hijau tua (#14532d), aksen kuning (#facc15)
+- Font Poppins dari Google Fonts untuk judul, Inter untuk teks
+- Sudut membulat, bayangan halus, banyak ruang kosong
+- Tema terang (light mode)</div>
+
+<table>
+  <tr><th>Yang diinginkan</th><th>Cara menulis prompt</th></tr>
+  <tr><td>Warna spesifik</td><td><code>warna utama #2563eb, latar krem #fef9f3</code></td></tr>
+  <tr><td>Gaya umum</td><td><code>gaya korporat bersih &amp; profesional</code> / <code>playful &amp; ceria</code></td></tr>
+  <tr><td>Font</td><td><code>font "Plus Jakarta Sans" dari Google Fonts</code></td></tr>
+  <tr><td>Tema gelap</td><td><code>dark mode dengan tombol pengalih tema</code></td></tr>
+  <tr><td>Animasi</td><td><code>animasi fade-in saat halaman di-scroll</code></td></tr>
+  <tr><td>Ikon</td><td><code>ikon dari Lucide (via CDN)</code></td></tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Ikon &amp; ilustrasi</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Pakai ikon Lucide dari CDN
+untuk fitur layanan.
+Gunakan placeholder gambar dari
+picsum.photos untuk sementara.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Tema gelap</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tambahkan tombol pengalih tema
+terang/gelap di kanan atas.
+Simpan pilihan di localStorage
+dan ingat saat dibuka kembali.</div>
+  </div>
+</div>
+
+<div class="warn">⚠️ <b>Tidak ada build step / npm.</b> Library eksternal (Bootstrap, Tailwind CDN, Chart.js, dsb.) hanya bisa dimuat dari <b>CDN</b> lewat <code>&lt;script&gt;</code> atau <code>&lt;link&gt;</code>. Tulis jelas, mis. <i>“pakai Bootstrap 5 dari CDN”</i>.</div>
+
+<!-- ══════════════ 4. DATABASE ══════════════ -->
+<h2 id="database"><span class="n">4</span>Database — Simpan &amp; Tampilkan Data</h2>
+<p class="lead">Kekuatan utama rakit: situs bisa menyimpan data <b>tanpa server sendiri</b>. AI akan membuat tabelnya otomatis.</p>
+
+<div class="note">
+  🗄️ Setiap project punya database bawaan. Data diakses dari JavaScript situs lewat
+  <code>fetch('/api/db/nama_tabel')</code> — tanpa API key, tanpa CORS.
+  <b>Jangan gunakan localStorage</b> untuk data yang dikirim pengunjung, karena localStorage hanya ada di browser satu orang.
+</div>
+
+<h3>Pola umum: pilih yang sesuai kebutuhan</h3>
+<table>
+  <tr><th>Jenis situs / fitur</th><th>Prompt</th><th>Akses tabel</th></tr>
+  <tr>
+    <td>Buku tamu / komentar</td>
+    <td><code>Buat buku tamu: form nama &amp; pesan, daftar pesan terbaru di bawahnya.</code></td>
+    <td><span class="badge b-ok">publik: list, create</span></td>
+  </tr>
+  <tr>
+    <td>Form kontak / pendaftaran</td>
+    <td><code>Buat form kontak (nama, email, pesan). Kiriman hanya boleh dibaca pemilik.</code></td>
+    <td><span class="badge b-ok">publik: create</span> + email privat</td>
+  </tr>
+  <tr>
+    <td>Pendaftaran acara / RSVP</td>
+    <td><code>Form pendaftaran seminar: nama, email, instansi, jumlah peserta.</code></td>
+    <td><span class="badge b-ok">publik: create</span></td>
+  </tr>
+  <tr>
+    <td>Katalog produk</td>
+    <td><code>Buat katalog produk (nama, harga, deskripsi, gambar) yang tampil di halaman dan bisa dilihat semua orang.</code></td>
+    <td><span class="badge b-ok">publik: list</span></td>
+  </tr>
+  <tr>
+    <td>Polling / voting</td>
+    <td><code>Buat polling: simpan pilihan pengunjung, tampilkan hasil dalam persentase.</code></td>
+    <td><span class="badge b-ok">publik: list, create</span></td>
+  </tr>
+  <tr>
+    <td>Papan skor / leaderboard</td>
+    <td><code>Simpan skor pemain (nama, skor) dan tampilkan peringkat tertinggi.</code></td>
+    <td><span class="badge b-ok">publik: list, create</span></td>
+  </tr>
+  <tr>
+    <td>Pesanan (order)</td>
+    <td><code>Form pesanan: nama, telepon, alamat, item, total. Hanya pemilik yang boleh melihat daftar pesanan.</code></td>
+    <td><span class="badge b-ok">publik: create</span> + data privat</td>
+  </tr>
+  <tr>
+    <td>Ulasan / rating produk</td>
+    <td><code>Buat ulasan dengan nama, rating bintang 1–5, dan komentar.</code></td>
+    <td><span class="badge b-ok">publik: list, create</span></td>
+  </tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Sebutkan tipe kolom</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Simpan pendaftaran dengan kolom:
+nama (teks, wajib),
+email (teks, wajib, privat),
+telepon (teks, privat),
+tanggal_lahir (tanggal),
+jumlah_orang (angka),
+setuju_syarat (ya/tidak).
+Tampilkan konfirmasi setelah kirim.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Ingin melihat data sendiri?</h3>
+    <p style="margin:6px 0">Pengunjung <b>anonim</b> (belum ada akun). Jadi gunakan
+    <code>update</code>/<code>delete</code> sebagai <b>khusus pemilik</b> — kamu melihat &amp;
+    mengelolanya lewat tab <b>Database</b> di editor.</p>
+    <div class="prompt"><span class="lbl">Builder</span>Simpan data yang masuk, dan atur
+agar hanya saya (pemilik) yang bisa
+melihat, mengubah, dan menghapusnya.</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>Contoh kombinasi kaya:</b> <i>“Buat toko online sederhana: katalog produk dari database (nama, harga, gambar, stok), keranjang di halaman, dan form checkout yang mengirim pesanan (nama, telp, alamat, item) — pesanan hanya bisa saya lihat.”</i></div>
+
+<!-- ══════════════ 5. INTERAKSI ══════════════ -->
+<h2 id="interaksi"><span class="n">5</span>Interaksi &amp; Fitur JavaScript</h2>
+<p class="lead">Perilaku dinamis: filter, pencarian, keranjang, kalkulator, dan lainnya.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Pencarian &amp; filter</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tambahkan kotak pencarian dan
+filter kategori di atas katalog.
+Hasil menyaring langsung saat
+mengetik (tanpa reload).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Keranjang belanja</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat keranjang: tombol
+"Tambah ke keranjang" di tiap produk,
+halaman keranjang dengan ubah jumlah
+dan total harga, lalu tombol checkout.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Kalkulator</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat kalkulator harga: pilih paket,
+jumlah halaman, dan opsi tambahan,
+lalu tampilkan total secara langsung.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Slider / carousel</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat slider gambar otomatis
+berganti tiap 5 detik, dengan
+tombol panah dan titik navigasi.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Modal / popup</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Saat kartu produk diklik,
+buka modal berisi detail lengkap
+dan tombol tutup.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Unggah &amp; tampilkan gambar</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Form dengan input file gambar,
+tampilkan pratinjau sebelum dikirim.
+(kirim base64 ke database)</div>
+  </div>
+</div>
+
+<div class="note">💡 <b>Sebutkan perilakunya, bukan teknisnya.</b> “Saat tombol diklik, total langsung berubah” lebih ampuh daripada “pakai addEventListener”. AI yang memilih cara teknisnya.</div>
+
+<!-- ══════════════ 6. CONTOH LENGKAP ══════════════ -->
+<h2 id="contoh"><span class="n">6</span>Contoh Prompt Lengkap (Siap Pakai)</h2>
+<p class="lead">Tinggal salin, sesuaikan nama &amp; detail, kirim ke mode Builder.</p>
+
+<div class="prompt"><span class="lbl">A · Undangan pernikahan</span>Buat website undangan pernikahan digital untuk Rina &amp; Dimas:
+- Cover dengan nama, tanggal, dan foto
+- Hitung mundur (countdown) ke hari acara
+- Detail acara: akad &amp; resepsi (tanggal, waktu, lokasi + peta)
+- Buku ucapan: form nama &amp; pesan, daftar ucapan terbaru
+- Konfirmasi kehadiran (nama, jumlah orang, hadir/tidak)
+Gaya elegan dengan warna sage green &amp; krem, font serif "Playfair Display".</div>
+
+<div class="prompt"><span class="lbl">B · Toko online sederhana</span>Buat toko online untuk "Kopi Nusantara":
+- Katalog produk: nama, harga, deskripsi, gambar (dari database, bisa dilihat siapa saja)
+- Halaman detail produk dengan pilihan jumlah
+- Keranjang belanja dengan total harga
+- Form pemesanan (nama, telepon, alamat, catatan) → hanya saya yang bisa melihat
+- Halaman kontak dengan jam buka
+Warna cokelat kopi &amp; krem, responsif.</div>
+
+<div class="prompt"><span class="lbl">C · Profil perusahaan</span>Buat website profil PT Maju Jaya:
+- Beranda: hero, statistik angka, layanan unggulan, klien
+- Tentang: sejarah singkat, visi &amp; misi, struktur tim
+- Layanan: 6 layanan dengan ikon dan deskripsi
+- Portofolio: galeri proyek dengan filter kategori
+- Blog sederhana: daftar artikel dari database
+- Kontak: form (nama, email, pesan), peta, info
+Gaya korporat biru tua &amp; putih, font Inter.</div>
+
+<div class="prompt"><span class="lbl">D · Event &amp; pendaftaran</span>Buat website seminar "Digital Marketing 2026":
+- Hero dengan judul, tanggal, lokasi, tombol daftar
+- Agenda acara (rundown per jam)
+- Pembicara: foto, nama, jabatan, bio
+- Pendaftaran: nama, email, instansi, jumlah peserta → hanya saya yang bisa lihat
+- FAQ (accordion)
+- Hitung mundur ke hari acara
+Gaya modern ungu &amp; putih.</div>
+
+<div class="prompt"><span class="lbl">E · Sistem inventaris (tabel)</span>Buat aplikasi inventaris barang sederhana:
+- Tabel barang: nama, kategori, jumlah, harga, lokasi
+- Form tambah barang
+- Pencarian dan filter per kategori
+- Ringkasan: total barang, total nilai
+- Tampilkan peringatan jika stok di bawah 5
+(dipakai internal — tabel hanya saya yang bisa kelola)</div>
+
+<div class="prompt"><span class="lbl">F · Kuis interaktif</span>Buat kuis pilihan ganda tentang pengetahuan umum:
+- 10 pertanyaan, masing-masing 4 pilihan
+- Skor berjalan, umpan balik benar/salah
+- Halaman hasil dengan skor akhir
+- Simpan skor terbaik ke database dan tampilkan 5 tertinggi
+Gaya ceria, warna-warni, animasi halus.</div>
+
+<!-- ══════════════ 7. PERBAIKAN ══════════════ -->
+<h2 id="lanjutan"><span class="n">7</span>Memperbaiki &amp; Mengubah</h2>
+<p class="lead">Cara mengoreksi hasil tanpa memulai dari nol.</p>
+
+<table>
+  <tr><th>Situasi</th><th>Prompt</th></tr>
+  <tr><td>Hasil kurang pas</td><td><code>Perbaiki bagian hero: teksnya terlalu kecil dan tombolnya kurang menonjol. Buat lebih besar dan kontras.</code></td></tr>
+  <tr><td>Ganti warna</td><td><code>Ganti semua warna hijau menjadi biru navy, jaga sisanya.</code></td></tr>
+  <tr><td>Ubah isi</td><td><code>Ganti judul menjadi "Selamat Datang di Toko Kami" dan teksnya jadi lebih ramah.</code></td></tr>
+  <tr><td>Susun ulang</td><td><code>Pindahkan bagian testimoni ke bawah bagian harga.</code></td></tr>
+  <tr><td>Tambah fitur</td><td><code>Tambahkan tombol WhatsApp mengambang di kanan bawah.</code></td></tr>
+  <tr><td>Perbaiki error</td><td><code>Form tidak tersimpan saat dikirim. Cek dan perbaiki agar datanya masuk ke database.</code></td></tr>
+  <tr><td>Kurangi/ubah gaya</td><td><code>Terlalu ramai. Sederhanakan: kurangi warna, tambah ruang kosong.</code></td></tr>
+</table>
+
+<div class="tip">💡 <b>Perbaikan makin presisi jika menyebut bagiannya.</b> Sebut nama halaman/bagian (“di bagian footer”, “di halaman kontak”) agar AI mengubah yang tepat, bukan seluruh situs.</div>
+
+<div class="note">🔄 <b>Semua perubahan bisa dibatalkan.</b> Di mode Builder, perubahan ditampilkan dengan tombol <b>Simpan / Batalkan</b> sebelum diterapkan. Ada juga riwayat percakapan — buka kembali untuk melanjutkan.</div>
+
+<!-- ══════════════ 8. BATASAN ══════════════ -->
+<h2 id="batasan"><span class="n">8</span>Batasan &amp; Tips Teknis</h2>
+<p class="lead">Yang perlu diketahui agar tidak membentur dinding.</p>
+
+<table>
+  <tr><th>Aspek</th><th>Batas</th></tr>
+  <tr><td>Jenis file</td><td><span class="badge b-ok">.html · .css · .js</span> saja</td></tr>
+  <tr><td>Ukuran per file</td><td>Maks <b>512 KB</b></td></tr>
+  <tr><td>Total per akun</td><td>Maks <b>20 MB</b> (500 berkas/folder)</td></tr>
+  <tr><td>Panjang satu prompt</td><td>Maks <b>4.000 karakter</b></td></tr>
+  <tr><td>Kode server (PHP/Node sendiri)</td><td><span class="badge b-no">Tidak bisa</span> — pakai database bawaan</td></tr>
+  <tr><td>Build step / npm</td><td><span class="badge b-no">Tidak ada</span> — pakai CDN untuk library</td></tr>
+  <tr><td>Akun pengunjung</td><td><span class="badge b-no">Belum ada</span> — pengunjung anonim</td></tr>
+  <tr><td>Operasi database</td><td><span class="badge b-ok">read · create · update · delete</span></td></tr>
+  <tr><td>Tipe kolom database</td><td><span class="badge b-ok">text · number · boolean · date</span></td></tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">✅ Lakukan</h3>
+    <ul>
+      <li>Sebut <b>tujuan &amp; pengguna</b> situs</li>
+      <li>Rinci <b>bagian per bagian</b></li>
+      <li>Sebut <b>data yang perlu disimpan</b></li>
+      <li><b>Satu perubahan besar per prompt</b></li>
+      <li>Pakai <b>Mode Plan</b> untuk ide yang belum matang</li>
+      <li>Sebutkan <b>warna &amp; font</b> spesifik</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">🚫 Hindari</h3>
+    <ul>
+      <li>Prompt super singkat: “buat website”</li>
+      <li>Campur 5 perubahan berbeda dalam satu prompt</li>
+      <li>Minta PHP / backend sendiri</li>
+      <li>Simpan data penting di <code>localStorage</code></li>
+      <li>Asumsi pengunjung punya akun</li>
+      <li>Ganti-ganti gaya tanpa menyebut bagiannya</li>
+    </ul>
+  </div>
+</div>
+
+<div class="warn">⚠️ <b>Hemat kredit AI.</b> Setiap prompt memakai kredit (ada jatah gratis bulanan + isi ulang). Rencanakan dulu dengan Mode Plan, baru jalankan — agar tidak bolak-balik memperbaiki.</div>
+
+<!-- ══════════════ TEMPLATE ══════════════ -->
+<h2><span class="n">★</span>Template Prompt Universal</h2>
+<p class="lead">Salin, isi bagian dalam <code>[ ]</code>, lalu kirim.</p>
+
+<div class="prompt">Buat website [jenis] untuk [siapa &amp; tujuannya].
+
+Halaman:
+- index.html — [bagian 1], [bagian 2], [bagian 3]
+- [halaman lain] — [isinya]
+
+Data yang perlu disimpan: [nama tabel + kolom + siapa yang boleh lihat/simpan].
+
+Gaya: warna [utama] &amp; [aksen], font [nama font],
+[modern/minimalis/elegan/ceria].
+
+Pastikan responsif di HP dan mudah dipakai.</div>
+
+<footer>
+  <p><b>Cheat Sheet Prompt — rakit.icu</b><br>
+  Dibuat berdasarkan perilaku AI Builder yang sebenarnya: mode Plan &amp; Builder,
+  database bawaan (<code>/api/db/&lt;tabel&gt;</code>), dan batas platform
+  (.html/.css/.js, 512 KB/berkas, 4.000 karakter/prompt).</p>
+</footer>
+
+</div>
+</body>
+</html>

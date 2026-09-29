@@ -111,6 +111,11 @@ app.get('/admin', (req, res) => {
   sendHtml(req, res, 'admin.html', { 'Cache-Control': 'no-store' });
 });
 
+// Panduan publik: cheat sheet prompt untuk AI Builder (tanpa perlu login).
+app.get('/panduan', (req, res) => {
+  sendHtml(req, res, 'panduan.html', { 'Cache-Control': 'public, max-age=3600' });
+});
+
 // Aset statis (/js, /css, /logo.svg ...). Karena nama berkas BER-VERSI (?v=hash) dari
 // sendHtml, aman dipasang cache panjang + immutable: pengunjung tak perlu revalidasi,
 // dan saat berkas berubah hash ikut berubah sehingga otomatis termuat ulang.
