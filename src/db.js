@@ -44,7 +44,7 @@ db.exec(`
     PRIMARY KEY (user_id, period)
   );
 
-  -- Saldo kredit AI yang dibeli (tidak hangus, dipakai setelah kredit gratis bulanan habis).
+  -- Saldo kredit AI yang dibeli (tidak hangus, dipakai setelah kredit gratis harian habis).
   CREATE TABLE IF NOT EXISTS credit_balance (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     balance INTEGER NOT NULL DEFAULT 0

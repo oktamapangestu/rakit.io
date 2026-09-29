@@ -1119,7 +1119,6 @@
     renderPlanBadge(c?.plan ?? null);
     if (!c || !c.enabled) return badge.replaceChildren();
     const empty = c.remaining < c.costPerPrompt;
-    const reset = new Date(c.resetsAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
     const plan = c.plan;
     const unlimited = plan?.id === 'unlimited' && plan.quotaRemaining > 0;
     badge.textContent = unlimited ? 'Unlimited' : `${c.remaining} kredit`;
@@ -1131,7 +1130,7 @@
       plan && (plan.id === 'unlimited'
         ? `Hari ini: ${plan.quotaUsed}/${plan.quota} prompt`
         : `Kredit ${plan.name}: ${plan.quotaRemaining}/${plan.quota} (terisi ulang ${shortDate(plan.quotaResetsAt)})`),
-      `Gratis bulan ini: ${c.freeRemaining}/${c.limit} (terisi ulang ${reset})`,
+      c.limit ? `Gratis hari ini: ${c.freeRemaining}/${c.limit} (terisi lagi besok 00.00 WIB, tidak menumpuk)` : null,
       c.purchased ? `Dibeli: ${c.purchased}` : null,
       c.topupEnabled ? 'Klik untuk langganan / isi ulang' : null,
     ].filter(Boolean).join(' · ');
@@ -1139,7 +1138,7 @@
     $('#aiTopupBanner').hidden = !empty;
     $('#aiTopupText').textContent = c.topupEnabled
       ? 'Kredit AI kamu habis.'
-      : `Kredit AI habis. Terisi lagi ${reset}.`;
+      : 'Kredit AI hari ini habis. Terisi lagi besok 00.00 WIB.';
     $('#aiTopupBtn').hidden = !c.topupEnabled;
     updateAiComposer();
   }
@@ -2571,7 +2570,7 @@
           h('strong', {}, current.id === 'unlimited' ? `${current.quotaRemaining}/${current.quota} prompt hari ini` : `${current.quotaRemaining} kredit`))
         : h('div', { class: 'topup-balance' },
           h('span', {}, 'Paket sekarang: ', h('strong', {}, 'Gratis')),
-          h('span', {}, `${free.limit} kredit/bulan · storage 20 MB`));
+          h('span', {}, `${free.limit} kredit/hari · storage 20 MB`));
 
       body.replaceChildren(...[
         intro
@@ -2604,7 +2603,7 @@
 
       const c = data.credits;
       body.replaceChildren(...[
-        head('Isi ulang kredit AI', 'Kredit yang dibeli tidak hangus, dan dipakai setelah kuota langganan & kredit gratis bulananmu habis.'),
+        head('Isi ulang kredit AI', 'Kredit yang dibeli tidak hangus, dan dipakai setelah kuota langganan & kredit gratis harianmu habis.'),
         tabs(),
         h('div', { class: 'topup-balance' },
           h('span', {}, 'Sisa kredit sekarang'),

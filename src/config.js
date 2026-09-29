@@ -33,7 +33,8 @@ export const config = {
     maxConcurrent: Math.max(1, Number(env.AI_MAX_CONCURRENT || 4)),
     queueMax: Math.max(0, Number(env.AI_QUEUE_MAX || 30)),
     queueTimeoutMs: Math.max(5, Number(env.AI_QUEUE_TIMEOUT_S || 120)) * 1000,
-    monthlyCredits: Number(env.AI_MONTHLY_CREDITS || 20),
+    // Default kredit gratis per hari (reset 00.00 WIB, tidak menumpuk); diatur owner di dashboard.
+    dailyCredits: Math.max(0, Number(env.AI_DAILY_CREDITS ?? 3) || 0),
     creditsPerPrompt: Number(env.AI_CREDITS_PER_PROMPT || 1),
   },
   billing: {

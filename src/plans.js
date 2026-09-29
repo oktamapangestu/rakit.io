@@ -93,6 +93,26 @@ export function saveModelCost(value) {
   return modelCost();
 }
 
+// Kredit gratis per hari untuk semua pengguna (0 = tanpa AI gratis). Tidak menumpuk: sisa hari ini hangus.
+const readFreeDaily = db.prepare("SELECT value FROM settings WHERE key = 'free_daily_credits'");
+const writeFreeDaily = db.prepare(`
+  INSERT INTO settings (key, value, updated_at) VALUES ('free_daily_credits', ?, ?)
+  ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+`);
+export const FREE_DAILY_MAX = 1000;
+export function freeDailyCredits() {
+  const saved = readFreeDaily.get();
+  return saved ? Number(saved.value) : config.ai.dailyCredits;
+}
+export function saveFreeDailyCredits(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0 || n > FREE_DAILY_MAX) {
+    throw new HttpError(400, `Kredit gratis harian harus bilangan bulat 0–${FREE_DAILY_MAX}`);
+  }
+  writeFreeDaily.run(String(n), Date.now());
+  return n;
+}
+
 /** Paket lengkap (bagian tetap + pengaturan owner), atau null. */
 export function getPlan(id, settings = planSettings()) {
   if (!Object.hasOwn(BASE, id)) return null;
@@ -128,11 +148,17 @@ export function cycleOf(plan, now = Date.now()) {
   return { period: `sub:${plan.startedAt}:${n}`, resetsAt: plan.startedAt + (n + 1) * PLAN_DAYS * DAY_MS };
 }
 
-// Batas harian Unlimited mengikuti tanggal WIB (UTC+7).
-export function dayOf(now = Date.now()) {
+// Hari dihitung dalam WIB (UTC+7): { date: 'YYYY-MM-DD', resetsAt: 00.00 WIB berikutnya (ms) }.
+export function wibDay(now = Date.now()) {
   const wib = new Date(now + 7 * 60 * 60 * 1000);
   const next = Date.UTC(wib.getUTCFullYear(), wib.getUTCMonth(), wib.getUTCDate() + 1) - 7 * 60 * 60 * 1000;
-  return { period: `day:${wib.toISOString().slice(0, 10)}`, resetsAt: next };
+  return { date: wib.toISOString().slice(0, 10), resetsAt: next };
+}
+
+// Batas harian Unlimited.
+export function dayOf(now = Date.now()) {
+  const { date, resetsAt } = wibDay(now);
+  return { period: `day:${date}`, resetsAt };
 }
 
 /** Pastikan paket boleh dibeli sekarang (dipanggil sebelum membuat tagihan). */

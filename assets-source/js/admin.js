@@ -249,7 +249,7 @@
         h('dt', {}, 'Token input'), h('dd', {}, num(st.ai.tokensIn)),
         h('dt', {}, 'Token output'), h('dd', {}, num(st.ai.tokensOut)),
         h('dt', {}, 'Model aktif'), h('dd', {}, st.ai.currentModel),
-        h('dt', {}, 'Kredit gratis terpakai bulan ini'), h('dd', {}, num(st.credits.usedThisMonth))));
+        h('dt', {}, 'Kredit gratis terpakai hari ini'), h('dd', {}, num(st.credits.usedToday))));
 
     const topUsers = card('Pengguna paling aktif', `Berdasarkan request AI · ${period}`, table([
       { label: 'Pengguna', value: userLink },
@@ -268,7 +268,7 @@
     };
 
     const creditUsers = card('Kredit & token per pengguna',
-      `Jatah gratis ${num(st.credits.freePerUser)}/bulan · total ${num(st.creditUsers.length)} pengguna`,
+      `Jatah gratis ${num(st.credits.freePerUser)}/hari (reset 00.00 WIB) · total ${num(st.creditUsers.length)} pengguna`,
       table([
         { label: 'Pengguna', value: userLink },
         { label: 'Gratis terpakai', num: true, value: (u) => `${num(u.used)} / ${num(u.freeLimit)}` },
@@ -346,6 +346,18 @@
     const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', {}, hint) : null);
     const numberInput = (value, attrs = {}) => h('input', { type: 'number', inputmode: 'numeric', value: String(value), ...attrs });
     const costInput = numberInput(data.modelCost || '', { min: '0', step: '0.01', placeholder: 'mis. 431' });
+    const freeInput = numberInput(data.freeDaily, { min: '0', max: String(data.limits.freeDailyMax), step: '1', required: true });
+    const freeEstimate = h('small', {});
+    const updateFree = () => {
+      const n = Number(freeInput.value) || 0;
+      const cost = Number(costInput.value) || 0;
+      freeEstimate.textContent = n
+        ? `Maks. ${num(n * 30)} kredit/bulan per pengguna${cost && data.usage.avgTokens ? ` · biaya AI terburuk ≈ ${rupiah(Math.round((n * 30 / data.creditsPerPrompt) * data.usage.avgTokens * cost / 1e6))}/pengguna/bulan` : ''}.`
+        : 'Pengguna gratis tidak mendapat kredit AI.';
+    };
+    freeInput.addEventListener('input', updateFree);
+    costInput.addEventListener('input', updateFree);
+    updateFree();
     const status = h('span', { class: 'save-status', role: 'status' });
     const saveBtn = h('button', { type: 'submit', class: 'save-btn', disabled: true }, 'Simpan harga');
 
@@ -395,10 +407,14 @@
     const form = h('form', { class: 'card plans-card', novalidate: true },
       h('div', { class: 'plans-title' },
         h('div', {},
-          h('h2', {}, 'Harga langganan'),
+          h('h2', {}, 'Harga langganan & kredit gratis'),
           h('p', { class: 'sub' }, 'Berlaku untuk pembelian baru. Pelanggan aktif tetap memakai masa aktifnya; paket yang tidak dijual tetap berlaku bagi yang sudah membayar.')),
         h('div', { class: 'plans-actions' }, status, saveBtn)),
       h('div', { class: 'plan-grid' }, rows.map((r) => r.el)),
+      h('div', { class: 'plan-free' },
+        h('div', { class: 'plan-head' }, h('h3', {}, 'Gratis')),
+        field('Kredit AI gratis per hari', freeInput, 'Reset 00.00 WIB, tidak menumpuk.'),
+        freeEstimate),
       h('div', { class: 'plan-cost' },
         field('Biaya model AI per 1 juta token (Rp)', costInput, 'Opsional, untuk menghitung margin.'),
         h('p', { class: 'usage-note' }, data.usage.prompts
@@ -414,7 +430,7 @@
       status.textContent = 'Menyimpan…';
       status.className = 'save-status';
       try {
-        const saved = await plansApi('PUT', { plans: rows.map((r) => r.read()), modelCost: Number(costInput.value) || 0 });
+        const saved = await plansApi('PUT', { plans: rows.map((r) => r.read()), modelCost: Number(costInput.value) || 0, freeDaily: Number(freeInput.value) });
         renderPlans(saved);
         const done = $('#plans .save-status');
         done.textContent = 'Tersimpan ✓';

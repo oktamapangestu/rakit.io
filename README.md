@@ -27,7 +27,7 @@ src/
   files.js     penyimpanan file per user di disk, validasi path, kuota
   sites.js     menyajikan website user (index.html, URL bersih, 404.html kustom, ETag)
   ai.js        asisten AI: konteks proyek, panggilan ke provider AI
-  credits.js   kredit AI: jatah gratis bulanan + saldo yang dibeli
+  credits.js   kredit AI: kuota langganan, jatah gratis harian, saldo yang dibeli
   billing.js   isi ulang kredit & langganan via QRIS (Kasera Pay) + webhook
   plans.js     paket langganan Pro/Unlimited: kuota AI & bonus storage
   userdb.js    database per proyek (SQLite), validasi & aturan akses
@@ -92,7 +92,7 @@ Konfigurasi di `.env`:
 | `AI_QUEUE_MAX` | `30` | Panjang antrean maksimal; lebih dari ini ditolak dengan pesan "AI sedang penuh". |
 | `AI_QUEUE_TIMEOUT_S` | `120` | Batas menunggu di antrean (detik). |
 | `AI_DEBUG` | — | Isi `1` untuk mencetak jawaban mentah AI ke log (berisi kode user — jangan di production). |
-| `AI_MONTHLY_CREDITS` | `30` | Kredit gratis per user per bulan (reset tanggal 1, UTC). |
+| `AI_DAILY_CREDITS` | `3` | Default kredit gratis per user per hari (reset 00.00 WIB, tidak menumpuk). Diatur di dashboard owner setelah pernah disimpan. |
 | `AI_CREDITS_PER_PROMPT` | `1` | Kredit yang dipakai per prompt. |
 
 - Mode **Builder** memakai *tool calling* (`write_file`, `delete_file`, `create_table`); server memvalidasi setiap
@@ -120,7 +120,7 @@ Konfigurasi di `.env`:
 ## Isi ulang kredit (QRIS via Kasera Pay)
 
 Kalau kredit habis, user bisa membeli paket kredit dan membayar dengan QRIS langsung dari editor.
-Kredit yang dibeli tidak hangus dan dipakai setelah kredit gratis bulanan habis.
+Kredit yang dibeli tidak hangus dan dipakai setelah kredit gratis harian habis.
 
 | Variabel | Keterangan |
 |---|---|
@@ -143,17 +143,18 @@ otomatis, dan bisa diperpanjang kapan saja. Paket dibuka dari badge kredit AI at
 
 | Paket | Default awal | AI | Storage file / project | Database / project | File & folder | Gambar / file |
 |---|---|---|---|---|---|---|
-| Gratis | — | `AI_MONTHLY_CREDITS` per bulan | 20 MB | 10 MB | 500 | 1 MB |
+| Gratis | — | `AI_DAILY_CREDITS` per hari (default 3, tidak menumpuk) | 20 MB | 10 MB | 500 | 1 MB |
 | Pro | `PLAN_PRO=49000:300` | 300 kredit tiap siklus 30 hari | 100 MB | 50 MB | 2.000 | 5 MB |
 | Unlimited | `PLAN_UNLIMITED=149000:60` | tanpa kuota bulanan, maks. 60 prompt/hari (WIB) | 250 MB | 100 MB | 5.000 | 10 MB |
 
 - **Harga, kuota AI, dan status dijual diatur di dashboard owner** (`/admin` → kartu *Harga langganan*) dan
   disimpan di tabel `settings`. `PLAN_PRO`/`PLAN_UNLIMITED` di `.env` hanya default sebelum owner pernah menyimpan.
-  Perubahan berlaku untuk pembelian baru; tagihan QRIS yang masih menunggu tetap dengan nominal lamanya. Paket
+  Kartu yang sama mengatur **kredit gratis per hari** (reset 00.00 WIB; sisa hari itu hangus, tidak menumpuk).
+  Perubahan harga berlaku untuk pembelian baru; tagihan QRIS yang masih menunggu tetap dengan nominal lamanya. Paket
   yang tidak dijual tetap berlaku bagi pelanggan yang sudah membayar. Kartu itu juga menghitung harga per
   kredit/prompt dan perkiraan margin terburuk dari rata-rata token per prompt 30 hari terakhir × biaya model
   (Rp per 1 juta token, diisi owner).
-- Urutan pemakaian kredit: kuota langganan → kredit gratis bulanan → saldo kredit yang dibeli. Jadi pelanggan
+- Urutan pemakaian kredit: kuota langganan → kredit gratis harian → saldo kredit yang dibeli. Jadi pelanggan
   Unlimited yang mencapai batas harian tetap bisa memakai kredit gratis/belinya.
 - **Perpanjang** paket yang sama: masa aktif ditambah 30 hari dari tanggal berakhir. **Upgrade** Pro → Unlimited:
   langsung aktif, sisa hari Pro dikonversi ke hari Unlimited sesuai harga. Downgrade ditolak selama paket lebih tinggi aktif.

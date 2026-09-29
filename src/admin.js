@@ -6,7 +6,11 @@ import { db } from './db.js';
 import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
 import { queueStats } from './aiqueue.js';
-import { getPlan, modelCost, PLAN_IDS, PLAN_LIMITS, planSettings, saveModelCost, savePlanSettings } from './plans.js';
+import {
+  FREE_DAILY_MAX, freeDailyCredits, getPlan, modelCost, PLAN_IDS, PLAN_LIMITS, planSettings,
+  saveFreeDailyCredits, saveModelCost, savePlanSettings,
+} from './plans.js';
+import { freePeriod } from './credits.js';
 
 // Dashboard pemilik platform: statistik pengguna, AI, pendapatan, dan penyimpanan.
 // Akses dibatasi ke email di ADMIN_EMAILS.
@@ -102,8 +106,9 @@ function plansView() {
       const plan = getPlan(id, settings);
       return { id, name: plan.name, price: plan.price, quota: settings[id].quota, enabled: plan.enabled, quotaUnit: plan.credits ? 'credits' : 'daily', storage: plan.storage };
     }),
-    limits: PLAN_LIMITS,
+    limits: { ...PLAN_LIMITS, freeDailyMax: FREE_DAILY_MAX },
     modelCost: modelCost(),
+    freeDaily: freeDailyCredits(),
     usage: { prompts: usage.prompts, avgTokens: Math.round(usage.avg), maxTokens: usage.max },
     creditsPerPrompt: config.ai.creditsPerPrompt,
   };
@@ -120,6 +125,7 @@ admin.put('/plans', express.json(), (req, res) => {
   try {
     savePlanSettings(input);
     if (body.modelCost !== undefined) saveModelCost(body.modelCost);
+    if (body.freeDaily !== undefined) saveFreeDailyCredits(body.freeDaily);
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');
@@ -136,7 +142,6 @@ admin.get('/stats', async (req, res) => {
   const since = Date.now() - days * DAY_MS;
   const sinceIso = new Date(since).toISOString();
   const today = dayList.at(-1);
-  const period = new Date().toISOString().slice(0, 7);
   const localDay = (col) => `date(${col} / 1000, 'unixepoch', '${TZ_OFFSET}')`;
 
   // Pengguna
@@ -173,9 +178,9 @@ admin.get('/stats', async (req, res) => {
 
   // Kredit
   const credits = {
-    usedThisMonth: one('SELECT COALESCE(SUM(used), 0) AS n FROM ai_usage WHERE period = ?', period).n,
+    usedToday: one('SELECT COALESCE(SUM(used), 0) AS n FROM ai_usage WHERE period = ?', freePeriod()).n,
     purchasedOutstanding: one('SELECT COALESCE(SUM(balance), 0) AS n FROM credit_balance').n,
-    freePerUser: config.ai.monthlyCredits,
+    freePerUser: freeDailyCredits(),
   };
 
   // Langganan yang masih aktif, per paket
@@ -218,7 +223,8 @@ admin.get('/stats', async (req, res) => {
     FROM users u ORDER BY created_at DESC LIMIT 10
   `).map((u) => ({ ...u, siteUrl: config.siteUrl(u.slug ?? u.username) }));
 
-  // Kredit & token per pengguna: jatah gratis bulan ini, saldo beli, total tersedia, dan pemakaian token.
+  const freeLimit = freeDailyCredits();
+  // Kredit & token per pengguna: jatah gratis hari ini, saldo beli, total tersedia, dan pemakaian token.
   const creditUsers = all(`
     SELECT u.id, u.username, u.email, ${PRIMARY_SLUG} AS slug,
            COALESCE(usage.used, 0) AS used,
@@ -239,8 +245,7 @@ admin.get('/stats', async (req, res) => {
       FROM ai_requests GROUP BY user_id
     ) agg ON agg.user_id = u.id
     ORDER BY (COALESCE(usage.used, 0) + COALESCE(bal.balance, 0)) DESC, (COALESCE(agg.inTokens, 0) + COALESCE(agg.outTokens, 0)) DESC, u.username
-  `, period).map((u) => {
-    const freeLimit = config.ai.monthlyCredits;
+  `, freePeriod()).map((u) => {
     const freeRemaining = Math.max(0, freeLimit - u.used);
     const totalTokens = u.inTokens + u.outTokens;
     return {

@@ -1,19 +1,15 @@
 import { config } from './config.js';
 import { db, q } from './db.js';
 import { HttpError } from './http-error.js';
-import { activatePlan, activePlan, cycleOf, dayOf, planFromPackageId } from './plans.js';
+import { activatePlan, activePlan, cycleOf, dayOf, freeDailyCredits, planFromPackageId, wibDay } from './plans.js';
 
 // Sumber kredit AI, dipakai berurutan:
 // - langganan: kuota Pro per siklus 30 hari, atau batas harian Unlimited (lihat plans.js)
-// - gratis: jatah bulanan, reset tiap tanggal 1 (UTC)
+// - gratis: jatah harian, reset 00.00 WIB, tidak menumpuk (sisa hari ini hangus)
 // - dibeli: saldo dari isi ulang, tidak hangus, dipakai setelah jatah gratis habis
 
-const currentPeriod = () => new Date().toISOString().slice(0, 7); // 'YYYY-MM' (UTC)
-
-function nextResetAt() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
-}
+// Baris ai_usage untuk jatah gratis hari ini (WIB).
+export const freePeriod = (now = Date.now()) => `free:${wibDay(now).date}`;
 
 // Kuota langganan yang berlaku sekarang: { period, limit, resetsAt } atau null.
 function planQuota(plan) {
@@ -23,8 +19,9 @@ function planQuota(plan) {
 }
 
 export function creditInfo(userId) {
-  const used = q.usage.get(userId, currentPeriod())?.used ?? 0;
-  const freeRemaining = Math.max(0, config.ai.monthlyCredits - used);
+  const freeLimit = freeDailyCredits();
+  const used = q.usage.get(userId, freePeriod())?.used ?? 0;
+  const freeRemaining = Math.max(0, freeLimit - used);
   const purchased = q.balance.get(userId)?.balance ?? 0;
 
   const plan = activePlan(userId);
@@ -34,13 +31,13 @@ export function creditInfo(userId) {
   return {
     enabled: config.ai.enabled,
     topupEnabled: config.billing.enabled,
-    limit: config.ai.monthlyCredits,
+    limit: freeLimit, // kredit gratis per hari
     used,
     freeRemaining,
     purchased,
     remaining: planRemaining + freeRemaining + purchased,
     costPerPrompt: config.ai.creditsPerPrompt,
-    resetsAt: nextResetAt(),
+    resetsAt: new Date(wibDay().resetsAt).toISOString(), // jatah gratis terisi lagi 00.00 WIB
     plan: plan && {
       id: plan.id,
       name: plan.name,
@@ -57,7 +54,7 @@ export function creditInfo(userId) {
 // Potong kredit sebelum memanggil AI. Mengembalikan catatan reservasi { source, period, cost }
 // yang bisa disimpan, supaya kredit tetap bisa dikembalikan walau server sempat restart.
 export function reserveCredits(userId) {
-  const period = currentPeriod();
+  const period = freePeriod();
   const cost = config.ai.creditsPerPrompt;
 
   const quota = planQuota(activePlan(userId));
@@ -68,15 +65,15 @@ export function reserveCredits(userId) {
     }
   }
   q.ensureUsage.run(userId, period);
-  if (q.reserveCredit.run(cost, userId, period, cost, config.ai.monthlyCredits).changes === 1) {
+  if (q.reserveCredit.run(cost, userId, period, cost, freeDailyCredits()).changes === 1) {
     return { source: 'free', period, cost };
   }
   if (q.spendBalance.run(cost, userId, cost).changes === 1) {
     return { source: 'purchased', period, cost };
   }
   const err = new HttpError(402, config.billing.enabled
-    ? 'Kredit AI kamu habis. Isi ulang kredit untuk lanjut memakai AI.'
-    : 'Kredit AI bulan ini sudah habis. Kredit akan terisi lagi awal bulan depan.');
+    ? 'Kredit AI kamu habis. Kredit gratis terisi lagi besok pukul 00.00 WIB, atau berlangganan / isi ulang untuk lanjut sekarang.'
+    : 'Kredit AI gratis hari ini sudah habis. Terisi lagi besok pukul 00.00 WIB.');
   err.code = 'no_credits';
   throw err;
 }
