@@ -1130,15 +1130,19 @@
       plan && (plan.id === 'unlimited'
         ? `Hari ini: ${plan.quotaUsed}/${plan.quota} prompt`
         : `Kredit ${plan.name}: ${plan.quotaRemaining}/${plan.quota} (terisi ulang ${shortDate(plan.quotaResetsAt)})`),
+      c.bonusRemaining > 0 ? `Bonus awal: ${c.bonusRemaining}/${c.bonusLimit} (sekali, tidak berkurang tiap hari sampai habis)` : null,
       c.limit ? `Gratis hari ini: ${c.freeRemaining}/${c.limit} (terisi lagi besok 00.00 WIB, tidak menumpuk)` : null,
       c.purchased ? `Dibeli: ${c.purchased}` : null,
       c.topupEnabled ? 'Klik untuk langganan / isi ulang' : null,
     ].filter(Boolean).join(' · ');
 
     $('#aiTopupBanner').hidden = !empty;
+    const usingBonus = c.bonusRemaining > 0;
     $('#aiTopupText').textContent = c.topupEnabled
       ? 'Kredit AI kamu habis.'
-      : 'Kredit AI hari ini habis. Terisi lagi besok 00.00 WIB.';
+      : usingBonus
+        ? `Masih ada bonus awal ${c.bonusRemaining} kredit.`
+        : `Kredit AI hari ini habis (gratis ${c.limit}/hari). Terisi lagi besok 00.00 WIB.`;
     $('#aiTopupBtn').hidden = !c.topupEnabled;
     updateAiComposer();
   }
@@ -2862,6 +2866,7 @@
         h('button', { type: 'button', class: 'promo-cta', onclick: () => startPayment({ planId: plan.id }) }, `Mulai ${plan.name}`)));
 
       const left = free.freeRemaining;
+      const bonus = free.bonusRemaining ?? 0;
       body.replaceChildren(...[
         h('button', { class: 'icon-btn promo-close', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close)),
         h('div', { class: 'promo-hero' },
@@ -2869,6 +2874,10 @@
           h('span', { class: 'promo-kicker' }, svg(SPARK), 'Upgrade rakit.icu'),
           h('h2', {}, 'Bangun lebih banyak, lebih cepat.'),
           h('p', {}, 'Kredit AI berlimpah, storage lega, dan upload gambar lebih besar.'),
+          bonus
+            ? h('div', { class: 'promo-today' },
+              h('span', {}, `Bonus awal ${bonus} kredit masih tersedia (sekali, tidak berkurang tiap hari)`))
+            : null,
           free.limit
             ? h('div', { class: `promo-today${left ? '' : ' empty'}` },
               h('span', {}, left ? `Kredit gratis hari ini tinggal ${left} dari ${free.limit}` : `Kredit gratis hari ini (${free.limit}) sudah habis`),
@@ -2916,7 +2925,7 @@
           h('strong', {}, current.id === 'unlimited' ? `${current.quotaRemaining}/${current.quota} prompt hari ini` : `${current.quotaRemaining} kredit`))
         : h('div', { class: 'topup-balance' },
           h('span', {}, 'Paket sekarang: ', h('strong', {}, 'Gratis')),
-          h('span', {}, `${free.limit} kredit/hari · storage 20 MB`));
+          h('span', {}, `Bonus awal ${free.bonusLimit} kredit + ${free.limit} kredit/hari · storage 20 MB`));
 
       body.replaceChildren(...[
         intro

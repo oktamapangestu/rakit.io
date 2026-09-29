@@ -113,6 +113,27 @@ export function saveFreeDailyCredits(value) {
   return n;
 }
 
+// Bonus kredit sekali untuk akun baru: habis pakai, tidak menumpuk, tidak kembali.
+// Berlaku untuk semua akun yang belum pernah menghabiskannya (user lama pun langsung dapat).
+const readFreeBonus = db.prepare("SELECT value FROM settings WHERE key = 'free_bonus_credits'");
+const writeFreeBonus = db.prepare(`
+  INSERT INTO settings (key, value, updated_at) VALUES ('free_bonus_credits', ?, ?)
+  ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+`);
+export const FREE_BONUS_MAX = 10_000;
+export function freeBonusCredits() {
+  const saved = readFreeBonus.get();
+  return saved ? Number(saved.value) : config.ai.bonusCredits;
+}
+export function saveFreeBonusCredits(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0 || n > FREE_BONUS_MAX) {
+    throw new HttpError(400, `Bonus kredit awal harus bilangan bulat 0–${FREE_BONUS_MAX}`);
+  }
+  writeFreeBonus.run(String(n), Date.now());
+  return n;
+}
+
 /** Paket lengkap (bagian tetap + pengaturan owner), atau null. */
 export function getPlan(id, settings = planSettings()) {
   if (!Object.hasOwn(BASE, id)) return null;

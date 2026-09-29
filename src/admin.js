@@ -7,8 +7,8 @@ import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
 import { queueStats } from './aiqueue.js';
 import {
-  FREE_DAILY_MAX, freeDailyCredits, getPlan, modelCost, PLAN_IDS, PLAN_LIMITS, planSettings,
-  saveFreeDailyCredits, saveModelCost, savePlanSettings,
+  FREE_DAILY_MAX, FREE_BONUS_MAX, freeBonusCredits, freeDailyCredits, getPlan, modelCost, PLAN_IDS, PLAN_LIMITS, planSettings,
+  saveFreeBonusCredits, saveFreeDailyCredits, saveModelCost, savePlanSettings,
 } from './plans.js';
 import { freePeriod } from './credits.js';
 
@@ -106,9 +106,10 @@ function plansView() {
       const plan = getPlan(id, settings);
       return { id, name: plan.name, price: plan.price, quota: settings[id].quota, enabled: plan.enabled, quotaUnit: plan.credits ? 'credits' : 'daily', storage: plan.storage };
     }),
-    limits: { ...PLAN_LIMITS, freeDailyMax: FREE_DAILY_MAX },
+    limits: { ...PLAN_LIMITS, freeDailyMax: FREE_DAILY_MAX, freeBonusMax: FREE_BONUS_MAX },
     modelCost: modelCost(),
     freeDaily: freeDailyCredits(),
+    freeBonus: freeBonusCredits(),
     usage: { prompts: usage.prompts, avgTokens: Math.round(usage.avg), maxTokens: usage.max },
     creditsPerPrompt: config.ai.creditsPerPrompt,
   };
@@ -126,6 +127,7 @@ admin.put('/plans', express.json(), (req, res) => {
     savePlanSettings(input);
     if (body.modelCost !== undefined) saveModelCost(body.modelCost);
     if (body.freeDaily !== undefined) saveFreeDailyCredits(body.freeDaily);
+    if (body.freeBonus !== undefined) saveFreeBonusCredits(body.freeBonus);
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');
@@ -224,10 +226,12 @@ admin.get('/stats', async (req, res) => {
   `).map((u) => ({ ...u, siteUrl: config.siteUrl(u.slug ?? u.username) }));
 
   const freeLimit = freeDailyCredits();
-  // Kredit & token per pengguna: jatah gratis hari ini, saldo beli, total tersedia, dan pemakaian token.
+  const bonusLimit = freeBonusCredits();
+  // Kredit & token per pengguna: bonus awal, jatah gratis hari ini, saldo beli, total tersedia, dan token.
   const creditUsers = all(`
     SELECT u.id, u.username, u.email, ${PRIMARY_SLUG} AS slug,
            COALESCE(usage.used, 0) AS used,
+           COALESCE(bonus.used, 0) AS bonusUsed,
            COALESCE(bal.balance, 0) AS purchased,
            COALESCE(agg.inTokens, 0) AS inTokens,
            COALESCE(agg.outTokens, 0) AS outTokens,
@@ -235,6 +239,7 @@ admin.get('/stats', async (req, res) => {
            agg.lastAt AS lastAt
     FROM users u
     LEFT JOIN ai_usage usage ON usage.user_id = u.id AND usage.period = ?
+    LEFT JOIN ai_usage bonus ON bonus.user_id = u.id AND bonus.period = 'free:bonus'
     LEFT JOIN credit_balance bal ON bal.user_id = u.id
     LEFT JOIN (
       SELECT user_id,
@@ -247,6 +252,7 @@ admin.get('/stats', async (req, res) => {
     ORDER BY (COALESCE(usage.used, 0) + COALESCE(bal.balance, 0)) DESC, (COALESCE(agg.inTokens, 0) + COALESCE(agg.outTokens, 0)) DESC, u.username
   `, freePeriod()).map((u) => {
     const freeRemaining = Math.max(0, freeLimit - u.used);
+    const bonusRemaining = Math.max(0, bonusLimit - u.bonusUsed);
     const totalTokens = u.inTokens + u.outTokens;
     return {
       username: u.username,
@@ -254,8 +260,11 @@ admin.get('/stats', async (req, res) => {
       used: u.used,
       freeLimit,
       freeRemaining,
+      bonusLimit,
+      bonusUsed: u.bonusUsed,
+      bonusRemaining,
       purchased: u.purchased,
-      remaining: freeRemaining + u.purchased,
+      remaining: freeRemaining + bonusRemaining + u.purchased,
       aiRequests: u.aiRequests,
       inTokens: u.inTokens,
       outTokens: u.outTokens,

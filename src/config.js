@@ -35,6 +35,8 @@ export const config = {
     queueTimeoutMs: Math.max(5, Number(env.AI_QUEUE_TIMEOUT_S || 120)) * 1000,
     // Default kredit gratis per hari (reset 00.00 WIB, tidak menumpuk); diatur owner di dashboard.
     dailyCredits: Math.max(0, Number(env.AI_DAILY_CREDITS ?? 3) || 0),
+    // Bonus kredit sekali untuk akun baru (habis pakai, tidak kembali); diatur owner di dashboard.
+    bonusCredits: Math.max(0, Number(env.AI_BONUS_CREDITS ?? 20) || 0),
     creditsPerPrompt: Number(env.AI_CREDITS_PER_PROMPT || 1),
   },
   billing: {

@@ -258,19 +258,20 @@
       { label: 'Belanja', num: true, value: (u) => (u.spent ? rupiah(u.spent) : h('span', { class: 'muted' }, '—')) },
     ], st.topUsers, 'Belum ada pemakaian AI.'));
 
-    // Bar kecil untuk menunjukkan sisa kredit relatif terhadap jatah + saldo.
+    // Bar kecil untuk menunjukkan sisa kredit relatif terhadap bonus + jatah + saldo.
     const creditBar = (u) => {
-      const total = u.freeRemaining + u.purchased;
-      const cap = u.used + total || 1;
+      const total = u.bonusRemaining + u.freeRemaining + u.purchased;
+      const cap = u.used + u.bonusUsed + total || 1;
       const seg = (n, cls) => (n > 0 ? h('span', { class: `seg ${cls}`, style: `width:${(n / cap) * 100}%` }) : null);
-      return h('span', { class: 'creditbar', title: `Terpakai ${num(u.used)} · gratis sisa ${num(u.freeRemaining)} · saldo ${num(u.purchased)}` },
-        seg(u.used, 'used'), seg(u.freeRemaining, 'free'), seg(u.purchased, 'paid'));
+      return h('span', { class: 'creditbar', title: `Bonus terpakai ${num(u.bonusUsed)} (sisa ${num(u.bonusRemaining)}) · gratis terpakai ${num(u.used)} (sisa ${num(u.freeRemaining)}) · saldo ${num(u.purchased)}` },
+        seg(u.used, 'used'), seg(u.bonusUsed, 'bonus'), seg(u.bonusRemaining, 'bonus-left'), seg(u.freeRemaining, 'free'), seg(u.purchased, 'paid'));
     };
 
     const creditUsers = card('Kredit & token per pengguna',
-      `Jatah gratis ${num(st.credits.freePerUser)}/hari (reset 00.00 WIB) · total ${num(st.creditUsers.length)} pengguna`,
+      `Bonus awal ${num(st.credits.freeBonus)} (sekali) · jatah gratis ${num(st.credits.freePerUser)}/hari (reset 00.00 WIB) · total ${num(st.creditUsers.length)} pengguna`,
       table([
         { label: 'Pengguna', value: userLink },
+        { label: 'Bonus sisa', num: true, value: (u) => (u.bonusLimit ? `${num(u.bonusRemaining)} / ${num(u.bonusLimit)}` : h('span', { class: 'muted' }, '—')) },
         { label: 'Gratis terpakai', num: true, value: (u) => `${num(u.used)} / ${num(u.freeLimit)}` },
         { label: 'Gratis sisa', num: true, value: (u) => num(u.freeRemaining) },
         { label: 'Saldo beli', num: true, value: (u) => (u.purchased ? num(u.purchased) : h('span', { class: 'muted' }, '—')) },
@@ -347,17 +348,25 @@
     const numberInput = (value, attrs = {}) => h('input', { type: 'number', inputmode: 'numeric', value: String(value), ...attrs });
     const costInput = numberInput(data.modelCost || '', { min: '0', step: '0.01', placeholder: 'mis. 431' });
     const freeInput = numberInput(data.freeDaily, { min: '0', max: String(data.limits.freeDailyMax), step: '1', required: true });
+    const bonusInput = numberInput(data.freeBonus, { min: '0', max: String(data.limits.freeBonusMax), step: '1', required: true });
     const freeEstimate = h('small', {});
-    const updateFree = () => {
+    const bonusEstimate = h('small', {});
+    const updateBonuses = () => {
       const n = Number(freeInput.value) || 0;
+      const b = Number(bonusInput.value) || 0;
       const cost = Number(costInput.value) || 0;
+      const totalFirstMonth = b + n * 30;
       freeEstimate.textContent = n
         ? `Maks. ${num(n * 30)} kredit/bulan per pengguna${cost && data.usage.avgTokens ? ` · biaya AI terburuk ≈ ${rupiah(Math.round((n * 30 / data.creditsPerPrompt) * data.usage.avgTokens * cost / 1e6))}/pengguna/bulan` : ''}.`
         : 'Pengguna gratis tidak mendapat kredit AI.';
+      bonusEstimate.textContent = b
+        ? `Sekali per akun, tidak menumpuk. Bulan pertama maks. ≈ ${num(totalFirstMonth)} kredit${cost && data.usage.avgTokens ? ` · biaya terburuk ≈ ${rupiah(Math.round((totalFirstMonth / data.creditsPerPrompt) * data.usage.avgTokens * cost / 1e6))}` : ''}.`
+        : 'Tanpa bonus kredit awal.';
     };
-    freeInput.addEventListener('input', updateFree);
-    costInput.addEventListener('input', updateFree);
-    updateFree();
+    freeInput.addEventListener('input', updateBonuses);
+    bonusInput.addEventListener('input', updateBonuses);
+    costInput.addEventListener('input', updateBonuses);
+    updateBonuses();
     const status = h('span', { class: 'save-status', role: 'status' });
     const saveBtn = h('button', { type: 'submit', class: 'save-btn', disabled: true }, 'Simpan harga');
 
@@ -414,7 +423,9 @@
       h('div', { class: 'plan-free' },
         h('div', { class: 'plan-head' }, h('h3', {}, 'Gratis')),
         field('Kredit AI gratis per hari', freeInput, 'Reset 00.00 WIB, tidak menumpuk.'),
-        freeEstimate),
+        freeEstimate,
+        field('Bonus kredit awal (sekali per akun)', bonusInput, 'Berlaku untuk semua akun yang belum menghabiskannya, termasuk pengguna lama. Habis pakai, tidak kembali.'),
+        bonusEstimate),
       h('div', { class: 'plan-cost' },
         field('Biaya model AI per 1 juta token (Rp)', costInput, 'Opsional, untuk menghitung margin.'),
         h('p', { class: 'usage-note' }, data.usage.prompts
@@ -430,7 +441,7 @@
       status.textContent = 'Menyimpan…';
       status.className = 'save-status';
       try {
-        const saved = await plansApi('PUT', { plans: rows.map((r) => r.read()), modelCost: Number(costInput.value) || 0, freeDaily: Number(freeInput.value) });
+        const saved = await plansApi('PUT', { plans: rows.map((r) => r.read()), modelCost: Number(costInput.value) || 0, freeDaily: Number(freeInput.value), freeBonus: Number(bonusInput.value) });
         renderPlans(saved);
         const done = $('#plans .save-status');
         done.textContent = 'Tersimpan ✓';

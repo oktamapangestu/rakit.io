@@ -185,6 +185,8 @@ td a:hover { color: var(--white); text-decoration: underline; }
 .creditbar .seg { height: 100%; }
 .creditbar .seg.used { background: var(--serious); }
 .creditbar .seg.free { background: var(--series-ai); }
+.creditbar .seg.bonus { background: var(--series-ai); opacity: .55; }
+.creditbar .seg.bonus-left { background: var(--good); opacity: .55; }
 .creditbar .seg.paid { background: var(--good); }
 .empty-row { padding: 20px 10px; text-align: center; color: var(--faint); }
 

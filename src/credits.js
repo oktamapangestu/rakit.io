@@ -1,15 +1,25 @@
 import { config } from './config.js';
 import { db, q } from './db.js';
 import { HttpError } from './http-error.js';
-import { activatePlan, activePlan, cycleOf, dayOf, freeDailyCredits, planFromPackageId, wibDay } from './plans.js';
+import { activatePlan, activePlan, cycleOf, dayOf, freeBonusCredits, freeDailyCredits, planFromPackageId, wibDay } from './plans.js';
 
 // Sumber kredit AI, dipakai berurutan:
 // - langganan: kuota Pro per siklus 30 hari, atau batas harian Unlimited (lihat plans.js)
+// - bonus: sekali untuk akun baru (mis. 20), habis pakai & tidak kembali; user lama ikut dapat
 // - gratis: jatah harian, reset 00.00 WIB, tidak menumpuk (sisa hari ini hangus)
 // - dibeli: saldo dari isi ulang, tidak hangus, dipakai setelah jatah gratis habis
 
 // Baris ai_usage untuk jatah gratis hari ini (WIB).
 export const freePeriod = (now = Date.now()) => `free:${wibDay(now).date}`;
+
+// Bonus awal: satu baris per user, period tetap (bukan per-hari) sehingga tak menumpuk & tak kembali.
+export const BONUS_PERIOD = 'free:bonus';
+const bonusRemaining = (userId) => {
+  const limit = freeBonusCredits();
+  if (limit <= 0) return 0;
+  const used = q.usage.get(userId, BONUS_PERIOD)?.used ?? 0;
+  return Math.max(0, limit - used);
+};
 
 // Kuota langganan yang berlaku sekarang: { period, limit, resetsAt } atau null.
 function planQuota(plan) {
@@ -24,6 +34,10 @@ export function creditInfo(userId) {
   const freeRemaining = Math.max(0, freeLimit - used);
   const purchased = q.balance.get(userId)?.balance ?? 0;
 
+  const bonusLimit = freeBonusCredits();
+  const bonusLeft = bonusRemaining(userId);
+  const bonusUsed = Math.max(0, bonusLimit - bonusLeft);
+
   const plan = activePlan(userId);
   const quota = planQuota(plan);
   const planUsed = quota ? q.usage.get(userId, quota.period)?.used ?? 0 : 0;
@@ -34,8 +48,12 @@ export function creditInfo(userId) {
     limit: freeLimit, // kredit gratis per hari
     used,
     freeRemaining,
+    // Bonus awal: masa perkenalan sebelum jatah harian. Sekali habis, tidak kembali.
+    bonusLimit,
+    bonusRemaining: bonusLeft,
+    bonusUsed,
     purchased,
-    remaining: planRemaining + freeRemaining + purchased,
+    remaining: planRemaining + bonusLeft + freeRemaining + purchased,
     costPerPrompt: config.ai.creditsPerPrompt,
     resetsAt: new Date(wibDay().resetsAt).toISOString(), // jatah gratis terisi lagi 00.00 WIB
     plan: plan && {
@@ -65,6 +83,14 @@ export function reserveCredits(userId) {
     }
   }
   q.ensureUsage.run(userId, period);
+  // Bonus awal dipakai lebih dulu: masa perkenalan 20 kredit sebelum jatah harian 3/hari.
+  const bonusLimit = freeBonusCredits();
+  if (bonusLimit > 0) {
+    q.ensureUsage.run(userId, BONUS_PERIOD);
+    if (q.reserveCredit.run(cost, userId, BONUS_PERIOD, cost, bonusLimit).changes === 1) {
+      return { source: 'bonus', period: BONUS_PERIOD, cost };
+    }
+  }
   if (q.reserveCredit.run(cost, userId, period, cost, freeDailyCredits()).changes === 1) {
     return { source: 'free', period, cost };
   }
@@ -80,7 +106,7 @@ export function reserveCredits(userId) {
 
 export function refundCredits(userId, reservation) {
   if (!reservation) return;
-  if (reservation.source === 'free' || reservation.source === 'plan') q.refundCredit.run(reservation.cost, userId, reservation.period);
+  if (['free', 'plan', 'bonus'].includes(reservation.source)) q.refundCredit.run(reservation.cost, userId, reservation.period);
   else q.addBalance.run(userId, reservation.cost);
 }
 
