@@ -50,6 +50,13 @@ db.exec(`
     balance INTEGER NOT NULL DEFAULT 0
   );
 
+  -- Pengaturan platform yang diubah owner lewat dashboard (JSON per kunci), mis. 'plans'.
+  CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
   -- Langganan aktif per user (Pro/Unlimited). Satu baris per user; diperbarui saat membeli/memperpanjang.
   CREATE TABLE IF NOT EXISTS subscriptions (
     user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

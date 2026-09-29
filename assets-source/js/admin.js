@@ -318,6 +318,116 @@
       h('div', { class: 'grid two' }, payments, signups));
   }
 
+  // ---------- Harga langganan ----------
+  // Dimuat & dirender terpisah dari statistik, supaya isian yang belum disimpan tidak hilang saat statistik dimuat ulang.
+  const mbLabel = (n) => `${Math.round(n / 1048576)} MB`;
+
+  async function plansApi(method, body) {
+    const res = await fetch('/api/admin/plans', {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
+    return data;
+  }
+
+  async function loadPlans() {
+    try {
+      renderPlans(await plansApi('GET'));
+    } catch (err) {
+      $('#plans').replaceChildren(h('p', { class: 'error' }, `Gagal memuat harga langganan: ${err.message}`));
+    }
+  }
+
+  function renderPlans(data) {
+    const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', {}, hint) : null);
+    const numberInput = (value, attrs = {}) => h('input', { type: 'number', inputmode: 'numeric', value: String(value), ...attrs });
+    const costInput = numberInput(data.modelCost || '', { min: '0', step: '0.01', placeholder: 'mis. 431' });
+    const status = h('span', { class: 'save-status', role: 'status' });
+    const saveBtn = h('button', { type: 'submit', class: 'save-btn', disabled: true }, 'Simpan harga');
+
+    const rows = data.plans.map((plan) => {
+      const price = numberInput(plan.price, { min: String(data.limits.minPrice), max: String(data.limits.maxPrice), step: '1000', required: true });
+      const quota = numberInput(plan.quota, { min: '1', max: String(data.limits.maxQuota), step: '1', required: true });
+      const enabled = h('input', { type: 'checkbox', checked: plan.enabled });
+      const estimate = h('div', { class: 'estimate' });
+      const daily = plan.quotaUnit === 'daily';
+
+      // Perkiraan biaya AI terburuk (semua kuota terpakai) dari rata-rata token per prompt 30 hari terakhir.
+      const update = () => {
+        const p = Number(price.value) || 0;
+        const qv = Number(quota.value) || 0;
+        const prompts = daily ? qv * 30 : qv / data.creditsPerPrompt;
+        const perUnit = qv ? p / (daily ? qv * 30 : qv) : 0;
+        const cost = Number(costInput.value) || 0;
+        const lines = [h('div', {}, daily ? 'Harga per prompt (maks. terpakai)' : 'Harga per kredit', h('strong', {}, rupiah(Math.round(perUnit))))];
+        if (cost && data.usage.avgTokens) {
+          const maxCost = Math.round((prompts * data.usage.avgTokens * cost) / 1e6);
+          const margin = p ? Math.round(((p - maxCost) / p) * 100) : 0;
+          lines.push(h('div', {}, 'Biaya AI jika kuota habis', h('strong', {}, `≈ ${rupiah(maxCost)}`)));
+          lines.push(h('div', { class: margin < 30 ? 'warn' : 'good' }, 'Margin terburuk', h('strong', {}, `${margin}%`)));
+        }
+        estimate.replaceChildren(...lines);
+      };
+      for (const el of [price, quota]) el.addEventListener('input', update);
+      costInput.addEventListener('input', update);
+      update();
+
+      return {
+        read: () => ({ id: plan.id, price: Number(price.value), quota: Number(quota.value), enabled: enabled.checked }),
+        el: h('div', { class: `plan-row${plan.enabled ? '' : ' off'}` },
+          h('div', { class: 'plan-head' },
+            h('h3', {}, plan.name),
+            h('label', { class: 'switch' }, enabled, h('span', {}, 'Dijual'))),
+          h('div', { class: 'plan-fields' },
+            field('Harga / 30 hari (Rp)', price),
+            field(daily ? 'Batas prompt per hari' : 'Kredit AI per 30 hari', quota, daily ? 'Fair use; hari dihitung WIB' : null)),
+          h('p', { class: 'plan-storage' }, `Storage ${mbLabel(plan.storage.totalSize)} · database ${mbLabel(plan.storage.dbBytes)} · gambar ${mbLabel(plan.storage.imageSize)}/file`),
+          estimate),
+        enabled,
+      };
+    });
+    rows.forEach((r) => r.enabled.addEventListener('change', () => r.el.classList.toggle('off', !r.enabled.checked)));
+
+    const form = h('form', { class: 'card plans-card', novalidate: true },
+      h('div', { class: 'plans-title' },
+        h('div', {},
+          h('h2', {}, 'Harga langganan'),
+          h('p', { class: 'sub' }, 'Berlaku untuk pembelian baru. Pelanggan aktif tetap memakai masa aktifnya; paket yang tidak dijual tetap berlaku bagi yang sudah membayar.')),
+        h('div', { class: 'plans-actions' }, status, saveBtn)),
+      h('div', { class: 'plan-grid' }, rows.map((r) => r.el)),
+      h('div', { class: 'plan-cost' },
+        field('Biaya model AI per 1 juta token (Rp)', costInput, 'Opsional, untuk menghitung margin.'),
+        h('p', { class: 'usage-note' }, data.usage.prompts
+          ? `30 hari terakhir: ${num(data.usage.prompts)} prompt, rata-rata ${num(data.usage.avgTokens)} token/prompt (maks. ${num(data.usage.maxTokens)}).`
+          : 'Belum ada data pemakaian AI 30 hari terakhir, jadi biaya belum bisa diperkirakan.')));
+
+    const markDirty = () => { saveBtn.disabled = false; status.textContent = 'Belum disimpan'; status.className = 'save-status dirty'; };
+    form.addEventListener('input', markDirty);
+    form.addEventListener('change', markDirty);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      saveBtn.disabled = true;
+      status.textContent = 'Menyimpan…';
+      status.className = 'save-status';
+      try {
+        const saved = await plansApi('PUT', { plans: rows.map((r) => r.read()), modelCost: Number(costInput.value) || 0 });
+        renderPlans(saved);
+        const done = $('#plans .save-status');
+        done.textContent = 'Tersimpan ✓';
+        done.className = 'save-status ok';
+      } catch (err) {
+        saveBtn.disabled = false;
+        status.textContent = err.message;
+        status.className = 'save-status error-text';
+      }
+    };
+    $('#plans').replaceChildren(form);
+  }
+
   // ---------- Event ----------
   function setDays(value) {
     days = value;
@@ -330,4 +440,5 @@
   $('#refresh').onclick = load;
   setDays([7, 30, 90].includes(days) ? days : 30);
   load();
+  loadPlans();
 })();

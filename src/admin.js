@@ -6,6 +6,7 @@ import { db } from './db.js';
 import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
 import { queueStats } from './aiqueue.js';
+import { getPlan, modelCost, PLAN_IDS, PLAN_LIMITS, planSettings, saveModelCost, savePlanSettings } from './plans.js';
 
 // Dashboard pemilik platform: statistik pengguna, AI, pendapatan, dan penyimpanan.
 // Akses dibatasi ke email di ADMIN_EMAILS.
@@ -84,6 +85,48 @@ async function storage() {
   storageCache = { at: Date.now(), value };
   return value;
 }
+
+// ---------- Harga langganan ----------
+
+function plansView() {
+  const settings = planSettings();
+  const since = Date.now() - 30 * DAY_MS;
+  // Rata-rata token per prompt yang berhasil (30 hari), untuk memperkirakan biaya per paket.
+  const usage = db.prepare(`
+    SELECT COUNT(*) AS prompts, COALESCE(AVG(input_tokens + output_tokens), 0) AS avg,
+           COALESCE(MAX(input_tokens + output_tokens), 0) AS max
+    FROM ai_requests WHERE status = 'ok' AND created_at >= ?
+  `).get(since);
+  return {
+    plans: PLAN_IDS.map((id) => {
+      const plan = getPlan(id, settings);
+      return { id, name: plan.name, price: plan.price, quota: settings[id].quota, enabled: plan.enabled, quotaUnit: plan.credits ? 'credits' : 'daily', storage: plan.storage };
+    }),
+    limits: PLAN_LIMITS,
+    modelCost: modelCost(),
+    usage: { prompts: usage.prompts, avgTokens: Math.round(usage.avg), maxTokens: usage.max },
+    creditsPerPrompt: config.ai.creditsPerPrompt,
+  };
+}
+
+admin.get('/plans', (req, res) => res.json(plansView()));
+
+admin.put('/plans', express.json(), (req, res) => {
+  const body = req.body ?? {};
+  const input = Object.fromEntries((Array.isArray(body.plans) ? body.plans : [])
+    .filter((p) => PLAN_IDS.includes(p?.id))
+    .map((p) => [p.id, { price: p.price, quota: p.quota, enabled: p.enabled }]));
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    savePlanSettings(input);
+    if (body.modelCost !== undefined) saveModelCost(body.modelCost);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  res.json(plansView());
+});
 
 // ---------- Statistik ----------
 

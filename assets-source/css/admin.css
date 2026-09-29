@@ -206,3 +206,60 @@ td a:hover { color: var(--white); text-decoration: underline; }
 }
 
 .stack { display: grid; gap: 16px; align-content: start; }
+
+/* ---------- Harga langganan ---------- */
+.plans-page { padding-bottom: 0; }
+.plans-title { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.plans-actions { display: flex; align-items: center; gap: 12px; }
+.save-status { color: var(--muted); font-size: 12.5px; }
+.save-status.dirty { color: var(--warning); }
+.save-status.ok { color: #4ade80; }
+.save-status.error-text { color: #fca5a5; }
+.save-btn {
+  height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--grad);
+  color: #fff;
+  font: 600 13px var(--ui);
+  cursor: pointer;
+}
+.save-btn:disabled { opacity: 0.45; cursor: default; }
+
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.plan-row { padding: 14px 16px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel-2); transition: opacity 0.15s; }
+.plan-row.off { opacity: 0.6; }
+.plan-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.plan-head h3 { margin: 0; color: var(--white); font-size: 15px; }
+.switch { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.switch input { width: 16px; height: 16px; accent-color: var(--accent); }
+.plan-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field span { color: var(--muted); font-size: 12px; }
+.field small { color: var(--faint); font-size: 11.5px; }
+.field input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--white);
+  font: 600 14px var(--ui);
+  font-variant-numeric: tabular-nums;
+}
+.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgb(139 92 246 / 0.2); }
+.plan-storage { margin: 10px 0 0; color: var(--faint); font-size: 12px; }
+.estimate { display: grid; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; }
+.estimate div { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); }
+.estimate strong { color: var(--white); font-variant-numeric: tabular-nums; }
+.estimate .good strong { color: #4ade80; }
+.estimate .warn strong { color: var(--warning); }
+.plan-cost { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; align-items: end; gap: 16px; margin-top: 14px; }
+.usage-note { margin: 0 0 6px; color: var(--muted); font-size: 12.5px; }
+
+@media (max-width: 640px) {
+  .plan-fields, .plan-cost { grid-template-columns: 1fr; }
+  .plan-grid { grid-template-columns: 1fr; }
+}

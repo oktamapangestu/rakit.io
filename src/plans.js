@@ -6,6 +6,8 @@ import { HttpError } from './http-error.js';
 // - pro:       kuota kredit AI per 30 hari + bonus storage
 // - unlimited: tanpa kuota bulanan, dibatasi jumlah prompt per hari (fair use) + bonus storage lebih besar
 // Storage berlaku per project milik pelanggan, dan kembali ke batas gratis saat langganan berakhir.
+// Harga, kuota AI, dan status dijual diatur owner di dashboard (tabel settings, kunci 'plans');
+// nilai PLAN_PRO / PLAN_UNLIMITED di .env hanya menjadi default sebelum pernah disimpan.
 
 export const PLAN_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -13,37 +15,110 @@ const MB = 1024 * 1024;
 
 const FREE_STORAGE = { totalSize: 20 * MB, entries: 500, dbBytes: 10 * MB, imageSize: 1 * MB };
 
-export const PLANS = {
+// Bagian tetap tiap paket. `quotaKey` = field kuota AI yang bisa diatur owner.
+const BASE = {
   pro: {
     id: 'pro',
     name: 'Pro',
-    price: config.plans.pro.price,
-    credits: config.plans.pro.credits, // kredit AI per 30 hari
+    quotaKey: 'credits', // kredit AI per 30 hari
     storage: { totalSize: 100 * MB, entries: 2000, dbBytes: 50 * MB, imageSize: 5 * MB },
   },
   unlimited: {
     id: 'unlimited',
     name: 'Unlimited',
-    price: config.plans.unlimited.price,
-    dailyLimit: config.plans.unlimited.dailyLimit, // prompt per hari (WIB)
+    quotaKey: 'dailyLimit', // prompt per hari (WIB)
     storage: { totalSize: 250 * MB, entries: 5000, dbBytes: 100 * MB, imageSize: 10 * MB },
   },
 };
-// Paket dengan harga/kuota 0 di .env dianggap tidak dijual.
-const forSale = (plan) => Boolean(plan && plan.price > 0 && (plan.credits || plan.dailyLimit));
+export const PLAN_IDS = Object.keys(BASE);
+
+// ---------- Pengaturan dari dashboard owner ----------
+
+export const PLAN_LIMITS = { minPrice: 1000, maxPrice: 10_000_000, maxQuota: 100_000 };
+
+const readSetting = db.prepare("SELECT value FROM settings WHERE key = 'plans'");
+const writeSetting = db.prepare(`
+  INSERT INTO settings (key, value, updated_at) VALUES ('plans', ?, ?)
+  ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+`);
+
+function envDefaults(id) {
+  const env = config.plans[id];
+  const quota = env[BASE[id].quotaKey];
+  return { price: env.price, quota, enabled: env.price > 0 && quota > 0 };
+}
+
+/** Harga, kuota, dan status dijual tiap paket: { pro: { price, quota, enabled }, ... } */
+export function planSettings() {
+  let saved = {};
+  try {
+    saved = JSON.parse(readSetting.get()?.value ?? '{}');
+  } catch { /* nilai rusak: pakai default */ }
+  return Object.fromEntries(PLAN_IDS.map((id) => [id, { ...envDefaults(id), ...saved[id] }]));
+}
+
+/** Simpan pengaturan dari dashboard owner (divalidasi di sini). */
+export function savePlanSettings(input) {
+  const current = planSettings();
+  const next = {};
+  for (const id of PLAN_IDS) {
+    const given = input?.[id] ?? {};
+    const price = Number(given.price ?? current[id].price);
+    const quota = Number(given.quota ?? current[id].quota);
+    const enabled = given.enabled === undefined ? current[id].enabled : Boolean(given.enabled);
+    const name = BASE[id].name;
+    if (!Number.isInteger(price) || price < PLAN_LIMITS.minPrice || price > PLAN_LIMITS.maxPrice) {
+      throw new HttpError(400, `Harga ${name} harus bilangan bulat Rp${PLAN_LIMITS.minPrice.toLocaleString('id-ID')}–Rp${PLAN_LIMITS.maxPrice.toLocaleString('id-ID')}`);
+    }
+    if (!Number.isInteger(quota) || quota < 1 || quota > PLAN_LIMITS.maxQuota) {
+      throw new HttpError(400, `Kuota ${name} harus bilangan bulat 1–${PLAN_LIMITS.maxQuota.toLocaleString('id-ID')}`);
+    }
+    next[id] = { price, quota, enabled };
+  }
+  writeSetting.run(JSON.stringify(next), Date.now());
+  return next;
+}
+
+// Biaya model AI (Rupiah per 1 juta token), hanya untuk menghitung perkiraan margin di dashboard.
+const readCost = db.prepare("SELECT value FROM settings WHERE key = 'model_cost'");
+const writeCost = db.prepare(`
+  INSERT INTO settings (key, value, updated_at) VALUES ('model_cost', ?, ?)
+  ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+`);
+export const modelCost = () => Number(readCost.get()?.value ?? 0) || 0;
+export function saveModelCost(value) {
+  const cost = Number(value);
+  if (!Number.isFinite(cost) || cost < 0 || cost > 10_000_000) throw new HttpError(400, 'Biaya model tidak valid');
+  writeCost.run(String(Math.round(cost * 100) / 100), Date.now());
+  return modelCost();
+}
+
+/** Paket lengkap (bagian tetap + pengaturan owner), atau null. */
+export function getPlan(id, settings = planSettings()) {
+  if (!Object.hasOwn(BASE, id)) return null;
+  const base = BASE[id];
+  const { price, quota, enabled } = settings[id];
+  return { id, name: base.name, price, enabled, [base.quotaKey]: quota, storage: base.storage };
+}
+
+// Paket nonaktif tetap berlaku untuk pelanggan yang sudah membayar, hanya tidak bisa dibeli.
+const forSale = (plan) => Boolean(plan && plan.enabled && plan.price > 0 && (plan.credits || plan.dailyLimit));
 
 // Urutan untuk upgrade: paket yang lebih tinggi boleh menggantikan yang lebih rendah kapan saja.
 const RANK = { pro: 1, unlimited: 2 };
 
 export const planPackageId = (planId) => `plan:${planId}`;
-export const planFromPackageId = (packageId) => PLANS[String(packageId).replace(/^plan:/, '')] ?? null;
-export const planForSale = (planId) => (Object.hasOwn(PLANS, planId) && forSale(PLANS[planId]) ? PLANS[planId] : null);
+export const planFromPackageId = (packageId) => getPlan(String(packageId).replace(/^plan:/, ''));
+export const planForSale = (planId) => {
+  const plan = getPlan(planId);
+  return forSale(plan) ? plan : null;
+};
 
 /** Langganan aktif user, atau null. */
 export function activePlan(userId, now = Date.now()) {
   const sub = q.subscription.get(userId);
-  if (!sub || sub.expires_at <= now || !PLANS[sub.plan]) return null;
-  return { ...PLANS[sub.plan], startedAt: sub.started_at, expiresAt: sub.expires_at };
+  const plan = sub && sub.expires_at > now ? getPlan(sub.plan) : null;
+  return plan ? { ...plan, startedAt: sub.started_at, expiresAt: sub.expires_at } : null;
 }
 
 // Kuota Pro dihitung per siklus 30 hari sejak langganan dimulai, supaya perpanjangan beberapa bulan
@@ -76,7 +151,7 @@ export function assertCanBuy(userId, plan) {
  */
 export function activatePlan(userId, plan, now = Date.now()) {
   const sub = q.subscription.get(userId);
-  const current = sub && sub.expires_at > now && PLANS[sub.plan] ? sub : null;
+  const current = sub && sub.expires_at > now && getPlan(sub.plan) ? sub : null;
   const period = PLAN_DAYS * DAY_MS;
 
   if (current && current.plan === plan.id) {
@@ -84,8 +159,8 @@ export function activatePlan(userId, plan, now = Date.now()) {
     return;
   }
   let bonus = 0;
-  if (current) {
-    const old = PLANS[current.plan];
+  if (current && plan.price > 0) {
+    const old = getPlan(current.plan);
     bonus = Math.floor(((current.expires_at - now) * old.price) / plan.price);
   }
   q.upsertSubscription.run(userId, plan.id, now, now + period + bonus, now);
@@ -102,7 +177,8 @@ export function storageFor(slug) {
 export const freeStorage = FREE_STORAGE;
 
 export function publicPlans() {
-  return Object.values(PLANS).filter(forSale).map((p) => ({
+  const settings = planSettings();
+  return PLAN_IDS.map((id) => getPlan(id, settings)).filter(forSale).map((p) => ({
     id: p.id,
     name: p.name,
     price: p.price,

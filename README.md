@@ -141,12 +141,18 @@ Di dashboard Kasera, daftarkan URL webhook: `https://rakit.icu/api/billing/webho
 Selain membeli kredit, user bisa berlangganan 30 hari lewat QRIS yang sama. Pembayarannya sekali bayar tanpa tagihan
 otomatis, dan bisa diperpanjang kapan saja. Paket dibuka dari badge kredit AI atau menu avatar → **Langganan & kredit AI**.
 
-| Paket | Default | AI | Storage file / project | Database / project | File & folder | Gambar / file |
+| Paket | Default awal | AI | Storage file / project | Database / project | File & folder | Gambar / file |
 |---|---|---|---|---|---|---|
 | Gratis | — | `AI_MONTHLY_CREDITS` per bulan | 20 MB | 10 MB | 500 | 1 MB |
 | Pro | `PLAN_PRO=49000:300` | 300 kredit tiap siklus 30 hari | 100 MB | 50 MB | 2.000 | 5 MB |
 | Unlimited | `PLAN_UNLIMITED=149000:60` | tanpa kuota bulanan, maks. 60 prompt/hari (WIB) | 250 MB | 100 MB | 5.000 | 10 MB |
 
+- **Harga, kuota AI, dan status dijual diatur di dashboard owner** (`/admin` → kartu *Harga langganan*) dan
+  disimpan di tabel `settings`. `PLAN_PRO`/`PLAN_UNLIMITED` di `.env` hanya default sebelum owner pernah menyimpan.
+  Perubahan berlaku untuk pembelian baru; tagihan QRIS yang masih menunggu tetap dengan nominal lamanya. Paket
+  yang tidak dijual tetap berlaku bagi pelanggan yang sudah membayar. Kartu itu juga menghitung harga per
+  kredit/prompt dan perkiraan margin terburuk dari rata-rata token per prompt 30 hari terakhir × biaya model
+  (Rp per 1 juta token, diisi owner).
 - Urutan pemakaian kredit: kuota langganan → kredit gratis bulanan → saldo kredit yang dibeli. Jadi pelanggan
   Unlimited yang mencapai batas harian tetap bisa memakai kredit gratis/belinya.
 - **Perpanjang** paket yang sama: masa aktif ditambah 30 hari dari tanggal berakhir. **Upgrade** Pro → Unlimited:

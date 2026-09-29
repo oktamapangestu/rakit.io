@@ -140,7 +140,7 @@ billing.post('/topup', async (req, res) => {
 
 billing.post('/subscribe', async (req, res) => {
   const plan = planForSale(String(req.body?.planId ?? ''));
-  if (!plan) throw new HttpError(400, 'Paket langganan tidak ditemukan');
+  if (!plan) throw new HttpError(400, 'Paket langganan ini sedang tidak dijual');
   assertCanBuy(req.user.id, plan);
   await createPayment(req, res, { packageId: planPackageId(plan.id), credits: 0, price: plan.price, label: `Langganan ${plan.name} 30 hari` });
 });
