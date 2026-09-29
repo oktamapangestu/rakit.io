@@ -81,6 +81,46 @@ a { color: inherit; }
 a.chip-btn { text-decoration: none; }
 a.chip-btn svg { width: 14px; height: 14px; }
 
+/* Tombol Panduan: lebih cerah + bersinar (glow) agar menonjol dari tombol lain. */
+#guideLink {
+  border: 1px solid rgb(196 168 255 / 0.55);
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: #fff;
+  font-weight: 600;
+  box-shadow:
+    0 0 0 1px rgb(139 92 246 / 0.25),
+    0 0 14px rgb(139 92 246 / 0.55),
+    0 0 26px rgb(99 102 241 / 0.35);
+  animation: guide-glow 2.6s ease-in-out infinite;
+}
+#guideLink:hover {
+  color: #fff;
+  border-color: rgb(196 168 255 / 0.9);
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgb(139 92 246 / 0.4),
+    0 0 20px rgb(139 92 246 / 0.75),
+    0 0 38px rgb(99 102 241 / 0.55);
+}
+@keyframes guide-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgb(139 92 246 / 0.25),
+      0 0 14px rgb(139 92 246 / 0.5),
+      0 0 26px rgb(99 102 241 / 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgb(139 92 246 / 0.4),
+      0 0 20px rgb(139 92 246 / 0.8),
+      0 0 36px rgb(99 102 241 / 0.55);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #guideLink { animation: none; }
+}
+
 .project-chip {
   display: flex;
   align-items: center;
