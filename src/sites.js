@@ -2,18 +2,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { q } from './db.js';
-import { cleanPath, isAllowedFile, resolveIn, statOrNull, userRoot } from './files.js';
+import { cleanPath, IMAGE_TYPES, isServableFile, resolveIn, statOrNull, userRoot } from './files.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  ...IMAGE_TYPES,
 };
 
 async function findFile(root, rel) {
   try {
     const clean = cleanPath(rel);
-    if (!isAllowedFile(clean)) return null;
+    if (!isServableFile(clean)) return null;
     const abs = resolveIn(root, clean);
     const st = await statOrNull(abs);
     return st?.isFile() ? { abs, st, ext: path.extname(clean).toLowerCase() } : null;

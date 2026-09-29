@@ -9,6 +9,11 @@ const baseDomain = (env.BASE_DOMAIN || 'localhost').toLowerCase();
 const publicPort = env.PUBLIC_PORT ?? (baseDomain === 'localhost' ? String(port) : '');
 const portSuffix = publicPort && !['80', '443'].includes(publicPort) ? `:${publicPort}` : '';
 
+function planEnv(value, key) {
+  const [price, amount] = String(value).split(':').map(Number);
+  return { price: price > 0 ? price : 0, [key]: amount > 0 ? amount : 0 };
+}
+
 export const config = {
   port,
   protocol,
@@ -41,6 +46,11 @@ export const config = {
       const [credits, price] = entry.split(':').map(Number);
       return { id: `p${credits}`, credits, price };
     }).filter((p) => p.credits > 0 && p.price > 0),
+  },
+  // Langganan 30 hari. Kosongkan harga (PLAN_PRO=) untuk menyembunyikan paket.
+  plans: {
+    pro: planEnv(env.PLAN_PRO ?? '49000:300', 'credits'), // harga:kredit per 30 hari
+    unlimited: planEnv(env.PLAN_UNLIMITED ?? '149000:60', 'dailyLimit'), // harga:prompt per hari
   },
   google: {
     // OAuth client dari Google Cloud Console (tipe "Web application").

@@ -3,11 +3,13 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.js';
 import { HttpError } from './http-error.js';
+import { storageFor } from './plans.js';
 
 // Database milik proyek user: satu file SQLite per user, dikelola hanya lewat fungsi di sini
 // (tidak ada SQL mentah dari user). Metadata tabel (tipe kolom, flag, aturan akses) disimpan
 // di tabel internal _rakit_tables.
 
+// `bytes` = batas paket gratis; batas sebenarnya per project mengikuti langganan pemiliknya (maxBytes()).
 export const DB_LIMITS = {
   bytes: 10 * 1024 * 1024,
   tables: 20,
@@ -36,11 +38,21 @@ export const hasDatabase = (username) => fs.existsSync(dbPath(username));
 const pool = new Map();
 const POOL_MAX = 50;
 
+const maxBytes = (slug) => storageFor(slug).dbBytes;
+
+// Batas ukuran ditegakkan oleh SQLite sendiri: penulisan melebihi batas gagal dengan SQLITE_FULL.
+// Diset ulang tiap kali dipakai, supaya ikut berubah saat langganan dimulai/berakhir.
+function applySizeLimit(db, slug) {
+  const { page_size: pageSize } = db.prepare('PRAGMA page_size').get();
+  db.exec(`PRAGMA max_page_count = ${Math.floor(maxBytes(slug) / pageSize)}`);
+}
+
 function open(username) {
   let db = pool.get(username);
   if (db) {
     pool.delete(username);
     pool.set(username, db);
+    applySizeLimit(db, username);
     return db;
   }
   db = new DatabaseSync(dbPath(username));
@@ -54,9 +66,7 @@ function open(username) {
       created_at TEXT NOT NULL
     );
   `);
-  // Batas ukuran ditegakkan oleh SQLite sendiri: penulisan melebihi batas gagal dengan SQLITE_FULL.
-  const { page_size: pageSize } = db.prepare('PRAGMA page_size').get();
-  db.exec(`PRAGMA max_page_count = ${Math.floor(DB_LIMITS.bytes / pageSize)}`);
+  applySizeLimit(db, username);
 
   pool.set(username, db);
   if (pool.size > POOL_MAX) {
@@ -91,7 +101,7 @@ function transaction(db, fn) {
 
 function translateError(err) {
   if (err?.errcode === SQLITE_FULL) {
-    return new HttpError(413, `Database penuh (maksimal ${DB_LIMITS.bytes / 1024 / 1024} MB)`);
+    return new HttpError(413, 'Database penuh. Hapus data yang tidak dipakai, atau berlangganan untuk kuota database lebih besar.');
   }
   return err;
 }
@@ -237,7 +247,7 @@ export function usage(username) {
   const { page_count: pages } = db.prepare('PRAGMA page_count').get();
   const { page_size: pageSize } = db.prepare('PRAGMA page_size').get();
   const { n } = db.prepare('SELECT COUNT(*) AS n FROM _rakit_tables').get();
-  return { bytes: pages * pageSize, tables: n, limits: { bytes: DB_LIMITS.bytes, tables: DB_LIMITS.tables } };
+  return { bytes: pages * pageSize, tables: n, limits: { bytes: maxBytes(username), tables: DB_LIMITS.tables } };
 }
 
 export function listTables(username) {

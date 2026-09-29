@@ -35,6 +35,7 @@
     trash: 'M6 1h4l.5.5V3H14v1h-1v10.5l-.5.5h-9l-.5-.5V4H2V3h3.5V1.5zM6.5 3h3V2h-3zM4 4v10h8V4zm2 2h1v6H6zm3 0h1v6H9z',
     refresh: 'M13.45 5.17A6 6 0 1 0 14 8h-1a5 5 0 1 1-.8-2.73l-1.7.23.14 1 3.4-.5-.5-3.4-1 .14z',
     gear: 'M9.1 1l.4 1.9 1 .4 1.6-1.1 1.6 1.6-1.1 1.6.4 1 1.9.4v2.3l-1.9.4-.4 1 1.1 1.6-1.6 1.6-1.6-1.1-1 .4-.4 1.9H6.9l-.4-1.9-1-.4-1.6 1.1-1.6-1.6 1.1-1.6-.4-1L1 9.1V6.9l1.9-.4.4-1-1.1-1.6 1.6-1.6 1.6 1.1 1-.4L6.9 1zM8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5',
+    image: 'M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 2zM2 3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v7.3l-3-3-2.5 2.5-3-3L2 11.8zM10.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3',
     folderOpen: 'M1.5 14h11l.5-.4 2.6-6.9-.5-.7H14V4.5l-.5-.5H7.7l-.9-.9-.3-.1H1.5l-.5.5v10zM2 3h4.3l.8.8.4.2H13v2H4l-.5.3L2 10.4zm10.1 10H2.2l2.2-6h9.9z',
   };
 
@@ -52,6 +53,8 @@
   const extOf = (p) => (baseName(p).includes('.') ? baseName(p).split('.').pop().toLowerCase() : '');
   const joinPath = (dir, name) => (dir ? `${dir}/${name}` : name).replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
   const within = (p, base) => p === base || p.startsWith(`${base}/`);
+  const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'avif'];
+  const isImage = (p) => IMAGE_EXT.includes(extOf(p));
   const formatBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
   // ---------- State ----------
@@ -162,6 +165,7 @@
   function fileIcon(entry, open) {
     if (entry.type === 'dir') return h('span', { class: 'ficon dir' }, svg(open ? ICON.folderOpen : ICON.folder));
     const ext = extOf(entry.path);
+    if (isImage(entry.path)) return h('span', { class: 'ficon img' }, svg(ICON.image));
     const label = { html: '<>', css: '#', js: 'JS' }[ext] ?? '•';
     return h('span', { class: `ficon ${ext}` }, label);
   }
@@ -194,21 +198,26 @@
       }
     };
     walk('', 0);
-    if (!rows.length) rows.push(h('div', { class: 'empty' }, 'Belum ada file. Klik kanan di sini atau pakai tombol + di atas.'));
+    if (!rows.length) rows.push(h('div', { class: 'empty' }, 'Belum ada file. Klik kanan di sini, pakai tombol di atas, atau seret gambar ke sini.'));
     tree.replaceChildren(...rows);
   }
 
   function renderUsage(usage) {
     const pct = Math.min(100, (usage.size / usage.limits.totalSize) * 100);
+    const nearlyFull = pct >= 80 || usage.entries >= usage.limits.entries * 0.9;
     $('#usage').replaceChildren(
       `${formatBytes(usage.size)} / ${formatBytes(usage.limits.totalSize)} · ${usage.entries} item`,
       h('div', { class: 'usage-bar' }, h('div', { style: `width:${pct}%` })),
+      nearlyFull && ai.credits?.topupEnabled && !ai.credits.plan
+        ? h('button', { type: 'button', class: 'usage-upgrade', onclick: () => openTopup('plans') }, 'Storage hampir penuh · tambah dengan langganan')
+        : null,
     );
   }
 
   async function loadTree() {
     const { files, usage } = await api('GET', '/api/files');
     state.entries = files;
+    state.limits = usage.limits;
     renderTree();
     renderUsage(usage);
   }
@@ -484,6 +493,160 @@
     schedulePreviewReload();
   }
 
+  // ---------- Gambar ----------
+  const imageUrl = (path) => `${state.project.siteUrl}/${path}?v=${state.entries.find((e) => e.path === path)?.size ?? 0}-${Date.now()}`;
+
+  // Nama file dari perangkat user dirapikan supaya lolos validasi path (huruf, angka, . - _).
+  function cleanFileName(name) {
+    const dot = name.lastIndexOf('.');
+    const ext = (dot > 0 ? name.slice(dot + 1) : '').toLowerCase().replace('jpeg', 'jpg');
+    const base = (dot > 0 ? name.slice(0, dot) : name)
+      .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|[-.]+$/g, '').slice(0, 58) || 'gambar';
+    return `${base}.${ext}`;
+  }
+
+  function uniquePath(path) {
+    const taken = new Set(state.entries.map((e) => e.path));
+    if (!taken.has(path)) return path;
+    const dot = path.lastIndexOf('.');
+    for (let i = 1; ; i++) {
+      const candidate = `${path.slice(0, dot)}-${i}${path.slice(dot)}`;
+      if (!taken.has(candidate)) return candidate;
+    }
+  }
+
+  // replacePath: ganti gambar tertentu (dari menu "Ganti gambar…").
+  function pickImages(dir = targetDir(), replacePath = null) {
+    const input = h('input', { type: 'file', accept: IMAGE_EXT.map((e) => `.${e}`).join(','), multiple: !replacePath });
+    input.onchange = () => uploadImages([...input.files], dir, replacePath);
+    input.click();
+  }
+
+  function bindImageDrop(tree) {
+    let depth = 0;
+    const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+    const dropDir = (e) => {
+      const row = e.target.closest('.row');
+      return row ? targetDir(row.dataset.path) : '';
+    };
+    tree.addEventListener('dragenter', (e) => { if (hasFiles(e)) { depth++; tree.classList.add('drop-target'); } });
+    tree.addEventListener('dragleave', (e) => { if (hasFiles(e) && --depth <= 0) { depth = 0; tree.classList.remove('drop-target'); } });
+    tree.addEventListener('dragover', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      const dir = dropDir(e);
+      tree.querySelectorAll('.row.drop-dir').forEach((r) => r.classList.toggle('drop-dir', r.dataset.path === dir));
+      const row = dir && tree.querySelector(`.row[data-path="${CSS.escape(dir)}"]`);
+      if (row) row.classList.add('drop-dir');
+    });
+    tree.addEventListener('drop', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth = 0;
+      tree.classList.remove('drop-target');
+      tree.querySelectorAll('.row.drop-dir').forEach((r) => r.classList.remove('drop-dir'));
+      uploadImages([...e.dataTransfer.files], dropDir(e));
+    });
+  }
+
+  async function uploadImages(files, dir, replacePath = null) {
+    const limit = state.limits?.imageSize ?? 1048576;
+    const accepted = [];
+    for (const file of files) {
+      if (!isImage(file.name)) {
+        toast(`"${file.name}" dilewati: hanya gambar ${IMAGE_EXT.join(', ')}`, 'error');
+      } else if (file.size > limit) {
+        toast(`"${file.name}" terlalu besar (${formatBytes(file.size)}). Maksimal ${formatBytes(limit)} per gambar${ai.credits?.plan ? '' : ' di paket Gratis'}.`, 'error');
+      } else {
+        accepted.push(file);
+      }
+    }
+    if (!accepted.length) return;
+
+    let done = 0;
+    let last = null;
+    setSaveStatus(`Mengunggah ${accepted.length} gambar…`, 'saving');
+    for (const file of accepted) {
+      let path = replacePath ?? joinPath(dir, cleanFileName(file.name));
+      let overwrite = Boolean(replacePath);
+      if (!replacePath && state.entries.some((e) => e.path === path)) {
+        const choice = await modal({
+          title: 'Gambar sudah ada',
+          message: `"${path}" sudah ada di project. Ganti dengan yang baru, atau simpan dengan nama lain?`,
+          buttons: [{ label: 'Ganti', value: 'replace', primary: true }, { label: 'Simpan sebagai baru', value: 'rename' }, { label: 'Lewati', value: null }],
+        });
+        if (!choice) continue;
+        if (choice === 'replace') overwrite = true;
+        else path = uniquePath(path);
+      }
+      try {
+        const res = await fetch(`/api/files/upload?path=${encodeURIComponent(path)}${overwrite ? '&overwrite=1' : ''}`, {
+          method: 'POST',
+          headers: { 'Content-Type': file.type || 'application/octet-stream', ...(state.projectSlug ? { 'X-Project': state.projectSlug } : {}) },
+          body: file,
+          credentials: 'same-origin',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
+        done++;
+        last = data.path;
+        // Catat segera supaya cek "sudah ada" untuk file berikutnya tetap akurat.
+        if (!state.entries.some((e) => e.path === data.path)) state.entries.push({ path: data.path, name: baseName(data.path), type: 'file', size: file.size });
+      } catch (err) {
+        toast(`"${file.name}": ${err.message}`, 'error');
+        if (/Kuota|Maksimal/.test(err.message)) break; // kuota penuh: berhenti, sisanya pasti gagal juga
+      }
+    }
+    setSaveStatus('');
+    if (!done) return;
+    if (dir) state.expanded.add(dir);
+    if (last) { expandTo(last); state.selected = last; }
+    await loadTree().catch(() => {});
+    schedulePreviewReload();
+    toast(done === 1 ? `Gambar diunggah: /${last}` : `${done} gambar diunggah`);
+  }
+
+  function openImage(path) {
+    const entry = state.entries.find((e) => e.path === path);
+    const root = $('#modal');
+    const url = imageUrl(path);
+    const info = h('span', {}, entry ? formatBytes(entry.size) : '');
+    const img = h('img', { src: url, alt: path });
+    img.onload = () => { info.textContent = `${img.naturalWidth} × ${img.naturalHeight} px · ${entry ? formatBytes(entry.size) : ''}`; };
+    img.onerror = () => { info.textContent = 'Gambar tidak bisa ditampilkan.'; };
+
+    const close = () => {
+      root.hidden = true;
+      root.replaceChildren();
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    const snippets = [
+      ['Path', `/${path}`],
+      ['HTML', `<img src="/${path}" alt="${baseName(path).replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ')}">`],
+      ['CSS', `background-image: url('/${path}');`],
+    ];
+
+    root.replaceChildren(h('div', { class: 'modal image-modal', role: 'dialog', 'aria-label': `Gambar ${path}` },
+      h('div', { class: 'topup-head' },
+        h('div', {}, h('h3', {}, baseName(path)), h('p', {}, info)),
+        h('button', { class: 'icon-btn', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close))),
+      h('div', { class: 'image-stage' }, img),
+      h('div', { class: 'image-snippets' }, snippets.map(([label, code]) => h('div', { class: 'snippet' },
+        h('span', { class: 'snippet-label' }, label),
+        h('code', {}, code),
+        h('button', { type: 'button', onclick: () => copyText(code, `${label} disalin`) }, 'Salin')))),
+      h('div', { class: 'modal-buttons' },
+        h('button', { type: 'button', onclick: () => { close(); pickImages(parentOf(path), path); } }, 'Ganti gambar…'),
+        h('button', { type: 'button', class: 'danger', onclick: () => { close(); deleteEntry(path); } }, 'Hapus'),
+        h('button', { type: 'button', class: 'primary', onclick: close }, 'Tutup'))));
+    root.hidden = false;
+    root.onmousedown = (e) => { if (e.target === root) close(); };
+    document.addEventListener('keydown', onKey, true);
+  }
+
   // ---------- Context menu ----------
   function showMenu(x, y, items) {
     const menu = $('#ctxmenu');
@@ -507,9 +670,16 @@
     const items = [
       { label: 'File baru…', run: () => createEntry('file', dir) },
       { label: 'Folder baru…', run: () => createEntry('dir', dir) },
+      { label: 'Upload gambar…', run: () => pickImages(dir) },
     ];
     if (!entry) return items;
-    const fileItems = entry.type === 'file' ? [
+    const fileItems = entry.type === 'file' && isImage(entry.path) ? [
+      { label: 'Lihat gambar', run: () => openImage(entry.path) },
+      { label: 'Salin path', run: () => copyText(`/${entry.path}`, 'Path disalin') },
+      { label: 'Salin URL publik', run: () => copyText(urlFor(entry.path)) },
+      { label: 'Ganti gambar…', run: () => pickImages(parentOf(entry.path), entry.path) },
+      '-',
+    ] : entry.type === 'file' ? [
       { label: 'Buka', run: () => openFile(entry.path) },
       extOf(entry.path) === 'html' && { label: 'Preview halaman ini', run: () => { state.previewPath = entry.path; reloadPreview(); } },
       { label: 'Salin URL publik', run: () => copyText(urlFor(entry.path)) },
@@ -583,7 +753,7 @@
       '-',
       { label: 'Salin URL website', run: () => copyText(state.project.siteUrl) },
       { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
-      ai.credits?.topupEnabled && { label: 'Isi ulang kredit AI', run: openTopup },
+      ai.credits?.topupEnabled && { label: 'Langganan & kredit AI', hint: ai.credits.plan?.name, run: () => openTopup('plans') },
       state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
       '-',
       { label: 'Keluar', danger: true, run: logout },
@@ -802,6 +972,9 @@
       if (type === 'dir') {
         state.expanded.has(path) ? state.expanded.delete(path) : state.expanded.add(path);
         renderTree();
+      } else if (isImage(path)) {
+        renderTree();
+        openImage(path);
       } else {
         setMode('code');
         setMobileView('editor');
@@ -830,6 +1003,8 @@
 
     $('#newFileBtn').onclick = () => createEntry('file');
     $('#newFolderBtn').onclick = () => createEntry('dir');
+    $('#uploadBtn').onclick = () => pickImages();
+    bindImageDrop(tree);
     $('#refreshBtn').onclick = () => loadTree().catch((err) => toast(err.message, 'error'));
     $('#collapseBtn').onclick = () => { state.expanded.clear(); renderTree(); };
     $('#reloadPreview').onclick = reloadPreview;
@@ -941,16 +1116,24 @@
   function renderCredits() {
     const badge = $('#aiCredits');
     const c = ai.credits;
+    renderPlanBadge(c?.plan ?? null);
     if (!c || !c.enabled) return badge.replaceChildren();
     const empty = c.remaining < c.costPerPrompt;
     const reset = new Date(c.resetsAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
-    badge.textContent = `${c.remaining} kredit`;
+    const plan = c.plan;
+    const unlimited = plan?.id === 'unlimited' && plan.quotaRemaining > 0;
+    badge.textContent = unlimited ? 'Unlimited' : `${c.remaining} kredit`;
     badge.classList.toggle('empty', empty);
+    badge.classList.toggle('plan', Boolean(plan));
     badge.disabled = !c.topupEnabled;
     badge.title = [
+      plan && `${plan.name} aktif sampai ${shortDate(plan.expiresAt)}`,
+      plan && (plan.id === 'unlimited'
+        ? `Hari ini: ${plan.quotaUsed}/${plan.quota} prompt`
+        : `Kredit ${plan.name}: ${plan.quotaRemaining}/${plan.quota} (terisi ulang ${shortDate(plan.quotaResetsAt)})`),
       `Gratis bulan ini: ${c.freeRemaining}/${c.limit} (terisi ulang ${reset})`,
       c.purchased ? `Dibeli: ${c.purchased}` : null,
-      c.topupEnabled ? 'Klik untuk isi ulang' : null,
+      c.topupEnabled ? 'Klik untuk langganan / isi ulang' : null,
     ].filter(Boolean).join(' · ');
 
     $('#aiTopupBanner').hidden = !empty;
@@ -959,6 +1142,22 @@
       : `Kredit AI habis. Terisi lagi ${reset}.`;
     $('#aiTopupBtn').hidden = !c.topupEnabled;
     updateAiComposer();
+  }
+
+  // Badge langganan di header (+ cincin di avatar). Memberi peringatan saat masa aktif hampir habis.
+  function renderPlanBadge(plan) {
+    const badge = $('#planBadge');
+    badge.hidden = !plan;
+    $('#avatarBtn').classList.toggle('subscribed', Boolean(plan));
+    $('#avatarBtn').dataset.plan = plan?.id ?? '';
+    if (!plan) return;
+    const daysLeft = Math.max(0, Math.ceil((Date.parse(plan.expiresAt) - Date.now()) / 86_400_000));
+    const expiring = daysLeft <= 3;
+    badge.dataset.plan = plan.id;
+    badge.classList.toggle('expiring', expiring);
+    $('.plan-badge-name', badge).textContent = plan.name;
+    $('.plan-badge-days', badge).textContent = expiring ? (daysLeft ? `${daysLeft} hari lagi` : 'berakhir hari ini') : '';
+    badge.title = `${plan.name} aktif sampai ${shortDate(plan.expiresAt)}${expiring ? ' · klik untuk perpanjang' : ''}`;
   }
 
   function updateAiComposer() {
@@ -1049,7 +1248,7 @@
   const errorBubble = (text, code) => h('div', { class: 'msg error' },
     text,
     code === 'no_credits' && ai.credits?.topupEnabled
-      ? h('button', { type: 'button', class: 'ai-topup-btn inline', onclick: openTopup }, 'Isi ulang kredit')
+      ? h('button', { type: 'button', class: 'ai-topup-btn inline', onclick: () => openTopup() }, 'Isi ulang kredit')
       : null);
 
   function guardBusy() {
@@ -1513,8 +1712,9 @@
     setMobileView(document.body.dataset.mobileView || 'editor');
     mobileQuery.addEventListener('change', applyResponsiveEditor);
     $('#dbNewTable').onclick = openCreateTable;
-    $('#aiCredits').onclick = openTopup;
-    $('#aiTopupBtn').onclick = openTopup;
+    $('#aiCredits').onclick = () => openTopup();
+    $('#planBadge').onclick = () => openTopup('plans');
+    $('#aiTopupBtn').onclick = () => openTopup();
     $('#aiForm').onsubmit = (e) => { e.preventDefault(); sendPrompt(); };
     const input = $('#aiInput');
     input.addEventListener('input', () => { autoGrow(); updateAiComposer(); });
@@ -2265,12 +2465,17 @@
     $('#diagramDownload').onclick = downloadDiagram;
   }
 
-  // ---------- Isi ulang kredit (QRIS) ----------
+  // ---------- Langganan & isi ulang kredit (QRIS) ----------
   const rupiah = (n) => `Rp${n.toLocaleString('id-ID')}`;
+  const shortDate = (iso) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  const mb = (bytes) => `${Math.round(bytes / 1048576)} MB`;
+  const PLAN_RANK = { pro: 1, unlimited: 2 };
 
-  function openTopup() {
+  // tab: 'plans' (langganan) | 'credits' (paket kredit). Default: langganan kalau belum berlangganan.
+  // intro: tampilan sambutan saat editor pertama kali dibuka (ada tombol "Nanti saja").
+  function openTopup(tab, { intro = false } = {}) {
     const root = $('#modal');
-    const body = h('div', { class: 'modal topup-modal', role: 'dialog', 'aria-label': 'Isi ulang kredit AI' });
+    const body = h('div', { class: 'modal topup-modal', role: 'dialog', 'aria-label': 'Langganan & kredit AI' });
     let pollTimer;
     let countdownTimer;
     let closed = false;
@@ -2302,20 +2507,88 @@
       h('div', { class: 'modal-buttons' }, h('button', { type: 'button', class: 'primary', onclick: showPackages }, 'Coba lagi')),
     ];
 
+    let data;
     async function showPackages() {
       stopTimers();
-      body.replaceChildren(head('Isi ulang kredit AI'), loadingView('Memuat paket…'));
-      let data;
+      body.replaceChildren(head('Langganan & kredit AI'), loadingView('Memuat paket…'));
       try {
         data = await api('GET', '/api/billing/packages');
       } catch (err) {
-        return body.replaceChildren(head('Isi ulang kredit AI'), ...errorView(err.message));
+        return body.replaceChildren(head('Langganan & kredit AI'), ...errorView(err.message));
       }
       if (closed) return;
-      if (!data.enabled || !data.packages.length) {
-        return body.replaceChildren(head('Isi ulang kredit AI'),
-          h('p', { class: 'topup-error' }, 'Isi ulang kredit belum tersedia saat ini.'));
+      ai.credits = data.credits;
+      renderCredits();
+      if (!data.enabled || (!data.packages.length && !data.plans.length)) {
+        return body.replaceChildren(head('Langganan & kredit AI'),
+          h('p', { class: 'topup-error' }, 'Pembayaran belum tersedia saat ini.'));
       }
+      if (!data.plans.length) tab = 'credits';
+      if (!data.packages.length) tab = 'plans';
+      tab ??= data.credits.plan ? 'credits' : 'plans';
+      if (tab === 'plans') showPlans();
+      else showCredits();
+    }
+
+    const tabs = () => (data.plans.length && data.packages.length
+      ? h('div', { class: 'topup-tabs', role: 'tablist' }, [['plans', 'Langganan'], ['credits', 'Isi kredit']].map(([id, label]) => h('button', {
+        type: 'button',
+        role: 'tab',
+        'aria-selected': String(tab === id),
+        onclick: () => { tab = id; if (id === 'plans') showPlans(); else showCredits(); },
+      }, label)))
+      : null);
+
+    function showPlans() {
+      const current = data.credits.plan;
+      const features = (plan) => [
+        plan.credits ? `${plan.credits.toLocaleString('id-ID')} kredit AI tiap 30 hari` : `AI tanpa kuota bulanan (maks. ${plan.dailyLimit} prompt/hari)`,
+        `Storage ${mb(plan.storage.totalSize)} per project`,
+        `Database ${mb(plan.storage.dbBytes)} per project`,
+        `Upload gambar hingga ${mb(plan.storage.imageSize)} per file`,
+        `Maks. ${plan.storage.entries.toLocaleString('id-ID')} file & folder`,
+      ];
+      const cards = data.plans.map((plan) => {
+        const isCurrent = current?.id === plan.id;
+        const lower = current && PLAN_RANK[plan.id] < PLAN_RANK[current.id];
+        const label = isCurrent ? 'Perpanjang 30 hari' : lower ? `Kamu sudah ${current.name}` : current ? `Upgrade ke ${plan.name}` : `Pilih ${plan.name}`;
+        return h('div', { class: `plan-card${isCurrent ? ' current' : ''}${plan.id === 'unlimited' ? ' featured' : ''}` },
+          h('div', { class: 'plan-name' }, plan.name, isCurrent ? h('span', { class: 'plan-tag' }, 'Aktif') : null),
+          h('div', { class: 'plan-price' }, rupiah(plan.price), h('span', {}, ' / 30 hari')),
+          h('ul', { class: 'plan-features' }, features(plan).map((text) => h('li', {}, text))),
+          h('button', {
+            type: 'button',
+            class: lower ? '' : 'primary',
+            disabled: lower,
+            onclick: () => startPayment({ planId: plan.id }),
+          }, label));
+      });
+
+      const free = data.credits;
+      const status = current
+        ? h('div', { class: 'topup-balance' },
+          h('span', {}, `Paket ${current.name} aktif sampai `, h('strong', {}, shortDate(current.expiresAt))),
+          h('strong', {}, current.id === 'unlimited' ? `${current.quotaRemaining}/${current.quota} prompt hari ini` : `${current.quotaRemaining} kredit`))
+        : h('div', { class: 'topup-balance' },
+          h('span', {}, 'Paket sekarang: ', h('strong', {}, 'Gratis')),
+          h('span', {}, `${free.limit} kredit/bulan · storage 20 MB`));
+
+      body.replaceChildren(...[
+        intro
+          ? head('Bangun lebih banyak dengan rakit.icu', 'Kamu sedang memakai paket Gratis. Berlangganan untuk kredit AI lebih banyak dan storage lebih besar. Bayar sekali dengan QRIS untuk 30 hari, tanpa tagihan otomatis.')
+          : head('Langganan rakit.icu', 'Bayar sekali dengan QRIS untuk 30 hari, tanpa tagihan otomatis. Bonus storage langsung aktif setelah pembayaran.'),
+        intro ? null : tabs(),
+        status,
+        h('div', { class: 'plan-grid' }, cards),
+        current && current.id !== 'unlimited' && data.plans.some((p) => p.id === 'unlimited')
+          ? h('p', { class: 'topup-note' }, `Upgrade ke Unlimited: sisa masa aktif ${current.name} dikonversi jadi hari Unlimited sesuai harga.`)
+          : null,
+        data.livemode ? null : h('p', { class: 'topup-test' }, 'Mode uji coba — tidak ada uang sungguhan yang ditarik.'),
+        intro ? h('div', { class: 'modal-buttons' }, h('button', { type: 'button', onclick: close }, 'Nanti saja, pakai paket Gratis')) : null,
+      ].filter(Boolean));
+    }
+
+    function showCredits() {
 
       let selected = data.packages[Math.min(1, data.packages.length - 1)];
       const cards = data.packages.map((pkg) => h('button', {
@@ -2331,7 +2604,8 @@
 
       const c = data.credits;
       body.replaceChildren(...[
-        head('Isi ulang kredit AI', 'Kredit yang dibeli tidak hangus, dan dipakai setelah kredit gratis bulananmu habis.'),
+        head('Isi ulang kredit AI', 'Kredit yang dibeli tidak hangus, dan dipakai setelah kuota langganan & kredit gratis bulananmu habis.'),
+        tabs(),
         h('div', { class: 'topup-balance' },
           h('span', {}, 'Sisa kredit sekarang'),
           h('strong', {}, `${c.remaining} kredit`)),
@@ -2339,17 +2613,19 @@
         data.livemode ? null : h('p', { class: 'topup-test' }, 'Mode uji coba — tidak ada uang sungguhan yang ditarik.'),
         h('div', { class: 'modal-buttons' },
           h('button', { type: 'button', onclick: close }, 'Batal'),
-          h('button', { type: 'button', class: 'primary', onclick: () => startPayment(selected) }, 'Bayar dengan QRIS')),
+          h('button', { type: 'button', class: 'primary', onclick: () => startPayment({ packageId: selected.id }) }, 'Bayar dengan QRIS')),
       ].filter(Boolean)); // replaceChildren() bawaan browser menulis null sebagai teks "null"
     }
 
-    async function startPayment(pkg) {
-      body.replaceChildren(head('Isi ulang kredit AI'), loadingView('Membuat kode QRIS…'));
+    async function startPayment(item) {
+      body.replaceChildren(head('Pembayaran'), loadingView('Membuat kode QRIS…'));
       try {
-        const { payment } = await api('POST', '/api/billing/topup', { packageId: pkg.id });
+        const { payment } = item.planId
+          ? await api('POST', '/api/billing/subscribe', { planId: item.planId })
+          : await api('POST', '/api/billing/topup', { packageId: item.packageId });
         if (!closed) showPayment(payment);
       } catch (err) {
-        if (!closed) body.replaceChildren(head('Isi ulang kredit AI'), ...errorView(err.message));
+        if (!closed) body.replaceChildren(head('Pembayaran'), ...errorView(err.message));
       }
     }
 
@@ -2361,7 +2637,7 @@
         : h('div', { class: 'qr qr-missing' }, 'Kode QR tidak tersedia. Gunakan halaman pembayaran.');
 
       body.replaceChildren(
-        head('Scan untuk membayar', `${payment.credits} kredit AI`),
+        head('Scan untuk membayar', payment.plan ? `Langganan ${payment.plan} 30 hari` : `${payment.credits} kredit AI`),
         h('div', { class: 'pay-body' },
           h('div', { class: 'qr-card' },
             h('div', { class: 'qris-label' }, 'QRIS'),
@@ -2377,7 +2653,7 @@
             status,
             payment.checkoutUrl ? h('a', { class: 'pay-link', href: payment.checkoutUrl, target: '_blank', rel: 'noopener' }, 'Buka halaman pembayaran ↗') : null)),
         h('div', { class: 'modal-buttons' },
-          h('button', { type: 'button', onclick: showPackages }, 'Ganti paket'),
+          h('button', { type: 'button', onclick: () => { tab = payment.plan ? 'plans' : 'credits'; showPackages(); } }, 'Ganti paket'),
           h('button', { type: 'button', onclick: close }, 'Tutup')),
       );
 
@@ -2408,12 +2684,17 @@
 
     function showSuccess(payment, credits) {
       stopTimers();
+      const plan = credits?.plan;
+      if (payment.plan) loadTree().catch(() => {}); // perbarui kuota storage di sidebar
       body.replaceChildren(
         head('Pembayaran berhasil'),
         h('div', { class: 'topup-result ok' },
           h('div', { class: 'result-icon' }, '✓'),
-          h('h4', {}, `+${payment.credits} kredit ditambahkan`),
-          h('p', {}, `Sisa kreditmu sekarang ${credits?.remaining ?? ''} kredit. Terima kasih!`)),
+          payment.plan
+            ? [h('h4', {}, `${plan?.name ?? payment.plan} aktif`),
+              h('p', {}, plan ? `Berlaku sampai ${shortDate(plan.expiresAt)}. Bonus storage sudah aktif di semua project-mu. Terima kasih!` : 'Terima kasih!')]
+            : [h('h4', {}, `+${payment.credits} kredit ditambahkan`),
+              h('p', {}, `Sisa kreditmu sekarang ${credits?.remaining ?? ''} kredit. Terima kasih!`)]),
         h('div', { class: 'modal-buttons' },
           h('button', { type: 'button', class: 'primary', onclick: () => { close(); setMode('ai'); } }, 'Lanjut pakai AI')),
       );
@@ -2574,6 +2855,19 @@
     // Tampilkan lagi percakapan terakhir (dan sambung ke job yang masih berjalan, bila ada).
     if (!ai.credits) await loadCredits();
     await initAiHistory();
+    maybeShowPlansIntro();
+  }
+
+  // Tawarkan langganan sekali saja (per akun, per browser) saat editor pertama kali dibuka.
+  function maybeShowPlansIntro() {
+    const key = `rakit.plansIntro.${state.me.username}`;
+    const c = ai.credits;
+    if (storage.get(key, false) || !c?.topupEnabled || c.plan) return;
+    setTimeout(() => {
+      if (!$('#modal').hidden) return; // jangan menimpa dialog lain yang sedang terbuka
+      storage.set(key, true);
+      openTopup('plans', { intro: true });
+    }, 900);
   }
 
   init().catch((err) => {

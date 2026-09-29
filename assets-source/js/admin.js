@@ -219,6 +219,11 @@
         label: 'Kredit terjual',
         value: num(st.revenue.creditsSold),
         detail: [`${num(st.revenue.payingUsers)} pembeli · saldo belum terpakai `, h('strong', {}, num(st.credits.purchasedOutstanding))],
+      }),
+      tile({
+        label: 'Pelanggan aktif',
+        value: num((st.subscribers?.pro ?? 0) + (st.subscribers?.unlimited ?? 0)),
+        detail: [`Pro ${num(st.subscribers?.pro ?? 0)} · Unlimited `, h('strong', {}, num(st.subscribers?.unlimited ?? 0))],
       }));
 
     const charts = h('div', { class: 'grid three' },
@@ -293,7 +298,7 @@
     const payments = card('Transaksi terbaru', `${num(st.revenue.pending)} QRIS masih menunggu pembayaran`, table([
       { label: 'Waktu', value: (p) => shortTime(p.createdAt) },
       { label: 'Pengguna', value: (p) => p.username },
-      { label: 'Kredit', num: true, value: (p) => num(p.credits) },
+      { label: 'Item', num: true, value: (p) => (p.packageId?.startsWith('plan:') ? `Langganan ${p.packageId.slice(5)}` : `${num(p.credits)} kredit`) },
       { label: 'Nominal', num: true, value: (p) => rupiah(p.amount) },
       { label: 'Status', value: (p) => h('span', { class: `pill ${p.status}` }, { succeeded: 'Lunas', pending: 'Menunggu', failed: 'Gagal', expired: 'Kedaluwarsa', canceled: 'Batal' }[p.status] ?? p.status, p.livemode ? null : h('span', { class: 'muted' }, ' · uji')) },
     ], st.recentPayments, 'Belum ada transaksi.'));

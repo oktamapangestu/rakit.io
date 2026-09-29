@@ -50,7 +50,16 @@ db.exec(`
     balance INTEGER NOT NULL DEFAULT 0
   );
 
-  -- Pembelian kredit lewat payment gateway (Kasera Pay).
+  -- Langganan aktif per user (Pro/Unlimited). Satu baris per user; diperbarui saat membeli/memperpanjang.
+  CREATE TABLE IF NOT EXISTS subscriptions (
+    user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    plan       TEXT NOT NULL,              -- pro | unlimited
+    started_at INTEGER NOT NULL,           -- awal siklus kuota (ms)
+    expires_at INTEGER NOT NULL,           -- ms
+    updated_at INTEGER NOT NULL
+  );
+
+  -- Pembelian kredit & langganan lewat payment gateway (Kasera Pay). Langganan: package_id = 'plan:<id>', credits = 0.
   CREATE TABLE IF NOT EXISTS payments (
     id           TEXT PRIMARY KEY,           -- id lokal (uuid), juga dipakai sebagai external_id
     provider_id  TEXT UNIQUE,                -- payreq_<uuid> dari Kasera
@@ -164,6 +173,13 @@ export const q = {
   addBalance: db.prepare(`
     INSERT INTO credit_balance (user_id, balance) VALUES (?, ?)
     ON CONFLICT (user_id) DO UPDATE SET balance = balance + excluded.balance
+  `),
+
+  subscription: db.prepare('SELECT * FROM subscriptions WHERE user_id = ?'),
+  upsertSubscription: db.prepare(`
+    INSERT INTO subscriptions (user_id, plan, started_at, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (user_id) DO UPDATE SET plan = excluded.plan, started_at = excluded.started_at,
+      expires_at = excluded.expires_at, updated_at = excluded.updated_at
   `),
 
   insertPayment: db.prepare(`

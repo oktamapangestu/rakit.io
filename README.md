@@ -1,7 +1,7 @@
 # rakit.icu
 
 Editor kode online ala VS Code (Monaco) dengan live preview. Setiap user yang mendaftar
-otomatis mendapat website di `https://<username>.rakit.icu`. Hanya file **.html, .css, .js**.
+otomatis mendapat website di `https://<username>.rakit.icu`. File kode **.html, .css, .js**, plus gambar yang diunggah.
 
 ## Jalankan lokal
 
@@ -28,7 +28,8 @@ src/
   sites.js     menyajikan website user (index.html, URL bersih, 404.html kustom, ETag)
   ai.js        asisten AI: konteks proyek, panggilan ke provider AI
   credits.js   kredit AI: jatah gratis bulanan + saldo yang dibeli
-  billing.js   isi ulang kredit via QRIS (Kasera Pay) + webhook
+  billing.js   isi ulang kredit & langganan via QRIS (Kasera Pay) + webhook
+  plans.js     paket langganan Pro/Unlimited: kuota AI & bonus storage
   userdb.js    database per proyek (SQLite), validasi & aturan akses
   database.js  API editor database (khusus pemilik)
   siteapi.js   API publik /api/db/* di domain user
@@ -135,6 +136,44 @@ Di dashboard Kasera, daftarkan URL webhook: `https://rakit.icu/api/billing/webho
 - Setiap pembayaran hanya menambah kredit sekali, walaupun webhook terkirim berulang.
 - Riwayat pembayaran ada di tabel `payments`.
 
+## Langganan (Pro & Unlimited)
+
+Selain membeli kredit, user bisa berlangganan 30 hari lewat QRIS yang sama. Pembayarannya sekali bayar tanpa tagihan
+otomatis, dan bisa diperpanjang kapan saja. Paket dibuka dari badge kredit AI atau menu avatar → **Langganan & kredit AI**.
+
+| Paket | Default | AI | Storage file / project | Database / project | File & folder | Gambar / file |
+|---|---|---|---|---|---|---|
+| Gratis | — | `AI_MONTHLY_CREDITS` per bulan | 20 MB | 10 MB | 500 | 1 MB |
+| Pro | `PLAN_PRO=49000:300` | 300 kredit tiap siklus 30 hari | 100 MB | 50 MB | 2.000 | 5 MB |
+| Unlimited | `PLAN_UNLIMITED=149000:60` | tanpa kuota bulanan, maks. 60 prompt/hari (WIB) | 250 MB | 100 MB | 5.000 | 10 MB |
+
+- Urutan pemakaian kredit: kuota langganan → kredit gratis bulanan → saldo kredit yang dibeli. Jadi pelanggan
+  Unlimited yang mencapai batas harian tetap bisa memakai kredit gratis/belinya.
+- **Perpanjang** paket yang sama: masa aktif ditambah 30 hari dari tanggal berakhir. **Upgrade** Pro → Unlimited:
+  langsung aktif, sisa hari Pro dikonversi ke hari Unlimited sesuai harga. Downgrade ditolak selama paket lebih tinggi aktif.
+- **Bonus storage** berlaku untuk semua project milik pelanggan dan langsung aktif setelah pembayaran. Saat
+  langganan berakhir, batas kembali ke paket gratis: file yang ada tidak dihapus, tetapi file baru atau file yang
+  makin besar ditolak sampai pemakaian turun di bawah batas (mengecilkan/menghapus file tetap bisa).
+- Data di tabel `subscriptions` (satu baris per user); pembayarannya di `payments` dengan `package_id = 'plan:<id>'`.
+  Batas storage per paket diatur di `src/plans.js`.
+
+## Gambar
+
+User bisa mengunggah gambar ke project: tombol **Upload gambar** di panel File, menu klik kanan
+(**Upload gambar…**, termasuk ke folder tertentu), atau seret file ke daftar file.
+
+- Format: `.png .jpg .jpeg .gif .webp .svg .ico .avif`. Isi file diperiksa (magic bytes / tag `<svg>`),
+  jadi file lain yang diganti ekstensinya ditolak.
+- Batas per gambar mengikuti paket (1 / 5 / 10 MB), dan ukurannya ikut kuota storage project.
+- Nama file dirapikan otomatis (huruf kecil, spasi → `-`). Kalau nama sudah ada, user memilih Ganti,
+  Simpan sebagai baru, atau Lewati.
+- Klik gambar untuk melihatnya (ukuran piksel & file) dan menyalin path, tag `<img>`, atau `url()` CSS.
+- Gambar disajikan di website seperti file lain (`/images/logo.png`). Gambar tidak bisa dibuka di Monaco,
+  dan rename harus tetap berekstensi gambar.
+- AI menerima daftar gambar di project, jadi bisa memakainya di kode, tapi tidak bisa membuat, mengubah,
+  atau menghapus gambar.
+- API: `POST /api/files/upload?path=<path>[&overwrite=1]` dengan body = isi file mentah.
+
 ## Database proyek
 
 Setiap proyek punya database sendiri (satu file SQLite di `data/db/<username>.db`) yang dikelola lewat
@@ -153,7 +192,7 @@ Website user memakainya lewat API otomatis di domainnya sendiri:
 - Setiap operasi per tabel diatur **Publik** atau **Hanya pemilik** (default: semua hanya pemilik).
 - Kolom **privat** tidak pernah dikirim lewat API publik.
 - Tipe kolom: teks, angka, ya/tidak, tanggal. Kolom `id` dan `created_at` otomatis.
-- Batas per proyek: 10 MB, 20 tabel, 30 kolom per tabel (`DB_LIMITS` di `src/userdb.js`).
+- Batas per proyek: 10 MB (lebih besar untuk pelanggan, lihat Langganan), 20 tabel, 30 kolom per tabel (`DB_LIMITS` di `src/userdb.js`).
 - Rate limit API publik per situs per IP: 300 baca dan 60 tulis per menit.
 - Path `/api/` di domain user dicadangkan untuk sistem.
 - Di mode Builder, AI bisa membuat tabel sendiri; perubahannya ikut dikonfirmasi (Simpan/Batalkan).
@@ -184,7 +223,7 @@ Setiap temuan punya tombol aksi (Atur akses, Buat tabel, Minta AI perbaiki). Dia
 
 ## Batasan (ubah di `src/files.js` → `LIMITS`)
 
-- 512 KB per file, 20 MB & 500 file/folder per user, kedalaman folder 8.
+- 512 KB per file, 20 MB & 500 file/folder per project (lebih besar untuk pelanggan, lihat `src/plans.js`), kedalaman folder 8.
 
 ## Deploy ke VPS
 

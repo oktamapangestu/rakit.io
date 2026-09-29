@@ -6,6 +6,7 @@ import { q } from './db.js';
 import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
 import { creditInfo, creditPayment } from './credits.js';
+import { assertCanBuy, planForSale, planFromPackageId, planPackageId, publicPlans } from './plans.js';
 
 const KASERA_BASE = 'https://pay.kasera.id/v1';
 const PAYMENT_TTL_MINUTES = 30;
@@ -56,6 +57,7 @@ async function paymentView(payment) {
     id: payment.id,
     status: payment.status,
     credits: payment.credits,
+    plan: payment.package_id.startsWith('plan:') ? planFromPackageId(payment.package_id)?.name ?? null : null,
     amount: payment.amount,
     expiresAt: payment.expires_at,
     checkoutUrl: payment.checkout_url,
@@ -79,37 +81,37 @@ billing.get('/packages', (req, res) => {
     enabled: config.billing.enabled,
     livemode: config.billing.livemode,
     packages: config.billing.packages,
+    plans: publicPlans(),
     credits: creditInfo(req.user.id),
   });
 });
 
-billing.post('/topup', async (req, res) => {
+// Buat tagihan QRIS untuk satu item (paket kredit atau langganan).
+async function createPayment(req, res, { packageId, credits, price, label }) {
   if (!config.billing.enabled) throw new HttpError(503, 'Pembayaran belum dikonfigurasi di server');
-  const pkg = config.billing.packages.find((p) => p.id === req.body?.packageId);
-  if (!pkg) throw new HttpError(400, 'Paket tidak ditemukan');
 
   // Pakai ulang QRIS yang masih berlaku untuk paket yang sama, supaya user tidak dapat banyak tagihan.
-  const existing = q.pendingPaymentFor.get(req.user.id, pkg.id);
-  if (existing && existing.qr_string && Date.parse(existing.expires_at) - Date.now() > 2 * 60_000) {
+  const existing = q.pendingPaymentFor.get(req.user.id, packageId);
+  if (existing && existing.amount === price && existing.qr_string && Date.parse(existing.expires_at) - Date.now() > 2 * 60_000) {
     return res.json({ payment: await paymentView(existing) });
   }
 
   const id = crypto.randomUUID();
-  q.insertPayment.run(id, req.user.id, pkg.id, pkg.credits, pkg.price, config.billing.livemode ? 1 : 0, Date.now());
+  q.insertPayment.run(id, req.user.id, packageId, credits, price, config.billing.livemode ? 1 : 0, Date.now());
 
   let trx;
   try {
     trx = await kasera('POST', '/transactions', {
       idempotencyKey: id,
       body: {
-        amount: pkg.price,
-        description: `Isi ulang ${pkg.credits} kredit AI rakit.icu`,
+        amount: price,
+        description: `${label} rakit.icu`,
         external_id: id,
         merchant_ref: `user-${req.user.id}`,
         payment_methods: ['qris'],
         expires_in_minutes: PAYMENT_TTL_MINUTES,
         customer: { name: req.user.username, email: req.user.email },
-        order_items: [{ name: `${pkg.credits} kredit AI`, price: pkg.price, quantity: 1 }],
+        order_items: [{ name: label, price, quantity: 1 }],
       },
     });
   } catch (err) {
@@ -128,6 +130,19 @@ billing.post('/topup', async (req, res) => {
     id,
   );
   res.status(201).json({ payment: await paymentView(q.paymentById.get(id)) });
+}
+
+billing.post('/topup', async (req, res) => {
+  const pkg = config.billing.packages.find((p) => p.id === req.body?.packageId);
+  if (!pkg) throw new HttpError(400, 'Paket tidak ditemukan');
+  await createPayment(req, res, { packageId: pkg.id, credits: pkg.credits, price: pkg.price, label: `${pkg.credits} kredit AI` });
+});
+
+billing.post('/subscribe', async (req, res) => {
+  const plan = planForSale(String(req.body?.planId ?? ''));
+  if (!plan) throw new HttpError(400, 'Paket langganan tidak ditemukan');
+  assertCanBuy(req.user.id, plan);
+  await createPayment(req, res, { packageId: planPackageId(plan.id), credits: 0, price: plan.price, label: `Langganan ${plan.name} 30 hari` });
 });
 
 const lastChecked = new Map(); // payment id -> waktu cek terakhir ke Kasera

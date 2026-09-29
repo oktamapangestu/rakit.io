@@ -14,7 +14,7 @@ import {
   requireAuth, requireSameOrigin, setSessionCookie, verifyPassword,
 } from './auth.js';
 import {
-  createDir, listTree, readText, removeEntry, renameEntry, usageOf, userRoot, writeText,
+  createDir, limitsFor, listTree, MAX_IMAGE_BYTES, readText, removeEntry, renameEntry, usageOf, userRoot, writeImage, writeText,
 } from './files.js';
 
 export const api = express.Router();
@@ -107,7 +107,7 @@ const rootOf = (req) => userRoot(req.project.slug);
 
 api.get('/files', async (req, res) => {
   const files = await listTree(rootOf(req));
-  res.json({ files, usage: usageOf(files) });
+  res.json({ files, usage: usageOf(files, limitsFor(rootOf(req))) });
 });
 
 api.get('/files/content', async (req, res) => {
@@ -125,6 +125,12 @@ api.post('/files', async (req, res) => {
     ? await createDir(rootOf(req), path)
     : await writeText(rootOf(req), path, '', { create: true });
   res.status(201).json({ path: created });
+});
+
+// Unggah gambar: body = isi file mentah, path & overwrite lewat query string.
+api.post('/files/upload', express.raw({ type: () => true, limit: MAX_IMAGE_BYTES + 1024 }), async (req, res) => {
+  const path = await writeImage(rootOf(req), req.query.path, req.body, { overwrite: req.query.overwrite === '1' });
+  res.status(201).json({ path });
 });
 
 api.post('/files/rename', async (req, res) => {

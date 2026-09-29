@@ -135,6 +135,10 @@ admin.get('/stats', async (req, res) => {
     freePerUser: config.ai.monthlyCredits,
   };
 
+  // Langganan yang masih aktif, per paket
+  const subscribers = Object.fromEntries(all('SELECT plan, COUNT(*) AS n FROM subscriptions WHERE expires_at > ? GROUP BY plan', Date.now())
+    .map((r) => [r.plan, r.n]));
+
   // Pendapatan (hanya pembayaran berhasil)
   const paidDay = `date(paid_at, '${TZ_OFFSET}')`;
   const revenue = {
@@ -151,7 +155,7 @@ admin.get('/stats', async (req, res) => {
     FROM payments WHERE status = 'succeeded' AND paid_at >= ? GROUP BY date
   `, new Date(since - DAY_MS).toISOString()), ['amount', 'count']);
   const recentPayments = all(`
-    SELECT p.created_at AS createdAt, p.paid_at AS paidAt, p.status, p.credits, p.amount, p.livemode, u.username
+    SELECT p.created_at AS createdAt, p.paid_at AS paidAt, p.status, p.package_id AS packageId, p.credits, p.amount, p.livemode, u.username
     FROM payments p JOIN users u ON u.id = p.user_id
     ORDER BY p.created_at DESC LIMIT 10
   `).map((p) => ({ ...p, livemode: Boolean(p.livemode) }));
@@ -220,6 +224,7 @@ admin.get('/stats', async (req, res) => {
     signupsByDay,
     ai: { ...aiTotals, byStatus: aiByStatus, byDay: aiByDay, models: aiModels, currentModel: config.ai.model },
     credits,
+    subscribers,
     creditUsers,
     revenue,
     revenueByDay,

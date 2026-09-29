@@ -207,6 +207,63 @@ a.chip-btn svg { width: 14px; height: 14px; }
   cursor: pointer;
 }
 .avatar:hover { border-color: var(--accent-line); }
+/* Pelanggan: cincin gradasi di avatar. */
+.avatar.subscribed { border: 0; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px #8b5cf6; }
+.avatar.subscribed[data-plan="unlimited"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px #f59e0b; }
+
+/* Badge langganan di header. */
+.plan-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  overflow: hidden;
+  border: 1px solid rgb(167 139 250 / 0.5);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgb(59 130 246 / 0.22), rgb(168 85 247 / 0.28));
+  color: #ede9fe;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgb(139 92 246 / 0.25);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.plan-badge:hover { transform: translateY(-1px); box-shadow: 0 0 24px rgb(139 92 246 / 0.4); }
+.plan-badge svg { width: 14px; height: 14px; fill: #c4b5fd; flex-shrink: 0; }
+.plan-badge[data-plan="unlimited"] {
+  border-color: rgb(251 191 36 / 0.6);
+  background: linear-gradient(135deg, rgb(245 158 11 / 0.28), rgb(236 72 153 / 0.24));
+  color: #fef3c7;
+  box-shadow: 0 0 18px rgb(245 158 11 / 0.28);
+}
+.plan-badge[data-plan="unlimited"]:hover { box-shadow: 0 0 24px rgb(245 158 11 / 0.45); }
+.plan-badge[data-plan="unlimited"] svg { fill: #fbbf24; }
+/* Kilau yang lewat sesekali. */
+.plan-badge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.28) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: plan-shine 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes plan-shine {
+  0%, 70% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+.plan-badge-days:empty { display: none; }
+.plan-badge-days { padding: 1px 7px; border-radius: 999px; background: rgb(0 0 0 / 0.3); font-size: 10.5px; font-weight: 600; }
+.plan-badge.expiring { border-color: rgb(251 191 36 / 0.7); }
+.plan-badge.expiring .plan-badge-days { color: var(--warn); }
+@media (prefers-reduced-motion: reduce) {
+  .plan-badge::after { animation: none; }
+}
 
 .icon-btn {
   display: inline-grid;
@@ -303,6 +360,44 @@ a.chip-btn svg { width: 14px; height: 14px; }
 .ficon.js { color: #facc15; background: rgb(250 204 21 / 0.12); }
 .ficon.dir { color: #a78bfa; }
 .ficon.dir svg { width: 16px; height: 16px; }
+.ficon.img { color: #34d399; background: rgb(52 211 153 / 0.12); }
+.ficon.img svg { width: 13px; height: 13px; fill: currentColor; }
+
+/* Drag & drop gambar ke daftar file. */
+.tree.drop-target { box-shadow: inset 0 0 0 2px var(--accent-line); border-radius: 10px; background: var(--accent-soft); }
+.row.drop-dir { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
+
+.modal.image-modal { max-width: 640px; }
+.image-stage {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  max-height: 52vh;
+  margin-bottom: 14px;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 12px;
+  /* Kotak-kotak supaya bagian transparan terlihat. */
+  background: repeating-conic-gradient(#1b2130 0% 25%, #11151f 0% 50%) 50% / 16px 16px;
+}
+.image-stage img { display: block; max-width: 100%; max-height: calc(52vh - 24px); object-fit: contain; }
+.image-snippets { display: grid; gap: 6px; margin-bottom: 16px; }
+.snippet { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 10px; border-radius: 9px; background: var(--bg); min-width: 0; }
+.snippet-label { width: 38px; flex-shrink: 0; color: var(--muted); font-size: 11px; font-weight: 600; }
+.snippet code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: 12px var(--mono); user-select: text; }
+.snippet button {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.snippet button:hover { border-color: var(--faint); }
 
 .usage {
   margin: 0 10px 10px;
@@ -922,6 +1017,68 @@ button.credit-badge:disabled { cursor: default; }
 }
 .topup-balance strong { color: var(--white); }
 
+.topup-note { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
+
+.topup-tabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 4px; border-radius: 10px; background: var(--bg); }
+.topup-tabs button {
+  flex: 1;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.topup-tabs button[aria-selected="true"] { background: var(--raised); color: var(--white); }
+
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.plan-card.featured { border-color: var(--accent-line); background: linear-gradient(180deg, var(--accent-soft), var(--panel) 70%); }
+.plan-card.current { border-color: var(--ok); }
+.plan-name { display: flex; align-items: center; gap: 8px; color: var(--white); font-weight: 700; font-size: 15px; }
+.plan-tag { padding: 1px 8px; border-radius: 999px; background: rgb(52 211 153 / 0.15); color: var(--ok); font-size: 11px; font-weight: 600; }
+.plan-price { color: var(--white); font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.plan-price span { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0; }
+.plan-features { flex: 1; margin: 4px 0 10px; padding-left: 18px; color: var(--text); font-size: 12.5px; line-height: 1.6; }
+.plan-card button {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.plan-card button.primary { border: 0; background: var(--grad); color: #fff; font-weight: 600; }
+.plan-card button.primary:hover { filter: brightness(1.1); }
+.plan-card button:disabled { opacity: 0.55; cursor: default; }
+
+.usage-upgrade {
+  display: block;
+  margin-top: 7px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #c4b5fd;
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.usage-upgrade:hover { text-decoration: underline; }
+.credit-badge.plan { box-shadow: inset 0 0 0 1px var(--accent-line); }
+
 .pkg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .pkg {
   display: flex;
@@ -1256,6 +1413,8 @@ button.credit-badge:disabled { cursor: default; }
   .publish-btn { width: 34px; padding: 0; justify-content: center; }
   /* Panduan tetap tersedia di HP sebagai ikon saja. */
   #guideLink { width: 34px; padding: 0; justify-content: center; }
+  .plan-badge { height: 30px; padding: 0 9px; }
+  .plan-badge-name { display: none; }
 
   /* Satu panel layar penuh, dipilih lewat navigasi bawah. */
   .workbench { padding: 8px 8px 0; }
