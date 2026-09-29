@@ -1750,6 +1750,8 @@ button.credit-badge:disabled { cursor: default; }
 
 .diagram-view { flex: 1; display: flex; flex-direction: column; min-height: 0; margin-top: 8px; border-top: 1px solid var(--line); }
 .diagram-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 12px; }
+.diagram-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+.diagram-tabs button { white-space: nowrap; }
 .diagram-tabs button.on, .diagram-tabs button[aria-selected="true"] { background: var(--raised); color: var(--white); }
 .diagram-tools { display: flex; align-items: center; gap: 2px; }
 .diagram-tools .icon-btn { font-size: 16px; font-weight: 600; }

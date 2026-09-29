@@ -102,6 +102,9 @@ diagrams.get('/', async (req, res) => {
   const pages = files.filter((f) => f.path.endsWith('.html')).map((f) => ({ path: f.path, title: pageTitle(contents.get(f.path)) }));
   const links = [];
   const assets = [];
+  const forms = [];
+  const headings = [];
+  const buttons = [];
   let external = 0;
   for (const page of pages) {
     const html = contents.get(page.path);
@@ -124,6 +127,21 @@ diagrams.get('/', async (req, res) => {
       const src = attr(tag, 'src');
       const ref = src ? resolveRef(src, page.path, fileSet) : null;
       if (ref) assets.push({ from: page.path, to: ref.target, kind: 'js', missing: !ref.exists });
+    }
+    // Form: aksi utama (kirim data) untuk diagram aktivitas & use case.
+    for (const [tag] of html.matchAll(/<form\b[^>]*>/gi)) {
+      forms.push({ page: page.path, action: attr(tag, 'action'), method: (attr(tag, 'method') ?? 'get').toLowerCase() });
+    }
+    // Judul & tombol: sumber "fitur" untuk use case & aktivitas.
+    for (const [tag, inner] of html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)) {
+      void tag;
+      const text = inner.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 50);
+      if (text) headings.push({ page: page.path, text });
+    }
+    for (const [tag, inner] of html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gi)) {
+      void tag;
+      const text = inner.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+      if (text) buttons.push({ page: page.path, text });
     }
   }
   const linkedTo = new Set(links.filter((l) => !l.broken).map((l) => l.to));
@@ -148,6 +166,9 @@ diagrams.get('/', async (req, res) => {
     pages,
     links,
     assets,
+    forms,
+    headings,
+    buttons,
     external,
     tables: tables.map((t) => ({ name: t.name, columns: t.columns, rules: t.rules, rowCount: t.rowCount })),
     relations: inferRelations(tables),
