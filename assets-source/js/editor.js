@@ -2483,9 +2483,15 @@
       clearTimeout(pollTimer);
       clearInterval(countdownTimer);
     };
+    // Tampilan promosi memakai modal lebar di tengah layar; kembali normal saat lanjut ke pembayaran/ditutup.
+    const setPromoLayout = (on) => {
+      root.classList.toggle('promo-backdrop', on);
+      body.classList.toggle('promo-modal', on);
+    };
     const close = () => {
       closed = true;
       stopTimers();
+      setPromoLayout(false);
       root.hidden = true;
       root.replaceChildren();
       document.removeEventListener('keydown', onKey, true);
@@ -2522,6 +2528,10 @@
         return body.replaceChildren(head('Langganan & kredit AI'),
           h('p', { class: 'topup-error' }, 'Pembayaran belum tersedia saat ini.'));
       }
+      if (intro) {
+        if (!data.plans.length || data.credits.plan) return close(); // tidak ada yang bisa ditawarkan
+        return showPromo();
+      }
       if (!data.plans.length) tab = 'credits';
       if (!data.packages.length) tab = 'plans';
       tab ??= data.credits.plan ? 'credits' : 'plans';
@@ -2537,6 +2547,57 @@
         onclick: () => { tab = id; if (id === 'plans') showPlans(); else showCredits(); },
       }, label)))
       : null);
+
+    // Promosi langganan untuk pengguna gratis (muncul maks. sekali sehari, lihat maybeShowPlansIntro).
+    function showPromo() {
+      setPromoLayout(true);
+      const free = data.credits;
+      const freeStore = data.free?.storage;
+      const times = (a, b) => (a && b && a / b >= 1.5 ? `${Math.round(a / b)}×` : null);
+      const perDay = (price) => rupiah(Math.round(price / 30 / 100) * 100);
+      const CHECK = 'M6.2 11.6 2.9 8.3l-.9.9 4.2 4.2 8-8-.9-.9z';
+      const RIBBON = { pro: 'Paling populer', unlimited: 'Paling lega' };
+
+      const features = (plan) => [
+        plan.credits
+          ? [`${plan.credits.toLocaleString('id-ID')} kredit AI / 30 hari`, times(plan.credits, free.limit * 30)]
+          : [`AI hingga ${plan.dailyLimit} prompt / hari`, times(plan.dailyLimit, free.limit)],
+        [`Storage ${mb(plan.storage.totalSize)} per project`, times(plan.storage.totalSize, freeStore?.totalSize)],
+        [`Database ${mb(plan.storage.dbBytes)} per project`, times(plan.storage.dbBytes, freeStore?.dbBytes)],
+        [`Gambar hingga ${mb(plan.storage.imageSize)} per file`, times(plan.storage.imageSize, freeStore?.imageSize)],
+        [`${plan.storage.entries.toLocaleString('id-ID')} file & folder`, times(plan.storage.entries, freeStore?.entries)],
+      ];
+      const cards = data.plans.map((plan, i) => h('div', { class: `promo-card ${plan.id}`, style: `--delay:${120 + i * 90}ms` },
+        RIBBON[plan.id] ? h('span', { class: 'promo-ribbon' }, RIBBON[plan.id]) : null,
+        h('div', { class: 'promo-name' }, plan.name),
+        h('div', { class: 'promo-price' }, rupiah(plan.price), h('span', {}, '/30 hari')),
+        h('div', { class: 'promo-perday' }, `≈ ${perDay(plan.price)} per hari`),
+        h('ul', { class: 'promo-features' }, features(plan).map(([text, mult]) => h('li', {},
+          svg(CHECK), h('span', {}, text), mult ? h('b', { class: 'promo-mult', title: 'dibanding paket Gratis' }, mult) : null))),
+        h('button', { type: 'button', class: 'promo-cta', onclick: () => startPayment({ planId: plan.id }) }, `Mulai ${plan.name}`)));
+
+      const left = free.freeRemaining;
+      body.replaceChildren(...[
+        h('button', { class: 'icon-btn promo-close', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close)),
+        h('div', { class: 'promo-hero' },
+          h('span', { class: 'promo-orb a' }), h('span', { class: 'promo-orb b' }),
+          h('span', { class: 'promo-kicker' }, svg(SPARK), 'Upgrade rakit.icu'),
+          h('h2', {}, 'Bangun lebih banyak, lebih cepat.'),
+          h('p', {}, `Kredit AI berlimpah, storage lega, dan upload gambar lebih besar — mulai ${perDay(Math.min(...data.plans.map((p) => p.price)))} per hari.`),
+          free.limit
+            ? h('div', { class: `promo-today${left ? '' : ' empty'}` },
+              h('span', {}, left ? `Kredit gratis hari ini tinggal ${left} dari ${free.limit}` : `Kredit gratis hari ini (${free.limit}) sudah habis`),
+              h('span', { class: 'promo-meter' }, h('i', { style: `width:${free.limit ? (left / free.limit) * 100 : 0}%` })))
+            : null),
+        h('div', { class: 'promo-grid' }, cards),
+        h('ul', { class: 'promo-trust' },
+          h('li', {}, svg(CHECK), 'Bayar QRIS — semua e-wallet & m-banking'),
+          h('li', {}, svg(CHECK), 'Aktif instan setelah bayar'),
+          h('li', {}, svg(CHECK), 'Tanpa tagihan otomatis')),
+        data.livemode ? null : h('p', { class: 'topup-test promo-test' }, 'Mode uji coba — tidak ada uang sungguhan yang ditarik.'),
+        h('button', { type: 'button', class: 'promo-later', onclick: close }, 'Nanti saja, lanjut dengan paket Gratis'),
+      ].filter(Boolean));
+    }
 
     function showPlans() {
       const current = data.credits.plan;
@@ -2617,6 +2678,7 @@
     }
 
     async function startPayment(item) {
+      setPromoLayout(false);
       body.replaceChildren(head('Pembayaran'), loadingView('Membuat kode QRIS…'));
       try {
         const { payment } = item.planId
@@ -2857,14 +2919,15 @@
     maybeShowPlansIntro();
   }
 
-  // Tawarkan langganan sekali saja (per akun, per browser) saat editor pertama kali dibuka.
+  // Promosi langganan untuk pengguna gratis: maks. sekali sehari (tanggal WIB) per akun, per browser.
   function maybeShowPlansIntro() {
-    const key = `rakit.plansIntro.${state.me.username}`;
+    const key = `rakit.promoDay.${state.me.username}`;
+    const today = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
     const c = ai.credits;
-    if (storage.get(key, false) || !c?.topupEnabled || c.plan) return;
+    if (storage.get(key, null) === today || !c?.topupEnabled || c.plan) return;
     setTimeout(() => {
-      if (!$('#modal').hidden) return; // jangan menimpa dialog lain yang sedang terbuka
-      storage.set(key, true);
+      if (!$('#modal').hidden) return; // ada dialog lain: coba lagi di kunjungan berikutnya
+      storage.set(key, today);
       openTopup('plans', { intro: true });
     }, 900);
   }
