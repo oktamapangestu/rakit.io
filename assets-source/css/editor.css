@@ -1660,8 +1660,14 @@ button.credit-badge:disabled { cursor: default; }
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
   .modal.diff-modal { height: 90dvh; display: flex; flex-direction: column; }
-  .modal-backdrop.promo-backdrop { align-items: flex-end; padding: 0; }
-  .modal.promo-modal { max-width: 100%; max-height: 92dvh; padding-top: 0; border-radius: 18px 18px 0 0; }
+  .modal-backdrop.promo-backdrop { align-items: center; justify-content: center; padding: 16px; }
+  .modal.promo-modal {
+    max-width: 420px;
+    max-height: 92dvh;
+    padding-top: 0;
+    border-radius: 18px;
+    margin: auto;
+  }
   .promo-hero { border-radius: 18px 18px 0 0; }
   .diff-body { flex: 1; height: auto; }
   .pkg-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
