@@ -55,7 +55,7 @@ You are in BUILDER mode: make the changes the user asks for.
 
 How to work:
 - Make every change by calling the tools: write_file (create or overwrite a file with its COMPLETE content — never a snippet, a diff, or "..." placeholders), delete_file, and create_table. You may call several tools at once and continue over several turns.
-- When the site needs to store or show data, use the database: call create_table for every table the code relies on that does not exist yet (or needs new columns or wider public access), and read/write it with fetch('/api/db/<table>') in the site's JavaScript. Typical public access: ["list", "create"] for a guestbook or comments, ["create"] for a contact or RSVP form whose entries only the owner should read. Mark personal data such as email or phone as private. Never use localStorage for data that visitors submit.
+- When the site needs to store or show data, use the database: call create_table for every table the code relies on that does not exist yet (or needs new columns or wider public access), and read/write it with fetch('/api/db/<table>') in the site's JavaScript. Typical public access: ["list", "create"] for a guestbook or comments, ["create"] for a contact or RSVP form whose entries only the owner should read. Mark personal data such as email or phone as private. To link rows across tables (e.g. an order belongs to a product), add a column of type "reference" with refTable set to the other table's name, store the target row's id in it, and read the joined data with fetch('/api/db/<table>?expand=<column>'). Never use localStorage for data that visitors submit.
 - If a tool returns an error, fix the problem and call it again.
 - When everything is done, reply WITHOUT calling any tool: a short, friendly summary of what you changed, in the same language the user writes in (usually Indonesian) — a few sentences, no code. That reply is shown to the user.
 - If the user only asks a question, just answer it without calling tools.
@@ -105,7 +105,8 @@ const TOOLS = [
               type: 'object',
               properties: {
                 name: { type: 'string', description: 'Lowercase letters, digits and _, starting with a letter.' },
-                type: { type: 'string', enum: COLUMN_TYPES },
+                type: { type: 'string', enum: COLUMN_TYPES, description: 'Use "reference" to link a row to another table; then also set refTable.' },
+                refTable: { type: 'string', description: 'Required when type is "reference": the table this column points to (e.g. "produk" for a column "produk_id"). Must be a table that exists or is created in the same answer.' },
                 required: { type: 'boolean' },
                 private: { type: 'boolean', description: 'Hidden from visitors (e.g. email, phone).' },
               },
@@ -342,7 +343,13 @@ function validateChange(change) {
       if (!TABLE_NAME_RE.test(col)) throw new Error(`Nama kolom "${c?.name}" tidak valid.`);
       if (['id', 'created_at'].includes(col)) throw new Error(`Kolom "${col}" sudah otomatis, jangan ditulis.`);
       if (!COLUMN_TYPES.includes(c?.type)) throw new Error(`Tipe kolom "${c?.type}" tidak dikenal. Pilih: ${COLUMN_TYPES.join(', ')}.`);
-      return { name: col, type: c.type, required: Boolean(c.required), private: Boolean(c.private) };
+      if (c.type === 'reference' && !String(c?.refTable ?? '').trim()) {
+        throw new Error(`Kolom relasi "${col}" harus menyertakan refTable (nama tabel yang ditunjuk).`);
+      }
+      return {
+        name: col, type: c.type, required: Boolean(c.required), private: Boolean(c.private),
+        ...(c.type === 'reference' ? { refTable: String(c.refTable).trim().toLowerCase() } : {}),
+      };
     });
     const publicOps = Array.isArray(change.public) ? change.public : [];
     const unknownOps = publicOps.filter((op) => !OPERATIONS.includes(op));

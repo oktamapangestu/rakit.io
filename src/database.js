@@ -27,8 +27,8 @@ database.delete('/tables/:name', (req, res) => {
 });
 
 database.get('/tables/:name/rows', (req, res) => {
-  const { limit, offset, sort, ...filters } = req.query;
-  res.json(userdb.listRows(owner(req), req.params.name, { limit, offset, sort, filters }));
+  const { limit, offset, sort, expand, ...filters } = req.query;
+  res.json(userdb.listRows(owner(req), req.params.name, { limit, offset, sort, expand, filters }));
 });
 
 database.post('/tables/:name/rows', (req, res) => {

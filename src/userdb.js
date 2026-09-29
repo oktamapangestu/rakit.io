@@ -17,13 +17,13 @@ export const DB_LIMITS = {
   textLength: 10_000,
   pageSize: 100,
 };
-export const COLUMN_TYPES = ['text', 'number', 'boolean', 'date'];
+export const COLUMN_TYPES = ['text', 'number', 'boolean', 'date', 'reference'];
 export const OPERATIONS = ['list', 'view', 'create', 'update', 'delete'];
 const DEFAULT_RULES = Object.fromEntries(OPERATIONS.map((op) => [op, 'owner']));
 
 const NAME_RE = /^[a-z][a-z0-9_]{0,39}$/;
 const SYSTEM_COLUMNS = new Set(['id', 'created_at']);
-const SQL_TYPE = { text: 'TEXT', number: 'REAL', boolean: 'INTEGER', date: 'TEXT' };
+const SQL_TYPE = { text: 'TEXT', number: 'REAL', boolean: 'INTEGER', date: 'TEXT', reference: 'INTEGER' };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
 const SQLITE_FULL = 13;
 
@@ -124,7 +124,15 @@ function normalizeColumn(input) {
   if (!COLUMN_TYPES.includes(input?.type)) {
     throw new HttpError(400, `Tipe kolom "${input?.type}" tidak dikenal. Pilih: ${COLUMN_TYPES.join(', ')}`);
   }
-  return { name, type: input.type, required: Boolean(input.required), private: Boolean(input.private) };
+  const column = { name, type: input.type, required: Boolean(input.required), private: Boolean(input.private) };
+  if (input.type === 'reference') {
+    if (!input?.refTable) {
+      throw new HttpError(400, `Kolom relasi "${name}" harus menunjuk ke tabel lain (refTable)`);
+    }
+    column.refTable = normalizeName(input.refTable, 'tabel relasi');
+    if (SYSTEM_COLUMNS.has(column.refTable)) throw new HttpError(400, `Kolom relasi "${name}" tidak bisa menunjuk ke "${column.refTable}"`);
+  }
+  return column;
 }
 
 function normalizeRules(input, base = DEFAULT_RULES) {
@@ -172,6 +180,11 @@ function coerce(column, value) {
       if (!DATE_RE.test(text) || Number.isNaN(Date.parse(text))) fail('tanggal, contoh 2026-12-31 atau 2026-12-31T19:00');
       return text;
     }
+    case 'reference': {
+      const n = typeof value === 'number' ? value : Number(String(value).trim());
+      if (!Number.isInteger(n) || n <= 0) fail(`id baris ${column.refTable} (bilangan bulat positif)`);
+      return n;
+    }
     default:
       return fail('valid');
   }
@@ -200,9 +213,29 @@ function buildValues(table, body, { partial }) {
   return values;
 }
 
-function outputRow(table, row, publicView) {
-  const out = { id: row.id, created_at: row.created_at };
+// Pastikan setiap nilai kolom relasi benar-benar menunjuk ke baris yang ada di tabel tujuan.
+function assertReferences(db, table, values) {
   for (const c of table.columns) {
+    if (c.type !== 'reference' || !Object.hasOwn(values, c.name) || values[c.name] === null) continue;
+    const target = tableOrThrow(db, c.refTable);
+    const found = db.prepare(`SELECT 1 FROM ${ident(target.name)} WHERE id = ?`).get(values[c.name]);
+    if (!found) {
+      throw new HttpError(400, `Kolom "${c.name}" menunjuk ke ${c.refTable} id ${values[c.name]} yang tidak ada`);
+    }
+  }
+}
+
+// Kolom relasi lain di seluruh proyek yang menunjuk ke tabel `name`.
+function referencesTo(db, name) {
+  return db.prepare('SELECT name, columns FROM _rakit_tables').all()
+    .flatMap(({ name: from, columns }) => JSON.parse(columns)
+      .filter((c) => c.type === 'reference' && c.refTable === name)
+      .map((c) => ({ from, column: c.name })));
+}
+
+function outputRow(table, row, publicView, columns = table.columns) {
+  const out = { id: row.id, created_at: row.created_at };
+  for (const c of columns) {
     if (publicView && c.private) continue;
     const value = row[c.name];
     out[c.name] = c.type === 'boolean' && value !== null ? Boolean(value) : value;
@@ -227,6 +260,10 @@ function writeMeta(db, table) {
     INSERT INTO _rakit_tables (name, columns, rules, created_at) VALUES (?, ?, ?, ?)
     ON CONFLICT (name) DO UPDATE SET columns = excluded.columns, rules = excluded.rules
   `).run(table.name, JSON.stringify(table.columns), JSON.stringify(table.rules), table.createdAt);
+}
+
+function allMeta(db) {
+  return db.prepare('SELECT name FROM _rakit_tables ORDER BY name').all().map(({ name }) => readMeta(db, name));
 }
 
 function tableOrThrow(db, name) {
@@ -263,6 +300,15 @@ export function getTable(username, name) {
   return tableOrThrow(open(username), name);
 }
 
+// Validasi kolom relasi: tabel tujuan harus ada dan bukan tabel itu sendiri.
+function assertRefTargets(db, tableName, columns) {
+  for (const c of columns) {
+    if (c.type !== 'reference') continue;
+    if (c.refTable === tableName) throw new HttpError(400, `Kolom "${c.name}" tidak bisa menunjuk ke tabelnya sendiri`);
+    if (!readMeta(db, c.refTable)) throw new HttpError(400, `Kolom "${c.name}" menunjuk ke tabel "${c.refTable}" yang tidak ada`);
+  }
+}
+
 export function createTable(username, input) {
   const db = open(username);
   const name = normalizeName(input?.name, 'tabel');
@@ -274,6 +320,7 @@ export function createTable(username, input) {
     if (readMeta(db, name)) throw new HttpError(409, `Tabel "${name}" sudah ada`);
     const { n } = db.prepare('SELECT COUNT(*) AS n FROM _rakit_tables').get();
     if (n >= DB_LIMITS.tables) throw new HttpError(413, `Maksimal ${DB_LIMITS.tables} tabel per proyek`);
+    assertRefTargets(db, name, columns);
 
     const columnSql = columns.map((c) => `, ${ident(c.name)} ${SQL_TYPE[c.type]}`).join('');
     db.exec(`CREATE TABLE ${ident(name)} (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL${columnSql})`);
@@ -298,6 +345,7 @@ export function updateTable(username, name, patch = {}) {
     for (const input of patch.addColumns ?? []) {
       const column = normalizeColumn(input);
       if (table.columns.some((c) => c.name === column.name)) throw new HttpError(409, `Kolom "${column.name}" sudah ada`);
+      assertRefTargets(db, table.name, [column]);
       table.columns.push(column);
       assertUniqueColumns(table.columns);
       db.exec(`ALTER TABLE ${t} ADD COLUMN ${ident(column.name)} ${SQL_TYPE[column.type]}`);
@@ -336,6 +384,15 @@ export function updateTable(username, name, patch = {}) {
         if (readMeta(db, newName)) throw new HttpError(409, `Tabel "${newName}" sudah ada`);
         db.exec(`ALTER TABLE ${t} RENAME TO ${ident(newName)}`);
         db.prepare('DELETE FROM _rakit_tables WHERE name = ?').run(table.name);
+        // Ikut perbarui kolom relasi di tabel lain yang menunjuk ke nama lama.
+        for (const other of allMeta(db)) {
+          if (other.name === newName) continue;
+          let dirty = false;
+          for (const c of other.columns) {
+            if (c.type === 'reference' && c.refTable === table.name) { c.refTable = newName; dirty = true; }
+          }
+          if (dirty) writeMeta(db, other);
+        }
         table.name = newName;
       }
     }
@@ -349,6 +406,11 @@ export function deleteTable(username, name) {
   const db = open(username);
   transaction(db, () => {
     const table = tableOrThrow(db, name);
+    const refs = referencesTo(db, table.name);
+    if (refs.length) {
+      const list = refs.map((r) => `${r.from}.${r.column}`).join(', ');
+      throw new HttpError(409, `Tabel "${table.name}" masih dirujuk oleh ${list}. Hapus dulu kolom relasinya.`);
+    }
     db.exec(`DROP TABLE ${ident(table.name)}`);
     db.prepare('DELETE FROM _rakit_tables WHERE name = ?').run(table.name);
   });
@@ -366,10 +428,35 @@ function parseSort(table, sort, visible) {
   return `${ident(column)} ${desc ? 'DESC' : 'ASC'}, id ${desc ? 'DESC' : 'ASC'}`;
 }
 
-export function listRows(username, name, { limit, offset, sort, filters = {}, publicView = false } = {}) {
+// Sertakan data baris tujuan untuk kolom relasi yang diminta (mis. ?expand=kategori_id).
+// Menyisipkan objek di bawah kunci kolom, tanpa menghapus nilai id-nya.
+function attachExpanded(db, table, rows, expand, publicView) {
+  const cols = table.columns.filter((c) => c.type === 'reference' && expand.includes(c.name));
+  if (!cols.length) return rows;
+  for (const c of cols) {
+    const target = tableOrThrow(db, c.refTable);
+    const visible = publicView ? target.columns.filter((col) => !col.private) : target.columns;
+    const ids = [...new Set(rows.map((r) => r[c.name]).filter((v) => v !== null && v !== undefined))];
+    const found = new Map();
+    if (ids.length) {
+      const placeholders = ids.map(() => '?').join(', ');
+      const picked = db.prepare(`SELECT * FROM ${ident(target.name)} WHERE id IN (${placeholders})`).all(...ids);
+      for (const row of picked) found.set(row.id, outputRow(target, row, publicView, visible));
+    }
+    for (const r of rows) {
+      const key = c.name;
+      const raw = r[key];
+      r[`${key}__ref`] = raw === null || raw === undefined ? null : (found.get(raw) ?? null);
+    }
+  }
+  return rows;
+}
+
+export function listRows(username, name, { limit, offset, sort, filters = {}, expand = [], publicView = false } = {}) {
   const db = open(username);
   const table = tableOrThrow(db, name);
   const visible = publicView ? table.columns.filter((c) => !c.private) : table.columns;
+  const expandList = normalizeExpand(table, expand, visible);
   const filterable = new Map([
     ['id', { name: 'id', type: 'number' }],
     ...visible.map((c) => [c.name, c]),
@@ -397,7 +484,20 @@ export function listRows(username, name, { limit, offset, sort, filters = {}, pu
   const { n: total } = db.prepare(`SELECT COUNT(*) AS n FROM ${t} ${whereSql}`).get(...params);
   const rows = db.prepare(`SELECT * FROM ${t} ${whereSql} ORDER BY ${parseSort(table, sort, visible)} LIMIT ? OFFSET ?`)
     .all(...params, lim, off);
-  return { rows: rows.map((r) => outputRow(table, r, publicView)), total, limit: lim, offset: off };
+  const out = rows.map((r) => outputRow(table, r, publicView));
+  return { rows: attachExpanded(db, table, out, expandList, publicView), total, limit: lim, offset: off };
+}
+
+// Terima expand sebagai daftar nama kolom relasi yang valid & terlihat.
+function normalizeExpand(table, expand, visible) {
+  const list = (Array.isArray(expand) ? expand : String(expand ?? '').split(',')).map((s) => String(s).trim()).filter(Boolean);
+  const refCols = new Set(table.columns.filter((c) => c.type === 'reference').map((c) => c.name));
+  const allowed = new Set(visible.map((c) => c.name));
+  for (const name of list) {
+    if (!refCols.has(name)) throw new HttpError(400, `Kolom "${name}" bukan relasi`);
+    if (!allowed.has(name)) throw new HttpError(400, `Kolom relasi "${name}" bersifat privat`);
+  }
+  return list;
 }
 
 function rowId(id) {
@@ -406,18 +506,22 @@ function rowId(id) {
   return n;
 }
 
-export function getRow(username, name, id, { publicView = false } = {}) {
+export function getRow(username, name, id, { publicView = false, expand = [] } = {}) {
   const db = open(username);
   const table = tableOrThrow(db, name);
   const row = db.prepare(`SELECT * FROM ${ident(table.name)} WHERE id = ?`).get(rowId(id));
   if (!row) throw new HttpError(404, 'Baris tidak ditemukan');
-  return outputRow(table, row, publicView);
+  const visible = publicView ? table.columns.filter((c) => !c.private) : table.columns;
+  const out = outputRow(table, row, publicView);
+  const [where] = attachExpanded(db, table, [out], normalizeExpand(table, expand, visible), publicView);
+  return where;
 }
 
 export function insertRow(username, name, body, { publicView = false } = {}) {
   const db = open(username);
   const table = tableOrThrow(db, name);
   const values = buildValues(table, body, { partial: false });
+  assertReferences(db, table, values);
   const keys = Object.keys(values);
   const sql = `INSERT INTO ${ident(table.name)} (created_at${keys.map((k) => `, ${ident(k)}`).join('')})
     VALUES (?${', ?'.repeat(keys.length)})`;
@@ -433,6 +537,7 @@ export function updateRow(username, name, id, body, { publicView = false } = {})
   const db = open(username);
   const table = tableOrThrow(db, name);
   const values = buildValues(table, body, { partial: true });
+  assertReferences(db, table, values);
   const keys = Object.keys(values);
   if (!keys.length) throw new HttpError(400, 'Tidak ada kolom yang diubah');
   try {
@@ -448,8 +553,15 @@ export function updateRow(username, name, id, body, { publicView = false } = {})
 export function deleteRow(username, name, id) {
   const db = open(username);
   const table = tableOrThrow(db, name);
-  const { changes } = db.prepare(`DELETE FROM ${ident(table.name)} WHERE id = ?`).run(rowId(id));
-  if (!changes) throw new HttpError(404, 'Baris tidak ditemukan');
+  const key = rowId(id);
+  return transaction(db, () => {
+    // ON DELETE SET NULL: lepaskan rujukan dari tabel lain sebelum baris dihapus.
+    for (const { from, column } of referencesTo(db, table.name)) {
+      db.prepare(`UPDATE ${ident(from)} SET ${ident(column)} = NULL WHERE ${ident(column)} = ?`).run(key);
+    }
+    const { changes } = db.prepare(`DELETE FROM ${ident(table.name)} WHERE id = ?`).run(key);
+    if (!changes) throw new HttpError(404, 'Baris tidak ditemukan');
+  });
 }
 
 // ---------- Ringkasan untuk AI ----------
@@ -458,7 +570,7 @@ export function schemaSummary(username) {
   if (!hasDatabase(username)) return '';
   return listTables(username).map((t) => {
     const open = OPERATIONS.filter((op) => t.rules[op] === 'public');
-    const columns = t.columns.map((c) => `${c.name}: ${c.type}${c.required ? ' required' : ''}${c.private ? ' private' : ''}`);
+    const columns = t.columns.map((c) => `${c.name}: ${c.type === 'reference' ? `reference(${c.refTable})` : c.type}${c.required ? ' required' : ''}${c.private ? ' private' : ''}`);
     return `- ${t.name} (${t.rowCount} rows; public: ${open.length ? open.join(', ') : 'none'})\n    ${['id: number (auto)', 'created_at: date (auto)', ...columns].join('\n    ')}`;
   }).join('\n');
 }

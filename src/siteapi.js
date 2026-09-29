@@ -29,13 +29,13 @@ function publicTable(req, op) {
 
 siteApi.get('/api/db/:table', (req, res) => {
   const table = publicTable(req, 'list');
-  const { limit, offset, sort, ...filters } = req.query;
-  res.json(userdb.listRows(req.siteUser, table.name, { limit, offset, sort, filters, publicView: true }));
+  const { limit, offset, sort, expand, ...filters } = req.query;
+  res.json(userdb.listRows(req.siteUser, table.name, { limit, offset, sort, expand, filters, publicView: true }));
 });
 
 siteApi.get('/api/db/:table/:id', (req, res) => {
   const table = publicTable(req, 'view');
-  res.json(userdb.getRow(req.siteUser, table.name, req.params.id, { publicView: true }));
+  res.json(userdb.getRow(req.siteUser, table.name, req.params.id, { publicView: true, expand: req.query.expand }));
 });
 
 siteApi.post('/api/db/:table', (req, res) => {

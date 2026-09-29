@@ -1726,7 +1726,7 @@
   }
 
   // ---------- Database (mode Data) ----------
-  const DB_TYPES = { text: 'Teks', number: 'Angka', boolean: 'Ya/Tidak', date: 'Tanggal' };
+  const DB_TYPES = { text: 'Teks', number: 'Angka', boolean: 'Ya/Tidak', date: 'Tanggal', reference: 'Relasi' };
   const DB_OPS = [
     ['list', 'Lihat daftar'],
     ['view', 'Lihat satu baris'],
@@ -1836,7 +1836,7 @@
           h('span', { class: 'col-name' }, c.name),
           c.required ? h('span', { class: 'col-flag', title: 'Wajib diisi' }, '*') : null,
           c.private ? h('span', { class: 'col-flag private', title: 'Privat — tidak tampil di API publik' }, svg(ICON.lock)) : null,
-          h('span', { class: 'col-type' }, c.system ? 'otomatis' : DB_TYPES[c.type]))),
+          h('span', { class: 'col-type' }, c.system ? 'otomatis' : (c.type === 'reference' ? `→ ${c.refTable}` : DB_TYPES[c.type])))),
         h('th', { class: 'row-actions' }))),
       h('tbody', {}, dbState.rows.length
         ? dbState.rows.map((row) => h('tr', {},
@@ -1961,11 +1961,40 @@
     return select;
   }
 
+  // Dropdown tabel tujuan untuk kolom bertipe Relasi. `exclude` = tabel yang tak boleh dipilih (diri sendiri).
+  function refSelect(value = '', exclude = null) {
+    const options = dbState.tables.map((t) => t.name).filter((n) => n !== exclude);
+    const select = h('select', { class: 'ref-select', title: 'Tabel yang ditunjuk' },
+      h('option', { value: '' }, '— pilih tabel —'),
+      options.map((n) => h('option', { value: n }, n)));
+    if (value && options.includes(value)) select.value = value;
+    return select;
+  }
+
   function miniCheck(label, checked, title, onChange) {
     const box = h('input', { type: 'checkbox' });
     box.checked = Boolean(checked);
     if (onChange) box.onchange = () => onChange(box.checked);
     return h('label', { class: 'mini-check', title }, box, label);
+  }
+
+  // Dropdown pilihan baris tabel tujuan untuk kolom relasi (label dari kolom teks pertama).
+  async function refRowSelect(c, selectedId = null) {
+    const select = h('select', { class: 'ref-select' });
+    select.append(h('option', { value: '' }, '— kosongkan —'));
+    try {
+      const data = await api('GET', `${tableUrl(c.refTable)}/rows?limit=200`);
+      const target = dbState.tables.find((t) => t.name === c.refTable);
+      const labelCol = target?.columns.find((col) => col.type === 'text')?.name;
+      for (const row of data.rows ?? []) {
+        const label = labelCol ? String(row[labelCol] ?? '') : '';
+        select.append(h('option', { value: String(row.id) }, `#${row.id}${label ? ` — ${label.slice(0, 40)}` : ''}`));
+      }
+    } catch {
+      select.append(h('option', { value: '', disabled: true }, '(gagal memuat baris)'));
+    }
+    if (selectedId != null) select.value = String(selectedId);
+    return select;
   }
 
   function openRowForm(t) {
@@ -1975,11 +2004,12 @@
       const input = c.type === 'boolean' ? h('input', { type: 'checkbox' })
         : c.type === 'text' ? h('textarea', { rows: '2' })
           : c.type === 'number' ? h('input', { type: 'number', step: 'any' })
-            : h('input', { type: 'text', placeholder: '2026-12-31 atau 2026-12-31T19:00' });
+            : c.type === 'reference' ? h('input', { type: 'number', step: '1', min: '1', placeholder: `id ${c.refTable}` })
+              : h('input', { type: 'text', placeholder: '2026-12-31 atau 2026-12-31T19:00' });
       inputs.set(c.name, input);
       return h('label', { class: `db-field ${c.type}` },
         h('span', { class: 'db-field-label' }, c.name, c.required ? h('span', { class: 'req' }, '*') : null,
-          h('span', { class: 'col-type' }, DB_TYPES[c.type])),
+          h('span', { class: 'col-type' }, c.type === 'reference' ? `→ ${c.refTable}` : DB_TYPES[c.type])),
         input);
     });
     const error = h('p', { class: 'db-form-error' });
@@ -2019,14 +2049,21 @@
     const addColumnRow = (preset = {}) => {
       const name = h('input', { placeholder: 'nama_kolom', spellcheck: 'false', autocomplete: 'off', value: preset.name ?? '' });
       const type = typeSelect(preset.type);
+      const ref = refSelect(preset.refTable);
+      ref.hidden = type.value !== 'reference';
+      type.onchange = () => { ref.hidden = type.value !== 'reference'; };
       const required = h('input', { type: 'checkbox' });
       const secret = h('input', { type: 'checkbox' });
       const row = h('div', { class: 'db-col-row' },
-        name, type,
+        name, type, ref,
         h('label', { class: 'mini-check', title: 'Wajib diisi' }, required, 'Wajib'),
         h('label', { class: 'mini-check', title: 'Tidak tampil di API publik' }, secret, 'Privat'),
         h('button', { type: 'button', class: 'icon-btn', title: 'Hapus kolom', onclick: () => row.remove() }, svg(ICON.close)));
-      row.read = () => ({ name: name.value.trim(), type: type.value, required: required.checked, private: secret.checked });
+      row.read = () => {
+        const c = { name: name.value.trim(), type: type.value, required: required.checked, private: secret.checked };
+        if (type.value === 'reference') c.refTable = ref.value;
+        return c;
+      };
       columnList.append(row);
       return name;
     };
@@ -2264,7 +2301,7 @@
       }
       findings.push({ level: 'info', text: `${t.name}: ${t.rowCount} baris · ${open.length ? `publik: ${open.join(', ')}` : 'privat (hanya kamu)'}` });
     }
-    if (d.relations.length) findings.push({ level: 'info', text: 'Garis relasi ditebak dari nama kolom (mis. produk_id → produk).' });
+    if (d.relations.length) findings.push({ level: 'info', text: 'Garis relasi mengikuti kolom bertipe Relasi; sisanya ditebak dari nama kolom (mis. produk_id → produk).' });
     return { code: lines.join('\n'), findings };
   }
 

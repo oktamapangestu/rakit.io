@@ -44,8 +44,21 @@ export async function applyChanges(username, changes) {
 
   try {
     // Tabel dulu, supaya halaman yang memakai datanya langsung berfungsi di preview.
-    for (const change of changes.filter((c) => c.action === 'table')) {
-      snapshot.tables.push(await applyTable(username, change));
+    // Fase 1: tabel + kolom biasa. Fase 2: kolom relasi, setelah semua tabel tujuan ada.
+    const tableChanges = changes.filter((c) => c.action === 'table');
+    for (const change of tableChanges) {
+      const plain = { ...change, columns: change.columns.filter((c) => c.type !== 'reference') };
+      snapshot.tables.push(await applyTable(username, plain));
+    }
+    for (const change of tableChanges) {
+      const refs = change.columns.filter((c) => c.type === 'reference');
+      if (!refs.length) continue;
+      const existing = userdb.listTables(username).find((t) => t.name === change.name);
+      const missing = refs.filter((c) => !existing?.columns.some((e) => e.name === c.name));
+      if (!missing.length) continue;
+      userdb.updateTable(username, change.name, { addColumns: missing });
+      // existed: true → revert cukup menghapus kolom relasi yang barusan ditambahkan.
+      snapshot.tables.push({ table: change.name, existed: true, addedColumns: missing.map((c) => c.name) });
     }
     for (const change of fileChanges) {
       const exists = await fileExists(root, change.path);

@@ -56,15 +56,31 @@ function dbCalls(text) {
   return calls;
 }
 
-// Relasi tidak disimpan di database, jadi ditebak dari nama kolom: <tabel>_id atau <tabel>.
+// Relasi resmi dari kolom bertipe `reference` didahulukan; sisanya ditebak dari nama kolom
+// (<tabel>_id atau <tabel>) sebagai pelengkap untuk database lama tanpa kolom relasi.
 function inferRelations(tables) {
   const names = new Set(tables.map((t) => t.name));
   const relations = [];
+  const seen = new Set();
+  const add = (from, column, to) => {
+    const key = `${from}.${column}->${to}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    relations.push({ from, column, to });
+  };
   for (const t of tables) {
     for (const c of t.columns) {
+      if (c.type === 'reference' && c.refTable && names.has(c.refTable)) {
+        add(t.name, c.name, c.refTable);
+      }
+    }
+  }
+  for (const t of tables) {
+    for (const c of t.columns) {
+      if (c.type === 'reference') continue;
       const target = c.name.endsWith('_id') ? c.name.slice(0, -3) : c.name;
       if (target !== t.name && names.has(target) && ['number', 'text'].includes(c.type)) {
-        relations.push({ from: t.name, column: c.name, to: target });
+        add(t.name, c.name, target);
       }
     }
   }
