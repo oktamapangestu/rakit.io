@@ -237,22 +237,29 @@ Setiap temuan punya tombol aksi (Atur akses, Buat tabel, Minta AI perbaiki). Dia
 1. **DNS** — arahkan dua record ke IP VPS:
    - `A  rakit.icu    -> <IP>`
    - `A  *.rakit.icu  -> <IP>`
-2. **Aplikasi**
+2. **Aplikasi** (di server ini: `/srv/rakit`)
    ```bash
-   git clone ... /opt/rakit.icu && cd /opt/rakit.icu
+   git clone ... /srv/rakit && cd /srv/rakit
    npm ci --omit=dev
    cat > .env <<'ENV'
-   PORT=3000
+   PORT=3010
    BASE_DOMAIN=rakit.icu
    PROTOCOL=https
    PUBLIC_PORT=
    NODE_ENV=production
-   DATA_DIR=/opt/rakit.icu/data
+   DATA_DIR=/srv/rakit/data
    ENV
    sudo cp deploy/rakit.service /etc/systemd/system/ && sudo systemctl enable --now rakit
    ```
-3. **HTTPS wildcard** — pakai `deploy/Caddyfile`. Sertifikat `*.rakit.icu` wajib lewat
-   DNS challenge, jadi Caddy perlu plugin DNS provider tempat domain dikelola (contoh: Cloudflare).
+   > `PORT` di `.env` harus sama dengan `proxy_pass` di konfigurasi Nginx.
+3. **Reverse proxy + HTTPS wildcard** — pakai Nginx (lihat `deploy/nginx-rakit.conf`):
+   ```bash
+   sudo cp deploy/nginx-rakit.conf /etc/nginx/sites-available/rakit
+   sudo ln -sf /etc/nginx/sites-available/rakit /etc/nginx/sites-enabled/rakit
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+   Sertifikat `*.rakit.icu` lewat Let's Encrypt (wildcard butuh DNS challenge, mis. certbot + plugin DNS).
+   App hanya `listen` di `127.0.0.1` — tutup port-nya dari publik lewat firewall (lihat `/root/app-guard.nft`).
 4. **Backup** folder `data/` secara berkala.
 
 ## Catatan keamanan
