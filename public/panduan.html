@@ -41,6 +41,15 @@
     letter-spacing:.08em;margin-bottom:6px;font-family:inherit}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  @media(max-width:680px){.grid3{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px}
+  .t-desk{background:#dbeafe;color:#1d4ed8}
+  .t-mob{background:#fce7f3;color:#be185d}
+  .t-both{background:#dcfce7;color:#15803d}
+  .bp{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12.5px;background:#f1f5f9;border:1px solid var(--line);
+    padding:2px 7px;border-radius:5px;white-space:nowrap}
   ul{margin:8px 0;padding-left:20px}
   li{margin:4px 0}
   code{background:#f1f5f9;color:#0f172a;padding:1.5px 6px;border-radius:5px;
@@ -78,6 +87,7 @@
     <a href="#dasar">Dasar</a>
     <a href="#struktur">Struktur</a>
     <a href="#desain">Desain</a>
+    <a href="#responsive">Responsive</a>
     <a href="#database">Database</a>
     <a href="#interaksi">Interaksi</a>
     <a href="#contoh">Contoh Lengkap</a>
@@ -190,8 +200,141 @@ dan ingat saat dibuka kembali.</div>
 
 <div class="warn">⚠️ <b>Tidak ada build step / npm.</b> Library eksternal (Bootstrap, Tailwind CDN, Chart.js, dsb.) hanya bisa dimuat dari <b>CDN</b> lewat <code>&lt;script&gt;</code> atau <code>&lt;link&gt;</code>. Tulis jelas, mis. <i>“pakai Bootstrap 5 dari CDN”</i>.</div>
 
-<!-- ══════════════ 4. DATABASE ══════════════ -->
-<h2 id="database"><span class="n">4</span>Database — Simpan &amp; Tampilkan Data</h2>
+<!-- ══════════════ 4. RESPONSIVE ══════════════ -->
+<h2 id="responsive"><span class="n">4</span>Responsive Design — Desktop / Mobile</h2>
+<p class="lead">Cara meminta tampilan yang berbeda di HP dan desktop, atau mengunci ke salah satu.</p>
+
+<div class="note">
+  📐 <b>Bawaan AI sudah responsif.</b> Kalau tidak disebut, AI membuat tata letak yang <b>menyesuaikan sendiri</b>
+  (desktop &amp; mobile). Bagian ini untuk saat kamu butuh <b>perilaku khusus</b> — misal satu halaman hanya
+  boleh untuk desktop, atau tampilan mobile jauh berbeda.
+</div>
+
+<h3>Pilih arah tampilan</h3>
+<div class="grid3">
+  <div class="card" style="margin:0">
+    <div class="tag t-both">Bawaan</div>
+    <p style="margin:8px 0 6px;font-weight:600">Responsif (dua-duanya)</p>
+    <p style="margin:0;font-size:13px;color:var(--muted)">Tata letak menyesuaikan layar. Tidak perlu ditulis — ini default.</p>
+  </div>
+  <div class="card" style="margin:0">
+    <div class="tag t-desk">Desktop</div>
+    <p style="margin:8px 0 6px;font-weight:600">Desktop-only</p>
+    <p style="margin:0;font-size:13px;color:var(--muted)">Halaman dirancang untuk layar lebar (mis. dashboard, tabel data).</p>
+  </div>
+  <div class="card" style="margin:0">
+    <div class="tag t-mob">Mobile</div>
+    <p style="margin:8px 0 6px;font-weight:600">Mobile-only</p>
+    <p style="margin:0;font-size:13px;color:var(--muted)">Dirancang khusus layar HP (mis. aplikasi absensi, kalkulator).</p>
+  </div>
+</div>
+
+<h3>Desktop-only</h3>
+<p style="margin:6px 0;font-size:14px">Halaman dibuat untuk layar lebar. Pengunjung HP melihat pesan “buka di desktop”.</p>
+<div class="prompt"><span class="lbl">Builder</span>Halaman dashboard ini khusus desktop.
+Jika dibuka di layar sempit (HP),
+sembunyikan isinya dan tampilkan pesan:
+"Halaman ini lebih nyaman dibuka di komputer.
+Silakan buka lewat layar yang lebih besar."</div>
+
+<div class="prompt"><span class="lbl">Builder</span>Buat layout desktop-only dengan lebar
+minimum 1200px, sidebar kiri tetap (fixed),
+dan area konten lebar.
+Kunci agar tidak "pecah" di layar kecil.</div>
+
+<h3>Mobile-only</h3>
+<p style="margin:6px 0;font-size:14px">Dirancang untuk HP: tombol besar, satu kolom, navigasi bawah.</p>
+<div class="prompt"><span class="lbl">Builder</span>Buat halaman ini khusus untuk HP:
+- Satu kolom, tombol besar &amp; mudah disentuh
+- Bilah navigasi tetap di bawah layar
+- Lebar maksimal 480px, di tengah jika dibuka di desktop
+- Teks cukup besar untuk dibaca sambil berdiri</div>
+
+<div class="prompt"><span class="lbl">Builder</span>Optimalkan khusus layar HP:
+sembunyikan elemen yang hanya berguna di desktop,
+gunakan menu "hamburger", dan utamakan
+kecepatan serta area sentuh ≥ 44px.</div>
+
+<h3>Perilaku berbeda per ukuran layar</h3>
+<p style="margin:6px 0;font-size:14px">Kalau ingin elemen muncul/hilang atau berubah bentuk di ukuran tertentu:</p>
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Sembunyikan di HP</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Sembunyikan sidebar dan tabel lebar
+saat dibuka di HP, tapi tetap tampil
+utuh di desktop.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Ubah bentuk</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Di desktop menu tampil mendatar di atas.
+Di HP, ubah jadi tombol hamburger
+yang membuka panel geser dari samping.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Kolom menyesuaikan</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Katalog tampil 4 kolom di desktop,
+2 kolom di tablet, 1 kolom di HP.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Tabel jadi kartu</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tabel data di desktop, tapi berubah
+jadi daftar kartu bertumpuk saat di HP
+agar tidak perlu geser-geser.</div>
+  </div>
+</div>
+
+<h3>Ukuran layar (titik henti umum)</h3>
+<p style="margin:6px 0;font-size:14px">Kalau mau menyebut angka pastinya, gunakan acuan ini:</p>
+<table>
+  <tr><th>Perangkat</th><th>Lebar layar</th><th>Sebutkan di prompt</th></tr>
+  <tr><td>📱 HP</td><td><span class="bp">&lt; 640px</span></td><td><code>di HP (di bawah 640px)</code></td></tr>
+  <tr><td>📱 HP besar / tablet kecil</td><td><span class="bp">640–767px</span></td><td><code>di layar sedang</code></td></tr>
+  <tr><td>💻 Tablet</td><td><span class="bp">768–1023px</span></td><td><code>di tablet (768–1023px)</code></td></tr>
+  <tr><td>🖥️ Desktop</td><td><span class="bp">≥ 1024px</span></td><td><code>di desktop (1024px ke atas)</code></td></tr>
+  <tr><td>🖥️ Desktop lebar</td><td><span class="bp">≥ 1280px</span></td><td><code>di layar lebar</code></td></tr>
+</table>
+
+<table>
+  <tr><th>Kebutuhan</th><th>Cara menulis prompt</th></tr>
+  <tr><td>Kunci ke desktop</td><td><code>halaman ini khusus desktop, tampilkan pesan "buka di komputer" kalau di HP</code></td></tr>
+  <tr><td>Kunci ke mobile</td><td><code>buat khusus HP, lebar maksimal 480px, rata tengah di desktop</code></td></tr>
+  <tr><td>Elemen tertentu</td><td><code>sembunyikan bagian statistik saat di HP</code></td></tr>
+  <tr><td>Menu</td><td><code>menu mendatar di desktop, hamburger di HP</code></td></tr>
+  <tr><td>Grid katalog</td><td><code>4 kolom desktop, 2 tablet, 1 HP</code></td></tr>
+  <tr><td>Gambar</td><td><code>gambar menyesuaikan lebar, tidak melebihi layar</code></td></tr>
+  <tr><td>Font</td><td><code>teks judul lebih kecil di HP (24px), lebih besar di desktop (40px)</code></td></tr>
+  <tr><td>Orientasi</td><td><code>susun berdampingan saat layar mendatar (landscape)</code></td></tr>
+  <tr><td>Uji di HP</td><td><code>pastikan tidak ada yang keluar batas layar atau perlu digeser</code></td></tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Contoh: dashboard desktop-only</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat dashboard admin khusus desktop:
+- Sidebar kiri tetap + konten lebar
+- Tabel data lengkap
+- Jika lebar layar &lt; 1024px, ganti isi
+  dengan pesan agar dibuka di komputer
+- Sembunyikan semua kontrol di layar kecil</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Contoh: aplikasi mobile-only</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat aplikasi absensi khusus HP:
+- Lebar maks 480px, rata tengah
+- Navigasi tab tetap di bawah
+- Tombol besar "Absen Masuk / Keluar"
+- Tampilkan jam besar di atas
+- Simpan riwayat ke database</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>Cara menguji:</b> buka situsmu di HP, atau di desktop tekan <b>F12</b> lalu aktifkan mode perangkat (ikon HP) untuk melihat tampilan mobile tanpa perlu HP sungguhan.</div>
+
+<div class="warn">⚠️ <b>Penting:</b> mobile-only / desktop-only berarti pengunjung dengan perangkat lain <b>tidak bisa memakai</b> situs. Pakai hanya bila memang disengaja (mis. alat internal pemilik). Kalau ingin semua bisa akses, cukup pakai <b>responsif biasa</b> (tulis: <i>“pastikan rapi di HP maupun desktop”</i>).</div>
+
+
+<!-- ══════════════ 5. DATABASE ══════════════ -->
+<h2 id="database"><span class="n">5</span>Database — Simpan &amp; Tampilkan Data</h2>
 <p class="lead">Kekuatan utama rakit: situs bisa menyimpan data <b>tanpa server sendiri</b>. AI akan membuat tabelnya otomatis.</p>
 
 <div class="note">
@@ -270,8 +413,8 @@ melihat, mengubah, dan menghapusnya.</div>
 
 <div class="tip">💡 <b>Contoh kombinasi kaya:</b> <i>“Buat toko online sederhana: katalog produk dari database (nama, harga, gambar, stok), keranjang di halaman, dan form checkout yang mengirim pesanan (nama, telp, alamat, item) — pesanan hanya bisa saya lihat.”</i></div>
 
-<!-- ══════════════ 5. INTERAKSI ══════════════ -->
-<h2 id="interaksi"><span class="n">5</span>Interaksi &amp; Fitur JavaScript</h2>
+<!-- ══════════════ 6. INTERAKSI ══════════════ -->
+<h2 id="interaksi"><span class="n">6</span>Interaksi &amp; Fitur JavaScript</h2>
 <p class="lead">Perilaku dinamis: filter, pencarian, keranjang, kalkulator, dan lainnya.</p>
 
 <div class="grid">
@@ -317,8 +460,8 @@ tampilkan pratinjau sebelum dikirim.
 
 <div class="note">💡 <b>Sebutkan perilakunya, bukan teknisnya.</b> “Saat tombol diklik, total langsung berubah” lebih ampuh daripada “pakai addEventListener”. AI yang memilih cara teknisnya.</div>
 
-<!-- ══════════════ 6. CONTOH LENGKAP ══════════════ -->
-<h2 id="contoh"><span class="n">6</span>Contoh Prompt Lengkap (Siap Pakai)</h2>
+<!-- ══════════════ 7. CONTOH LENGKAP ══════════════ -->
+<h2 id="contoh"><span class="n">7</span>Contoh Prompt Lengkap (Siap Pakai)</h2>
 <p class="lead">Tinggal salin, sesuaikan nama &amp; detail, kirim ke mode Builder.</p>
 
 <div class="prompt"><span class="lbl">A · Undangan pernikahan</span>Buat website undangan pernikahan digital untuk Rina &amp; Dimas:
@@ -370,8 +513,8 @@ Gaya modern ungu &amp; putih.</div>
 - Simpan skor terbaik ke database dan tampilkan 5 tertinggi
 Gaya ceria, warna-warni, animasi halus.</div>
 
-<!-- ══════════════ 7. PERBAIKAN ══════════════ -->
-<h2 id="lanjutan"><span class="n">7</span>Memperbaiki &amp; Mengubah</h2>
+<!-- ══════════════ 8. PERBAIKAN ══════════════ -->
+<h2 id="lanjutan"><span class="n">8</span>Memperbaiki &amp; Mengubah</h2>
 <p class="lead">Cara mengoreksi hasil tanpa memulai dari nol.</p>
 
 <table>
@@ -389,8 +532,8 @@ Gaya ceria, warna-warni, animasi halus.</div>
 
 <div class="note">🔄 <b>Semua perubahan bisa dibatalkan.</b> Di mode Builder, perubahan ditampilkan dengan tombol <b>Simpan / Batalkan</b> sebelum diterapkan. Ada juga riwayat percakapan — buka kembali untuk melanjutkan.</div>
 
-<!-- ══════════════ 8. BATASAN ══════════════ -->
-<h2 id="batasan"><span class="n">8</span>Batasan &amp; Tips Teknis</h2>
+<!-- ══════════════ 9. BATASAN ══════════════ -->
+<h2 id="batasan"><span class="n">9</span>Batasan &amp; Tips Teknis</h2>
 <p class="lead">Yang perlu diketahui agar tidak membentur dinding.</p>
 
 <table>
@@ -404,6 +547,7 @@ Gaya ceria, warna-warni, animasi halus.</div>
   <tr><td>Akun pengunjung</td><td><span class="badge b-no">Belum ada</span> — pengunjung anonim</td></tr>
   <tr><td>Operasi database</td><td><span class="badge b-ok">read · create · update · delete</span></td></tr>
   <tr><td>Tipe kolom database</td><td><span class="badge b-ok">text · number · boolean · date</span></td></tr>
+  <tr><td>Responsive</td><td><span class="badge b-ok">bawaan responsif</span> · bisa dikunci mobile/desktop saja</td></tr>
 </table>
 
 <div class="grid">
