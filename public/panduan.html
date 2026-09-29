@@ -88,10 +88,21 @@
     <a href="#struktur">Struktur</a>
     <a href="#desain">Desain</a>
     <a href="#responsive">Responsive</a>
+    <a href="#seo">SEO</a>
+    <a href="#aksesibilitas">Aksesibilitas</a>
+    <a href="#form">Form</a>
+    <a href="#animasi">Animasi</a>
+    <a href="#media">Media</a>
+    <a href="#navigasi">Navigasi</a>
+    <a href="#kinerja">Kinerja</a>
+    <a href="#konten">Konten</a>
+    <a href="#keamanan">Keamanan</a>
+    <a href="#integrasi">Integrasi</a>
+    <a href="#dashboard">Dashboard</a>
     <a href="#database">Database</a>
     <a href="#interaksi">Interaksi</a>
-    <a href="#contoh">Contoh Lengkap</a>
-    <a href="#lanjutan">Perbaikan</a>
+    <a href="#contoh">Contoh</a>
+    <a href="#pola-lanjutan">Pola Lanjutan</a>
     <a href="#batasan">Batasan</a>
   </nav>
 </header>
@@ -333,8 +344,477 @@ agar tidak perlu geser-geser.</div>
 <div class="warn">⚠️ <b>Penting:</b> mobile-only / desktop-only berarti pengunjung dengan perangkat lain <b>tidak bisa memakai</b> situs. Pakai hanya bila memang disengaja (mis. alat internal pemilik). Kalau ingin semua bisa akses, cukup pakai <b>responsif biasa</b> (tulis: <i>“pastikan rapi di HP maupun desktop”</i>).</div>
 
 
-<!-- ══════════════ 5. DATABASE ══════════════ -->
-<h2 id="database"><span class="n">5</span>Database — Simpan &amp; Tampilkan Data</h2>
+<!-- ══════════════ 5. SEO & BERBAGI ══════════════ -->
+<h2 id="seo"><span class="n">5</span>SEO &amp; Berbagi di Media Sosial</h2>
+<p class="lead">Agar situs muncul di Google dan tampil menarik saat tautannya dibagikan ke WhatsApp/media sosial.</p>
+
+<div class="note">
+  🔎 AI <b>tidak otomatis</b> menambahkan informasi SEO. Sebut permintaan ini secara eksplisit agar
+  situsmu mudah ditemukan dan tautannya tampil rapi saat dibagikan.
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Judul &amp; deskripsi (Google)</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tambahkan informasi SEO di semua halaman:
+- Judul tab yang jelas (maks 60 karakter)
+- Deskripsi untuk Google (maks 160 karakter)
+- Nama brand di akhir judul
+Contoh: "Kopi Nusantara — Biji Kopi Lokasi Pilihan"</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Pratinjau saat dibagikan (Open Graph)</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Saat tautan dibagikan ke WhatsApp/Facebook/
+Twitter, tampilkan pratinjau:
+- Judul &amp; deskripsi singkat
+- Gambar pratinjau (1200×630)
+- Nama situs
+Tambahkan tag Open Graph untuk itu.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Ikon tab &amp; perangkat</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tambahkan favicon (ikon di tab browser)
+dan ikon untuk layar utama HP,
+lalu pasang di semua halaman.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Bahasa &amp; mesin pencari</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Setel bahasa halaman ke Indonesia
+(lang="id"), tambahkan sitemap sederhana
+dan izinkan Google mengindeks situs.</div>
+  </div>
+</div>
+
+<h3>Contoh permintaan SEO lengkap</h3>
+<div class="prompt"><span class="lbl">Builder</span>Optimalkan SEO untuk website toko kopi "Kopi Nusantara":
+- Judul: "Kopi Nusantara — Biji Kopi Lokasi Pilihan" 
+- Deskripsi: "Beli biji kopi segar dari petani lokal. 
+  Pilihan arabika & robusta terbaik, dikirim ke seluruh Indonesia."
+- Gambar pratinjau: logo toko dengan latar cokelat
+- Favicon: biji kopi
+- Bahasa: Indonesia
+Tambahkan juga di halaman produk dan halaman tentang.</div>
+
+<table>
+  <tr><th>Kebutuhan</th><th>Cara menulis prompt</th></tr>
+  <tr><td>Muncul di Google</td><td><code>optimalkan SEO agar muncul di pencarian Google, tambahkan judul dan deskripsi halaman</code></td></tr>
+  <tr><td>Tautan rapi di WA</td><td><code>buat pratinjau bagus saat tautan dibagikan ke WhatsApp dan media sosial</code></td></tr>
+  <tr><td>Favicon</td><td><code>tambahkan favicon berupa logo saya di tab browser</code></td></tr>
+  <tr><td>Kata kunci</td><td><code>sertakan kata "toko kue jakarta" dan "pesan kue online" secara alami</code></td></tr>
+  <tr><td>Google Maps</td><td><code>tambahkan lokasi toko yang terbaca Google (alamat, jam buka)</code></td></tr>
+  <tr><td>Multi-halaman</td><td><code>pastikan setiap halaman punya judul &amp; deskripsi berbeda</code></td></tr>
+</table>
+
+<div class="tip">💡 <b>Judul &amp; deskripsi adalah yang paling penting.</b> Kalau hanya sempat minta satu hal, minta itu — inilah yang muncul di hasil pencarian Google dan saat tautan dibagikan.</div>
+
+<!-- ══════════════ 6. AKSESIBILITAS ══════════════ -->
+<h2 id="aksesibilitas"><span class="n">6</span>Aksesibilitas — Mudah Dipakai Semua Orang</h2>
+<p class="lead">Membuat situs nyaman dipakai siapa saja, termasuk pengguna pembaca layar dan orang dengan gangguan penglihatan.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Gambar &amp; teks alternatif</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Pastikan setiap gambar punya teks alternatif
+(alt) yang menjelaskan isinya, untuk pembaca layar.
+Gambar hiasan cukup diberi alt kosong.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Kontras &amp; keterbacaan</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Pastikan kontras teks dan latar cukup
+(teks gelap di latar terang), ukuran font
+minimal 16px, dan jarak antarbaris nyaman.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Bisa dipakai tanpa mouse</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Pastikan semua tombol dan tautan bisa
+diakses dengan tombol Tab di keyboard,
+dan ada penanda jelas saat sedang difokus.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Form yang jelas</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Setiap kolom form punya label yang jelas
+(ketik "Nama", bukan sekadar kotak kosong),
+dan pesan kesalahan mudah dimengerti.</div>
+  </div>
+</div>
+
+<div class="prompt"><span class="lbl">Permintaan menyeluruh</span>Rapikan aksesibilitas situs:
+- Semua gambar punya teks alt
+- Kontras warna memadai
+- Bisa dinavigasi dengan keyboard (Tab)
+- Form punya label
+- Struktur judul berurutan (H1 lalu H2, bukan melompat)
+- Tombol punya area sentuh cukup besar di HP</div>
+
+<div class="tip">💡 <b>Kenapa penting?</b> Situs yang aksesibel lebih ramah bagi semua orang — termasuk yang memakai HP sambil jalan, koneksi lambat, atau membaca di bawah sinar matahari. Bonusnya: penilaian Google juga lebih baik.</div>
+
+<!-- ══════════════ 7. FORM & VALIDASI ══════════════ -->
+<h2 id="form"><span class="n">7</span>Form &amp; Validasi Input</h2>
+<p class="lead">Form yang benar menyimpan data dengan rapi dan memberi tahu pengunjung bila ada yang salah.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Form lengkap</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat form pemesanan dengan:
+- Nama (wajib), Email (wajib, format email)
+- Nomor HP (wajib, hanya angka)
+- Alamat (wajib), Catatan (opsional)
+- Validasi saat dikirim: tandai kolom yang salah
+  dengan pesan jelas
+- Setelah berhasil: tampilkan "Terima kasih,
+  pesanan Anda sudah masuk" dan kosongkan form</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Kolom pilihan &amp; tanggal</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Form pendaftaran acara:
+- Nama, email
+- Pilihan paket (dropdown: Reguler/VIP)
+- Tanggal kunjungan (date picker)
+- Jumlah orang (1-10)
+- Centang "Saya setuju syarat &amp; ketentuan"
+Simpan ke database setelah valid.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Unggah berkas &amp; gambar</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Form dengan input gambar:
+- Pilih foto, tampilkan pratinjau sebelum kirim
+- Batasi ukuran maksimal 2 MB
+- Setelah dikirim, tampilkan gambar di galeri
+(ubah gambar jadi teks terenkode)</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Menampilkan data masuk</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Form kontak + daftar pesan masuk,
+tampilkan 10 terbaru dengan waktu kirim.
+Hanya saya (pemilik) yang bisa melihat daftarnya.</div>
+  </div>
+</div>
+
+<div class="warn">⚠️ <b>Data dari form pengunjung tidak boleh disimpan hanya di browser.</b> Minta AI menyimpannya ke <b>database</b> (lihat bagian Database) agar tidak hilang saat pengunjung menutup halaman.</div>
+
+<!-- ══════════════ 8. ANIMASI & INTERAKSI LANJUTAN ══════════════ -->
+<h2 id="animasi"><span class="n">8</span>Animasi &amp; Interaksi Lanjutan</h2>
+<p class="lead">Sentuhan dinamis agar situs terasa hidup — tanpa mengganggu.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Animasi saat menggulir</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat elemen muncul halus (fade + naik)
+saat digulir ke bawah, dengan animasi bertahap
+antar-kartu. Jangan ganggu pembacaan.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Efek hover</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tombol membesar sedikit &amp; kartu terangkat
+saat kursor di atasnya, dengan transisi halus.
+Efek tetap wajar di layar sentuh (HP).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Galeri &amp; lightbox</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Saat gambar galeri diklik, buka tampilan
+besar (lightbox) dengan latar gelap, tombol
+tutup, dan panah untuk gambar berikutnya.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Tab &amp; akordeon</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat FAQ akordeon: pertanyaan diklik untuk
+membuka jawaban, panah berputar, hanya satu
+yang terbuka pada satu waktu.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Notifikasi &amp; toast</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Setelah form tersimpan, munculkan notifikasi
+kecil di pojok atas ("Data terkirim") yang
+hilang sendiri setelah 3 detik.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Mode gelap/terang</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tombol pengalih tema terang/gelap,
+ingat pilihan pengunjung, ikuti pengaturan
+HP mereka secara otomatis saat pertama dibuka.</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>Manis tapi jangan berlebihan.</b> Animasi bagus untuk menuntun perhatian. Kalau terlalu banyak, situs terasa lambat dan membingungkan. Sebut: <i>"animasi halus, tidak berlebihan"</i>.</div>
+
+<!-- ══════════════ 9. GAMBAR, MEDIA & IKON ══════════════ -->
+<h2 id="media"><span class="n">9</span>Gambar, Media &amp; Ikon</h2>
+<p class="lead">Cara meminta gambar, ilustrasi, peta, video, dan ikon tanpa file sendiri.</p>
+
+<div class="note">
+  🖼️ Situs user hanya berupa <code>.html</code> · <code>.css</code> · <code>.js</code> — tidak bisa menyimpan
+  file gambar besar. Untuk gambar, gunakan <b>tautan gambar dari internet</b> (mis. layanan gratis)
+  atau simpan sebagai teks terenkode di database.
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Gambar sementara (placeholder)</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Gunakan gambar contoh dari picsum.photos
+untuk semua foto sementara, dengan ukuran
+yang sesuai. Nanti saya ganti dengan foto asli.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Ikon</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Pakai ikon dari Lucide (CDN) untuk
+fitur layanan: truk pengiriman, keamanan,
+dukungan 24 jam, dan garansi.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Ilustrasi</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tambahkan ilustrasi dari unDraw untuk
+bagian "cara kerja" (3 langkah), gaya
+yang cocok dengan warna situs.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Peta lokasi</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Sematkan peta Google Maps untuk lokasi
+toko (Jl. Contoh No. 123, Jakarta) di
+halaman kontak dan footer.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Video YouTube</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Sematkan video YouTube (tautan:
+youtube.com/watch?v=XXXX) secara responsif
+di bagian profil perusahaan.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Ikut tampil cepat</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Muat gambar secara bertahap (lazy load)
+dan tampilkan placeholder abu-abu sebelum
+gambar selesai termuat.</div>
+  </div>
+</div>
+
+<!-- ══════════════ 10. NAVIGASI & MULTI-HALAMAN ══════════════ -->
+<h2 id="navigasi"><span class="n">10</span>Navigasi &amp; Multi-Halaman</h2>
+<p class="lead">Mengatur banyak halaman dan tautan antar-halaman dengan rapi.</p>
+
+<div class="note">
+  🔗 URL bersih otomatis: berkas <code>tentang.html</code> bisa dibuka lewat <code>/tentang</code>.
+  Halaman <code>404.html</code> kustom juga otomatis dipakai bila ada halaman yang tidak ditemukan.
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Menu navigasi</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat menu navigasi dengan logo di kiri,
+tautan halaman di tengah, dan tombol kontak
+di kanan. Menu menempel di atas saat digulir,
+dan jadi hamburger di HP.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Halaman 404 sendiri</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat halaman 404.html yang ramah:
+pesan lucu, ilustrasi, dan tombol
+"Kembali ke beranda".</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Navigasi bawah (HP)</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Untuk aplikasi HP, buat bilah navigasi
+tetap di bawah dengan ikon beranda,
+riwayat, dan profil.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Tautan dalam halaman</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat menu yang menggulir ke bagian
+dalam halaman (Tentang, Layanan, Kontak)
+dengan posisi tepat di bawah header.</div>
+  </div>
+</div>
+
+<!-- ══════════════ 11. KINERJA & KECEPATAN ══════════════ -->
+<h2 id="kinerja"><span class="n">11</span>Kinerja &amp; Kecepatan</h2>
+<p class="lead">Situs yang cepat lebih menyenangkan dan lebih disukai mesin pencari.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Ringan &amp; cepat</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat situs seringan mungkin: hindari
+perpustakaan besar kalau tidak perlu,
+muat gambar bertahap, dan gunakan CSS
+yang efisien.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Font cepat</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Muat hanya 2 varian font (normal &amp; tebal),
+dan tampilkan teks dengan font cadangan
+sampai font asli siap (agar tidak kosong).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Gambar hemat</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Gunakan gambar berukuran wajar (maks
+lebar 1600px), format modern, dan tentukan
+dimensi agar tata letak tidak bergeser.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Indikator memuat</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Saat data sedang diambil dari database,
+tampilkan indikator memuat (spinner), dan
+pesan jelas bila gagal.</div>
+  </div>
+</div>
+
+<div class="tip">💡 Semua aset rakit.icu sudah dikompresi (gzip) &amp; di-cache, jadi situsmu memang cepat sejak awal. Fokus pada <b>ukuran gambar</b> — itu penyebab situs lambat yang paling umum.</div>
+
+<!-- ══════════════ 12. KONTEN & COPYWRITING ══════════════ -->
+<h2 id="konten"><span class="n">12</span>Konten &amp; Tulisan</h2>
+<p class="lead">AI bisa menulis teksnya sekaligus — beri tahu siapa pembacanya.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Nada tulisan</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tulis semua teks dengan nada ramah,
+hangat, dan sederhana (tanpa istilah rumit),
+seolah bicara ke teman.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Sasaran pembaca</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tulis untuk ibu rumah tangga usia 30-50
+yang baru mulai berbisnis online. Hindari
+istilah teknis, tonjolkan kemudahan.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Bagian penting</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat judul utama yang menarik (headline),
+subjudul penjelas, dan tombol ajakan
+("Pesan Sekarang", "Hubungi Kami").</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Konten contoh</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Isi dengan teks contoh yang masuk akal
+untuk bisnis kuliner rumahan di Bandung,
+6 menu, 3 testimoni, dan informasi kontak.</div>
+  </div>
+</div>
+
+<div class="tip">💡 Semakin spesifik (siapa pembaca, bisnis apa, di mana), semakin bagus tulisan yang dihasilkan. Ganti "website bisnis" menjadi "website katering rumahan di Yogyakarta untuk acara keluarga".</div>
+
+<!-- ══════════════ 13. KEAMANAN & DATA PRIBADI ══════════════ -->
+<h2 id="keamanan"><span class="n">13</span>Keamanan &amp; Data Pribadi</h2>
+<p class="lead">Melindungi data pengunjung dan menjaga agar tidak disalahgunakan.</p>
+
+<table>
+  <tr><th>Kebutuhan</th><th>Cara menulis prompt</th></tr>
+  <tr><td>Data sensitif</td><td><code>tandai email, nomor HP, dan alamat sebagai data privat — hanya saya yang bisa lihat</code></td></tr>
+  <tr><td>Form publik</td><td><code>pengunjung hanya boleh mengirim, tidak boleh melihat daftar kiriman orang lain</code></td></tr>
+  <tr><td>Anti-spam</td><td><code>tambahkan kolom "ketik hasil 3+2" untuk mencegah bot mengirim form</code></td></tr>
+  <tr><td>Data tidak hilang</td><td><code>simpan semua data pengunjung ke database, jangan hanya di browser</code></td></tr>
+  <tr><td>Kata sandi</td><td><code>kalau ada area pribadi, jangan simpan kata sandi di situs — pakai pemilik saja</code></td></tr>
+</table>
+
+<div class="warn">⚠️ <b>Prinsip aman:</b> untuk data pengunjung yang bersifat pribadi (email, telepon, alamat), selalu atur sebagai <b>khusus pemilik</b>. Kamu melihat &amp; mengelolanya lewat tab <b>Database</b> di editor.</div>
+
+<!-- ══════════════ 14. INTEGRASI PIHAK KETIGA ══════════════ -->
+<h2 id="integrasi"><span class="n">14</span>Integrasi Pihak Ketiga (CDN &amp; Layanan)</h2>
+<p class="lead">Menambahkan layanan populer lewat CDN/tautan — tanpa server sendiri.</p>
+
+<div class="note">
+  🔌 Tambahkan perpustakaan atau layanan lewat tautan (CDN). Sebutkan nama &amp; sumbernya dengan jelas,
+  mis. <i>"pakai Chart.js dari CDN"</i>.
+</div>
+
+<table>
+  <tr><th>Kebutuhan</th><th>Prompt</th></tr>
+  <tr><td>Grafik &amp; statistik</td><td><code>tampilkan grafik penjualan bulanan pakai Chart.js dari CDN</code></td></tr>
+  <tr><td>Peta</td><td><code>sematkan Google Maps untuk lokasi Jl. Merdeka 10</code></td></tr>
+  <tr><td>WhatsApp</td><td><code>tambahkan tombol WhatsApp mengambang ke nomor 0812xxxx</code></td></tr>
+  <tr><td>Instagram/sosial</td><td><code>tambahkan tautan ke Instagram @tokosaya dan Facebook</code></td></tr>
+  <tr><td>Video</td><td><code>sematkan video YouTube youtube.com/watch?v=xxxx secara responsif</code></td></tr>
+  <tr><td>Kerangka UI</td><td><code>pakai Bootstrap 5 dari CDN untuk tata letaknya</code></td></tr>
+  <tr><td>Tanggal</td><td><code>pakai date picker yang rapi dan mudah dipakai di HP</code></td></tr>
+  <tr><td>Kalender acara</td><td><code>tampilkan kalender bulanan untuk memilih tanggal kunjungan</code></td></tr>
+</table>
+
+<!-- ══════════════ 15. TABEL DATA & DASHBOARD ══════════════ -->
+<h2 id="dashboard"><span class="n">15</span>Tabel Data &amp; Dashboard</h2>
+<p class="lead">Menampilkan banyak data dengan rapi, plus ringkasan angka dan grafik.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Tabel dengan sortir &amp; cari</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat tabel data barang dengan kolom
+Nama, Kategori, Jumlah, Harga.
+Bisa diurutkan per kolom, dicari, dan
+ada halaman (10 baris per halaman).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Ringkasan angka</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Di atas tabel, tampilkan kartu ringkasan:
+total barang, total nilai (rupiah),
+dan jumlah barang dengan stok rendah.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Grafik</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat grafik batang penjualan 6 bulan
+terakhir dan grafik lingkaran kategori
+produk terlaris (pakai Chart.js).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Tambah/ubah/hapus</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Form tambah data, tombol ubah dan hapus
+di tiap baris dengan konfirmasi sebelum
+menghapus. Data langsung terbarui di tabel.</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>Dashboard = desktop.</b> Tabel lebar paling nyaman di layar besar. Minta: <i>"tampilan tabel untuk desktop, dan jadi kartu bertumpuk di HP"</i> (lihat bagian Responsive).</div>
+
+<!-- ══════════════ 16. POLA PROMPT LANJUTAN ══════════════ -->
+<h2 id="pola-lanjutan"><span class="n">16</span>Pola Prompt Lanjutan</h2>
+<p class="lead">Teknik agar hasil makin tepat, terutama untuk situs yang kompleks.</p>
+
+<h3>Iterasi bertahap (dari rencana ke hasil)</h3>
+<div class="prompt"><span class="lbl">Alur terbaik</span>1. Mode Plan: "Rencanakan aplikasi kasir untuk toko kelontong."
+2. Baca &amp; sesuaikan rencananya.
+3. "Jalankan rencana ini." (mode Builder)
+4. "Sekarang tambahkan fitur cetak struk."
+5. "Perbaiki: stok berkurang otomatis setelah transaksi."</div>
+
+<h3>Konteks + permintaan</h3>
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Beri contoh</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat kartu produk seperti gaya marketplace,
+contoh tata letak:
+gambar di atas, nama, harga tebal, tombol
+"Beli" penuh lebar di bawah.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Sebut yang kamu tidak mau</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buat situs minimalis. JANGAN pakai
+warna mencolok, animasi berlebihan,
+atau tata letak yang ramai.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Rujuk bagian spesifik</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Di halaman index.html, bagian hero:
+perbesar judul, tambahkan tombol kedua
+"Lihat Menu" di samping tombol "Pesan".</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Minta perbaikan bertarget</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Tombol "Kirim" tidak berfungsi.
+Cek kenapa dan perbaiki agar form
+tersimpan ke database.</div>
+  </div>
+</div>
+
+<h3>Saat hasil kurang pas</h3>
+<table>
+  <tr><th>Masalah</th><th>Prompt perbaikan</th></tr>
+  <tr><td>Tata letak berantakan</td><td><code>rapikan tata letak bagian layanan: sejajarkan ikon, judul, dan deskripsi dengan rapi</code></td></tr>
+  <tr><td>Warna tidak cocok</td><td><code>ganti aksen kuning jadi biru muda, sisanya tetap</code></td></tr>
+  <tr><td>Terlalu penuh</td><td><code>sederhanakan: tambah jarak antarbagian, kurangi elemen</code></td></tr>
+  <tr><td>Fungsi error</td><td><code>saat tombol diklik tidak terjadi apa-apa. Periksa dan perbaiki</code></td></tr>
+  <tr><td>Belum responsif</td><td><code>di HP tata letaknya rusak. Perbaiki agar rapi di layar kecil</code></td></tr>
+  <tr><td>Ingin variasi</td><td><code>buat 3 pilihan gaya hero, saya pilih salah satu</code></td></tr>
+</table>
+
+<div class="tip">💡 <b>Satu pesan, satu tujuan.</b> Umpan balik pendek &amp; spesifik ("tombol terlalu kecil", "judul kurang tebal") jauh lebih efektif daripada mengulang seluruh permintaan.</div>
+
+<!-- ══════════════ 17. DATABASE ══════════════ -->
+<h2 id="database"><span class="n">17</span>Database — Simpan &amp; Tampilkan Data</h2>
 <p class="lead">Kekuatan utama rakit: situs bisa menyimpan data <b>tanpa server sendiri</b>. AI akan membuat tabelnya otomatis.</p>
 
 <div class="note">
@@ -413,8 +893,8 @@ melihat, mengubah, dan menghapusnya.</div>
 
 <div class="tip">💡 <b>Contoh kombinasi kaya:</b> <i>“Buat toko online sederhana: katalog produk dari database (nama, harga, gambar, stok), keranjang di halaman, dan form checkout yang mengirim pesanan (nama, telp, alamat, item) — pesanan hanya bisa saya lihat.”</i></div>
 
-<!-- ══════════════ 6. INTERAKSI ══════════════ -->
-<h2 id="interaksi"><span class="n">6</span>Interaksi &amp; Fitur JavaScript</h2>
+<!-- ══════════════ 18. INTERAKSI ══════════════ -->
+<h2 id="interaksi"><span class="n">18</span>Interaksi &amp; Fitur JavaScript</h2>
 <p class="lead">Perilaku dinamis: filter, pencarian, keranjang, kalkulator, dan lainnya.</p>
 
 <div class="grid">
@@ -460,8 +940,8 @@ tampilkan pratinjau sebelum dikirim.
 
 <div class="note">💡 <b>Sebutkan perilakunya, bukan teknisnya.</b> “Saat tombol diklik, total langsung berubah” lebih ampuh daripada “pakai addEventListener”. AI yang memilih cara teknisnya.</div>
 
-<!-- ══════════════ 7. CONTOH LENGKAP ══════════════ -->
-<h2 id="contoh"><span class="n">7</span>Contoh Prompt Lengkap (Siap Pakai)</h2>
+<!-- ══════════════ 19. CONTOH LENGKAP ══════════════ -->
+<h2 id="contoh"><span class="n">19</span>Contoh Prompt Lengkap (Siap Pakai)</h2>
 <p class="lead">Tinggal salin, sesuaikan nama &amp; detail, kirim ke mode Builder.</p>
 
 <div class="prompt"><span class="lbl">A · Undangan pernikahan</span>Buat website undangan pernikahan digital untuk Rina &amp; Dimas:
@@ -513,8 +993,8 @@ Gaya modern ungu &amp; putih.</div>
 - Simpan skor terbaik ke database dan tampilkan 5 tertinggi
 Gaya ceria, warna-warni, animasi halus.</div>
 
-<!-- ══════════════ 8. PERBAIKAN ══════════════ -->
-<h2 id="lanjutan"><span class="n">8</span>Memperbaiki &amp; Mengubah</h2>
+<!-- ══════════════ 20. PERBAIKAN ══════════════ -->
+<h2 id="lanjutan"><span class="n">20</span>Memperbaiki &amp; Mengubah</h2>
 <p class="lead">Cara mengoreksi hasil tanpa memulai dari nol.</p>
 
 <table>
@@ -532,8 +1012,8 @@ Gaya ceria, warna-warni, animasi halus.</div>
 
 <div class="note">🔄 <b>Semua perubahan bisa dibatalkan.</b> Di mode Builder, perubahan ditampilkan dengan tombol <b>Simpan / Batalkan</b> sebelum diterapkan. Ada juga riwayat percakapan — buka kembali untuk melanjutkan.</div>
 
-<!-- ══════════════ 9. BATASAN ══════════════ -->
-<h2 id="batasan"><span class="n">9</span>Batasan &amp; Tips Teknis</h2>
+<!-- ══════════════ 21. BATASAN ══════════════ -->
+<h2 id="batasan"><span class="n">21</span>Batasan &amp; Tips Teknis</h2>
 <p class="lead">Yang perlu diketahui agar tidak membentur dinding.</p>
 
 <table>
@@ -548,6 +1028,8 @@ Gaya ceria, warna-warni, animasi halus.</div>
   <tr><td>Operasi database</td><td><span class="badge b-ok">read · create · update · delete</span></td></tr>
   <tr><td>Tipe kolom database</td><td><span class="badge b-ok">text · number · boolean · date</span></td></tr>
   <tr><td>Responsive</td><td><span class="badge b-ok">bawaan responsif</span> · bisa dikunci mobile/desktop saja</td></tr>
+  <tr><td>SEO &amp; pratinjau berbagi</td><td><span class="badge b-warn">harus diminta</span> — AI tidak menambah otomatis</td></tr>
+  <tr><td>Gambar/media</td><td><span class="badge b-warn">lewat tautan</span> — tidak bisa menyimpan file gambar sendiri</td></tr>
 </table>
 
 <div class="grid">
