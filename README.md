@@ -40,9 +40,25 @@ src/
   aiapply.js   menerapkan & membatalkan perubahan Builder di server (dengan snapshot)
   db.js        skema SQLite
 public/        landing page + editor (Monaco dari CDN jsDelivr)
+assets-source/ JS & CSS sumber (yang diedit manusia); hasil minify di public/
 templates/     file awal untuk user baru
 data/          database & file user (dibuat otomatis, jangan di-commit)
 ```
+
+### Aset frontend (JS/CSS)
+
+`public/js` dan `public/css` berisi **hasil minify** — jangan diedit langsung.
+Edit sumbernya di `assets-source/`, lalu bangun ulang:
+
+```bash
+npm install     # sekali saja (memasang esbuild)
+npm run build   # minify assets-source/ -> public/
+```
+
+Server menyisipkan `?v=<hash>` pada referensi aset di HTML dan mengirimnya dengan
+`Cache-Control: immutable`, sehingga pengunjung otomatis memuat versi baru saat
+berkas berubah tanpa perlu membersihkan cache.
+
 
 ## Akun & project
 

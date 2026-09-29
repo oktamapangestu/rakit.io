@@ -1,4 +1,6 @@
 import path from 'node:path';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { config } from './config.js';
@@ -13,6 +15,47 @@ import { google } from './google.js';
 import { USERNAME_RE } from './username.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
+
+// Cache-busting aset: sisipkan ?v=<hash> pada <script src> dan <link href> yang menunjuk
+// ke berkas di /js atau /css. Hash dihitung dari isi berkas, di-cache di memori, dan
+// dihitung ulang otomatis saat berkas berubah (mtime). Tujuannya agar aset bisa dipasang
+// Cache-Control immutable (1 tahun) tanpa risiko pengunjung memakai versi lama.
+const assetVersionCache = new Map();
+function assetVersion(relPath) {
+  const abs = path.join(PUBLIC_DIR, relPath);
+  try {
+    const { mtimeMs } = fs.statSync(abs);
+    const cached = assetVersionCache.get(relPath);
+    if (cached && cached.mtimeMs === mtimeMs) return cached.hash;
+    const hash = crypto.createHash('sha1').update(fs.readFileSync(abs)).digest('hex').slice(0, 10);
+    assetVersionCache.set(relPath, { mtimeMs, hash });
+    return hash;
+  } catch {
+    return null;
+  }
+}
+
+// Ubah referensi aset lokal menjadi ber-versi. Contoh:
+//   /js/editor.js  ->  /js/editor.js?v=ab12cd34ef
+// Hanya menyentuh /js/... dan /css/... (dan tanpa protokol/host).
+function withAssetVersions(html) {
+  return html.replace(/(["'])\/((?:js|css)\/[^"'?#]+)(?:[?#][^"']*)?\1/g, (m, q, rel) => {
+    const v = assetVersion(rel);
+    return v ? `${q}/${rel}?v=${v}${q}` : m;
+  });
+}
+
+function sendHtml(req, res, file, headers = {}) {
+  const abs = path.join(PUBLIC_DIR, file);
+  let html;
+  try {
+    html = withAssetVersions(fs.readFileSync(abs, 'utf8'));
+  } catch {
+    return res.status(404).send('Not found');
+  }
+  res.set({ 'Content-Type': 'text/html; charset=utf-8', ...headers });
+  res.send(html);
+}
 
 const app = express();
 app.disable('x-powered-by');
@@ -54,23 +97,34 @@ app.use('/api', api);
 
 app.get('/', (req, res) => {
   if (req.user) return res.redirect('/editor');
-  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+  sendHtml(req, res, 'index.html', { 'Cache-Control': 'no-cache' });
 });
 
 app.get('/editor', (req, res) => {
   if (!req.user) return res.redirect('/');
-  res.set('Cache-Control', 'no-store');
-  res.sendFile(path.join(PUBLIC_DIR, 'editor.html'));
+  sendHtml(req, res, 'editor.html', { 'Cache-Control': 'no-store' });
 });
 
 app.get('/admin', (req, res) => {
   if (!req.user) return res.redirect('/');
   if (!isAdmin(req.user)) return res.redirect('/editor');
-  res.set('Cache-Control', 'no-store');
-  res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
+  sendHtml(req, res, 'admin.html', { 'Cache-Control': 'no-store' });
 });
 
-app.use(express.static(PUBLIC_DIR, { index: false }));
+// Aset statis (/js, /css, /logo.svg ...). Karena nama berkas BER-VERSI (?v=hash) dari
+// sendHtml, aman dipasang cache panjang + immutable: pengunjung tak perlu revalidasi,
+// dan saat berkas berubah hash ikut berubah sehingga otomatis termuat ulang.
+app.use(express.static(PUBLIC_DIR, {
+  index: false,
+  etag: true,
+  lastModified: true,
+  maxAge: '1y',
+  immutable: true,
+  setHeaders(res, filePath) {
+    // HTML tetap no-cache agar selalu segar; hanya aset yang boleh panjang.
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
