@@ -2554,7 +2554,6 @@
       const free = data.credits;
       const freeStore = data.free?.storage;
       const times = (a, b) => (a && b && a / b >= 1.5 ? `${Math.round(a / b)}×` : null);
-      const perDay = (price) => rupiah(Math.round(price / 30 / 100) * 100);
       const CHECK = 'M6.2 11.6 2.9 8.3l-.9.9 4.2 4.2 8-8-.9-.9z';
       const RIBBON = { pro: 'Paling populer', unlimited: 'Paling lega' };
 
@@ -2571,7 +2570,6 @@
         RIBBON[plan.id] ? h('span', { class: 'promo-ribbon' }, RIBBON[plan.id]) : null,
         h('div', { class: 'promo-name' }, plan.name),
         h('div', { class: 'promo-price' }, rupiah(plan.price), h('span', {}, '/30 hari')),
-        h('div', { class: 'promo-perday' }, `≈ ${perDay(plan.price)} per hari`),
         h('ul', { class: 'promo-features' }, features(plan).map(([text, mult]) => h('li', {},
           svg(CHECK), h('span', {}, text), mult ? h('b', { class: 'promo-mult', title: 'dibanding paket Gratis' }, mult) : null))),
         h('button', { type: 'button', class: 'promo-cta', onclick: () => startPayment({ planId: plan.id }) }, `Mulai ${plan.name}`)));
@@ -2583,7 +2581,7 @@
           h('span', { class: 'promo-orb a' }), h('span', { class: 'promo-orb b' }),
           h('span', { class: 'promo-kicker' }, svg(SPARK), 'Upgrade rakit.icu'),
           h('h2', {}, 'Bangun lebih banyak, lebih cepat.'),
-          h('p', {}, `Kredit AI berlimpah, storage lega, dan upload gambar lebih besar — mulai ${perDay(Math.min(...data.plans.map((p) => p.price)))} per hari.`),
+          h('p', {}, 'Kredit AI berlimpah, storage lega, dan upload gambar lebih besar.'),
           free.limit
             ? h('div', { class: `promo-today${left ? '' : ' empty'}` },
               h('span', {}, left ? `Kredit gratis hari ini tinggal ${left} dari ${free.limit}` : `Kredit gratis hari ini (${free.limit}) sudah habis`),

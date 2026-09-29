@@ -1180,8 +1180,6 @@ button.credit-badge:disabled { cursor: default; }
 .promo-name { color: var(--white); font-size: 16px; font-weight: 800; }
 .promo-price { margin-top: 6px; color: var(--white); font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .promo-price span { margin-left: 4px; color: var(--muted); font-size: 13px; font-weight: 500; letter-spacing: 0; }
-.promo-perday { margin-top: 2px; color: #a5b4fc; font-size: 12.5px; font-weight: 600; }
-.promo-card.unlimited .promo-perday { color: #fcd34d; }
 .promo-features { flex: 1; display: grid; gap: 8px; margin: 16px 0 18px; padding: 0; list-style: none; font-size: 13px; }
 .promo-features li { display: flex; align-items: center; gap: 8px; color: var(--text); }
 .promo-features li > span { flex: 1; }
