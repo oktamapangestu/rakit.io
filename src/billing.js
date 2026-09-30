@@ -58,6 +58,7 @@ async function paymentView(payment) {
     status: payment.status,
     credits: payment.credits,
     plan: payment.package_id.startsWith('plan:') ? planFromPackageId(payment.package_id)?.name ?? null : null,
+    assistant: payment.package_id.startsWith('asst:'), // isi ulang Saldo Asisten (nominal = amount)
     amount: payment.amount,
     expiresAt: payment.expires_at,
     checkoutUrl: payment.checkout_url,
@@ -82,6 +83,7 @@ billing.get('/packages', (req, res) => {
     livemode: config.billing.livemode,
     packages: config.billing.packages,
     plans: publicPlans(),
+    assistantPackages: config.assistant.packages,
     free: { storage: freeStorage, history: freeHistory }, // pembanding "× lipat" di promosi langganan
     credits: creditInfo(req.user.id),
   });
@@ -137,6 +139,13 @@ billing.post('/topup', async (req, res) => {
   const pkg = config.billing.packages.find((p) => p.id === req.body?.packageId);
   if (!pkg) throw new HttpError(400, 'Paket tidak ditemukan');
   await createPayment(req, res, { packageId: pkg.id, credits: pkg.credits, price: pkg.price, label: `${pkg.credits} kredit AI` });
+});
+
+// Isi ulang Saldo Asisten AI website (Rupiah dibayar = saldo yang didapat).
+billing.post('/assistant-topup', async (req, res) => {
+  const pkg = config.assistant.packages.find((p) => p.id === req.body?.packageId);
+  if (!pkg) throw new HttpError(400, 'Paket saldo asisten tidak ditemukan');
+  await createPayment(req, res, { packageId: pkg.id, credits: 0, price: pkg.amount, label: `Saldo Asisten AI ${pkg.amount.toLocaleString('id-ID')}` });
 });
 
 billing.post('/subscribe', async (req, res) => {

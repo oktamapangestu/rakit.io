@@ -10,6 +10,7 @@ import { diagrams } from './diagrams.js';
 import { admin, isAdmin } from './admin.js';
 import { createProject, loadProject, projects, publicProject, slugTaken } from './projects.js';
 import { autoVersionBeforeEdit, versions } from './versions.js';
+import { assistant } from './assistant.js';
 import {
   clearSessionCookie, createSession, destroySession, hashPassword, rateLimit,
   requireAuth, requireSameOrigin, setSessionCookie, verifyPassword,
@@ -152,6 +153,7 @@ api.use('/ai', ai);
 api.use('/billing', billing);
 api.use('/database', database);
 api.use('/versions', versions);
+api.use('/assistant', assistant);
 api.use('/diagrams', diagrams);
 api.use('/admin', admin);
 

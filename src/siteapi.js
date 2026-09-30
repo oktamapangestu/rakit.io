@@ -2,6 +2,7 @@ import express from 'express';
 import { HttpError } from './http-error.js';
 import { rateLimit } from './auth.js';
 import * as userdb from './userdb.js';
+import { siteAssistant } from './assistant.js';
 
 // API publik di domain user: https://<user>.rakit.icu/api/db/<tabel>
 // Hanya operasi yang dibuka "Publik" oleh pemilik di editor database yang boleh dipakai.
@@ -53,6 +54,9 @@ siteApi.delete('/api/db/:table/:id', (req, res) => {
   userdb.deleteRow(req.siteUser, table.name, req.params.id);
   res.json({ ok: true });
 });
+
+// Asisten AI website: /api/ai/chat, /api/ai/config, /api/ai/widget.js
+siteApi.use('/api/ai', siteAssistant);
 
 // Seluruh /api/ di domain user dicadangkan untuk sistem (tahap berikutnya: serverless function).
 siteApi.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan' }));

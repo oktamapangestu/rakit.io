@@ -50,6 +50,12 @@ export const config = {
       return { id: `p${credits}`, credits, price };
     }).filter((p) => p.credits > 0 && p.price > 0),
   },
+  // Asisten AI untuk website pengguna: paket isi ulang saldo (Rupiah), dipisah koma.
+  assistant: {
+    packages: (env.ASSISTANT_PACKAGES || '10000,25000,50000').split(',').map(Number)
+      .filter((n) => Number.isInteger(n) && n >= 1000)
+      .map((amount) => ({ id: `asst:${amount}`, amount })),
+  },
   // Langganan 30 hari. Kosongkan harga (PLAN_PRO=) untuk menyembunyikan paket.
   plans: {
     pro: planEnv(env.PLAN_PRO ?? '49000:300', 'credits'), // harga:kredit per 30 hari

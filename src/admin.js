@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { db } from './db.js';
 import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
+import { adminAssistantView, saveAssistantSettings, setSiteBlocked } from './assistant.js';
 import { queueStats } from './aiqueue.js';
 import {
   FREE_DAILY_MAX, FREE_BONUS_MAX, freeBonusCredits, freeDailyCredits, getPlan, modelCost, PLAN_IDS, PLAN_LIMITS, planSettings,
@@ -116,6 +117,17 @@ function plansView() {
 }
 
 admin.get('/plans', (req, res) => res.json(plansView()));
+
+// Asisten AI website: model (aktif/nonaktif, harga), saldo percobaan, website pemakai & blokir.
+admin.get('/assistant', (req, res) => res.json(adminAssistantView()));
+admin.put('/assistant', express.json(), (req, res) => {
+  saveAssistantSettings({ models: req.body?.models, trial: req.body?.trial });
+  res.json(adminAssistantView());
+});
+admin.post('/assistant/block', express.json(), (req, res) => {
+  setSiteBlocked(req.body?.slug, req.body?.blocked);
+  res.json(adminAssistantView());
+});
 
 admin.put('/plans', express.json(), (req, res) => {
   const body = req.body ?? {};

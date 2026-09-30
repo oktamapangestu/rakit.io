@@ -25,6 +25,7 @@ const BASE = {
     quotaKey: 'credits', // kredit AI per 30 hari
     storage: { totalSize: 100 * MB, entries: 2000, dbBytes: 50 * MB, imageSize: 5 * MB },
     history: { days: 30, max: 200 },
+    assistant: 10_000, // saldo asisten AI website (Rupiah) per siklus 30 hari
   },
   unlimited: {
     id: 'unlimited',
@@ -32,6 +33,7 @@ const BASE = {
     quotaKey: 'dailyLimit', // prompt per hari (WIB)
     storage: { totalSize: 250 * MB, entries: 5000, dbBytes: 100 * MB, imageSize: 10 * MB },
     history: { days: 90, max: 2000 },
+    assistant: 30_000,
   },
 };
 export const PLAN_IDS = Object.keys(BASE);
@@ -143,7 +145,7 @@ export function getPlan(id, settings = planSettings()) {
   if (!Object.hasOwn(BASE, id)) return null;
   const base = BASE[id];
   const { price, quota, enabled } = settings[id];
-  return { id, name: base.name, price, enabled, [base.quotaKey]: quota, storage: base.storage, history: base.history };
+  return { id, name: base.name, price, enabled, [base.quotaKey]: quota, storage: base.storage, history: base.history, assistant: base.assistant };
 }
 
 // Paket nonaktif tetap berlaku untuk pelanggan yang sudah membayar, hanya tidak bisa dibeli.
@@ -244,5 +246,6 @@ export function publicPlans() {
     dailyLimit: p.dailyLimit ?? null,
     storage: p.storage,
     history: p.history,
+    assistant: p.assistant,
   }));
 }

@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { db, q } from './db.js';
+import { addAssistantBalance, isAssistantPackage } from './assistant.js';
 import { HttpError } from './http-error.js';
 import { activatePlan, activePlan, cycleOf, dayOf, freeBonusCredits, freeDailyCredits, planFromPackageId, wibDay } from './plans.js';
 
@@ -118,6 +119,7 @@ export function creditPayment(payment, paidAt) {
     if (changes === 1) {
       const plan = planFromPackageId(payment.package_id);
       if (payment.package_id.startsWith('plan:') && plan) activatePlan(payment.user_id, plan);
+      else if (isAssistantPackage(payment.package_id)) addAssistantBalance(payment.user_id, payment.amount);
       else q.addBalance.run(payment.user_id, payment.credits);
     }
     db.exec('COMMIT');

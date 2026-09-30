@@ -753,6 +753,7 @@
       '-',
       { label: 'Salin URL website', run: () => copyText(state.project.siteUrl) },
       { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
+      { label: 'Asisten AI website', hint: 'baru', run: openAssistant },
       ai.credits?.topupEnabled && { label: 'Langganan & kredit AI', hint: ai.credits.plan?.name, run: () => openTopup('plans') },
       state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
       '-',
@@ -3027,6 +3028,162 @@
     }
   }
 
+  // ---------- Asisten AI untuk website pengguna ----------
+  const WIDGET_TAG = '<script src="/api/ai/widget.js" defer></script>';
+  const INSTRUCTION_EXAMPLE = [
+    'Kamu adalah customer service Toko Kue Bu Sri.',
+    '- Produk: bolu pandan Rp45.000, brownies Rp50.000, kue lapis Rp60.000.',
+    '- Pesan lewat WhatsApp 0812-3456-7890, minimal H-1.',
+    '- Buka Senin–Sabtu, 08.00–17.00. Kirim area Bandung saja.',
+    'Jawab ramah dan singkat. Kalau ditanya hal di luar toko, arahkan kembali ke produk kami.',
+  ].join('\n');
+
+  async function openAssistant() {
+    const root = $('#modal');
+    const body = h('div', { class: 'modal assistant-modal', role: 'dialog', 'aria-label': 'Asisten AI website' });
+    const close = () => {
+      root.hidden = true;
+      root.replaceChildren();
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => { if (e.key === 'Escape' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); close(); } };
+    root.replaceChildren(body);
+    root.hidden = false;
+    root.onmousedown = (e) => { if (e.target === root) close(); };
+    document.addEventListener('keydown', onKey, true);
+
+    const head = h('div', { class: 'topup-head' },
+      h('div', {}, h('h3', {}, 'Asisten AI untuk websitemu'),
+        h('p', {}, 'Pengunjung websitemu bisa bertanya kapan saja, dan dijawab AI sesuai instruksimu.')),
+      h('button', { class: 'icon-btn', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close)));
+    body.replaceChildren(head, h('div', { class: 'topup-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Memuat…'));
+
+    let data;
+    try {
+      data = await api('GET', '/api/assistant');
+    } catch (err) {
+      return body.replaceChildren(head, h('p', { class: 'topup-error' }, err.message));
+    }
+    if (!data.available || !data.models.length) {
+      return body.replaceChildren(head, h('p', { class: 'topup-error' }, 'Asisten AI belum tersedia di server ini.'));
+    }
+    const s = data.settings;
+
+    // --- Status & saldo
+    const enabled = h('input', { type: 'checkbox', checked: s.enabled });
+    const wallet = data.wallet;
+    const statusRow = h('div', { class: 'asst-status' },
+      h('label', { class: 'switch asst-switch' }, enabled, h('span', { class: 'track' }, h('span', { class: 'thumb' })),
+        h('span', {}, h('strong', {}, 'Aktifkan asisten'), h('small', {}, 'Kalau mati, gelembung chat tidak muncul di websitemu.'))),
+      s.blocked ? h('span', { class: 'asst-pill bad' }, 'Diblokir admin') : null);
+    const balance = h('div', { class: 'asst-balance' },
+      h('div', {},
+        h('span', { class: 'asst-label' }, 'Saldo asisten'),
+        h('strong', {}, rupiah(Math.floor(wallet.available))),
+        h('small', {}, wallet.allowance
+          ? `Termasuk jatah ${wallet.allowance.plan} ${rupiah(Math.floor(wallet.allowance.remaining))} (terisi lagi ${shortDate(wallet.allowance.resetsAt)}) + saldo ${rupiah(Math.floor(wallet.balance))}`
+          : 'Dipakai setiap kali asisten menjawab. Saldo tidak hangus.')),
+      data.packages.length
+        ? h('button', { type: 'button', class: 'asst-topup', onclick: () => { close(); openTopup('assistant', { after: openAssistant }); } }, 'Isi saldo')
+        : null);
+
+    // --- Pilihan model
+    let modelKey = s.modelKey;
+    const modelCards = data.models.map((m) => h('button', {
+      type: 'button',
+      class: 'asst-model',
+      onclick: () => { modelKey = m.key; markModels(); },
+    },
+    h('span', { class: 'asst-tier' }, m.tier || m.name),
+    h('strong', {}, m.name),
+    h('span', { class: 'asst-price' }, `≈ ${rupiah(m.perMessage)} per jawaban`),
+    h('small', {}, `≈ ${rupiah(m.per1k)} per 1.000 jawaban`)));
+    const markModels = () => modelCards.forEach((c, i) => c.classList.toggle('selected', data.models[i].key === modelKey));
+    markModels();
+
+    // --- Isian
+    const nameInput = h('input', { value: s.name, maxlength: '40', placeholder: 'mis. Sri, CS Toko Kue' });
+    const greetInput = h('input', { value: s.greeting, maxlength: '200' });
+    const instr = h('textarea', { rows: '7', maxlength: '4000', placeholder: INSTRUCTION_EXAMPLE });
+    instr.value = s.instructions;
+    const capInput = h('input', { type: 'number', min: '100', step: '500', value: String(s.dailyCap) });
+    const field = (label, input, hint, extra) => h('label', { class: 'asst-field' },
+      h('span', {}, label, extra ?? null), input, hint ? h('small', {}, hint) : null);
+
+    // --- Pemakaian 7 hari
+    const maxMsg = Math.max(1, ...data.usage.map((u) => u.messages));
+    const usage = h('div', { class: 'asst-usage' },
+      h('div', { class: 'asst-bars' }, data.usage.map((u) => h('span', {
+        class: 'bar',
+        title: `${new Date(`${u.day}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}: ${u.messages} jawaban · ${rupiah(u.spent)}`,
+      }, h('i', { style: `height:${Math.max(4, (u.messages / maxMsg) * 100)}%` })))),
+      h('small', {}, `7 hari terakhir: ${data.usage.reduce((n, u) => n + u.messages, 0)} jawaban · ${rupiah(Math.round(data.usage.reduce((n, u) => n + u.spent, 0)))}`));
+
+    // --- Cara pasang
+    const install = h('div', { class: 'asst-install' },
+      h('p', {}, 'Tempel baris ini sebelum ', h('code', {}, '</body>'), ' di halaman yang ingin punya asisten, atau minta AI: “tambahkan asisten chat di websiteku”.'),
+      h('div', { class: 'snippet' },
+        h('code', {}, WIDGET_TAG),
+        h('button', { type: 'button', onclick: () => copyText(WIDGET_TAG, 'Kode disalin') }, 'Salin')),
+      h('button', { type: 'button', class: 'link-btn', onclick: installWidget }, 'Pasang otomatis di index.html'));
+
+    const status = h('span', { class: 'asst-save-status' });
+    const saveBtn = h('button', { type: 'submit', class: 'primary' }, 'Simpan');
+    const form = h('form', { class: 'asst-form', onsubmit: async (e) => {
+      e.preventDefault();
+      saveBtn.disabled = true;
+      status.textContent = 'Menyimpan…';
+      try {
+        await api('PUT', '/api/assistant', {
+          enabled: enabled.checked, modelKey, name: nameInput.value, greeting: greetInput.value,
+          instructions: instr.value, dailyCap: Number(capInput.value),
+        });
+        status.textContent = 'Tersimpan ✓';
+        toast(enabled.checked ? 'Asisten aktif di websitemu' : 'Pengaturan asisten disimpan');
+        schedulePreviewReload();
+      } catch (err) {
+        status.textContent = '';
+        toast(err.message, 'error');
+      } finally {
+        saveBtn.disabled = false;
+      }
+    } },
+    statusRow,
+    balance,
+    h('h4', {}, 'Pilih otak asistennya'),
+    s.modelFallback ? h('p', { class: 'asst-note' }, 'Model yang kamu pilih sebelumnya sedang tidak tersedia, jadi sementara asisten memakai model di bawah yang ditandai. Simpan untuk memakainya seterusnya.') : null,
+    h('div', { class: 'asst-models' }, modelCards),
+    h('h4', {}, 'Kenalkan asistenmu'),
+    h('div', { class: 'asst-grid' },
+      field('Nama asisten', nameInput),
+      field('Sapaan pembuka', greetInput)),
+    field('Apa yang perlu diketahui asisten?', instr,
+      'Tulis info usaha/websitemu: produk, harga, jam buka, cara pesan, dan gaya bicara. Asisten hanya menjawab berdasarkan ini.',
+      h('button', { type: 'button', class: 'link-btn', onclick: () => { instr.value = INSTRUCTION_EXAMPLE; instr.focus(); } }, 'Pakai contoh')),
+    field('Batas pemakaian per hari (Rp)', capInput, 'Supaya saldo aman walau websitemu tiba-tiba ramai. Asisten berhenti sampai besok kalau batas tercapai.'),
+    h('h4', {}, 'Pemakaian'),
+    usage,
+    h('h4', {}, 'Pasang di websitemu'),
+    install,
+    h('div', { class: 'modal-buttons' }, status, h('button', { type: 'button', onclick: close }, 'Tutup'), saveBtn));
+    body.replaceChildren(head, form);
+
+    // Sisipkan tag widget sebelum </body> di index.html (kalau belum ada).
+    async function installWidget() {
+      try {
+        await saveAll();
+        const { content } = await api('GET', '/api/files/content?path=index.html');
+        if (content.includes('/api/ai/widget.js')) return toast('Asisten sudah terpasang di index.html');
+        const next = /<\/body>/i.test(content) ? content.replace(/<\/body>/i, `  ${WIDGET_TAG}\n</body>`) : `${content}\n${WIDGET_TAG}\n`;
+        await api('PUT', '/api/files/content', { path: 'index.html', content: next });
+        await syncFromServer(['index.html']);
+        toast(enabled.checked ? 'Asisten dipasang di index.html' : 'Dipasang. Jangan lupa aktifkan & simpan.');
+      } catch (err) {
+        toast(err.message.includes('tidak ditemukan') ? 'index.html tidak ada. Tempel kodenya manual di halamanmu.' : err.message, 'error');
+      }
+    }
+  }
+
   // ---------- Langganan & isi ulang kredit (QRIS) ----------
   const rupiah = (n) => `Rp${n.toLocaleString('id-ID')}`;
   const shortDate = (iso) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -3035,7 +3192,8 @@
 
   // tab: 'plans' (langganan) | 'credits' (paket kredit). Default: langganan kalau belum berlangganan.
   // intro: tampilan sambutan saat editor pertama kali dibuka (ada tombol "Nanti saja").
-  function openTopup(tab, { intro = false } = {}) {
+  // tab 'assistant': isi ulang Saldo Asisten AI website; `after` dipanggil setelah modal ditutup dari layar sukses.
+  function openTopup(tab, { intro = false, after = null } = {}) {
     const root = $('#modal');
     const body = h('div', { class: 'modal topup-modal', role: 'dialog', 'aria-label': 'Langganan & kredit AI' });
     let pollTimer;
@@ -3087,6 +3245,12 @@
       if (closed) return;
       ai.credits = data.credits;
       renderCredits();
+      if (tab === 'assistant') {
+        if (!data.enabled || !data.assistantPackages?.length) {
+          return body.replaceChildren(head('Isi saldo asisten'), h('p', { class: 'topup-error' }, 'Pembayaran belum tersedia saat ini.'));
+        }
+        return showAssistantPackages();
+      }
       if (!data.enabled || (!data.packages.length && !data.plans.length)) {
         return body.replaceChildren(head('Langganan & kredit AI'),
           h('p', { class: 'topup-error' }, 'Pembayaran belum tersedia saat ini.'));
@@ -3129,6 +3293,7 @@
         [`Gambar hingga ${mb(plan.storage.imageSize)} per file`, times(plan.storage.imageSize, freeStore?.imageSize)],
         [`${plan.storage.entries.toLocaleString('id-ID')} file & folder`, times(plan.storage.entries, freeStore?.entries)],
         [`Riwayat versi ${plan.history.days} hari`, times(plan.history.days, data.free?.history?.days)],
+        ...(plan.assistant ? [[`Saldo asisten AI website ${rupiah(plan.assistant)}/30 hari`, null]] : []),
       ];
       const cards = data.plans.map((plan, i) => h('div', { class: `promo-card ${plan.id}`, style: `--delay:${120 + i * 90}ms` },
         RIBBON[plan.id] ? h('span', { class: 'promo-ribbon' }, RIBBON[plan.id]) : null,
@@ -3174,6 +3339,7 @@
         `Database ${mb(plan.storage.dbBytes)} per project`,
         `Upload gambar hingga ${mb(plan.storage.imageSize)} per file`,
         `Riwayat versi ${plan.history.days} hari`,
+        plan.assistant ? `Saldo asisten AI website ${rupiah(plan.assistant)} / 30 hari` : null,
         `Maks. ${plan.storage.entries.toLocaleString('id-ID')} file & folder`,
       ];
       const cards = data.plans.map((plan) => {
@@ -3183,7 +3349,7 @@
         return h('div', { class: `plan-card${isCurrent ? ' current' : ''}${plan.id === 'unlimited' ? ' featured' : ''}` },
           h('div', { class: 'plan-name' }, plan.name, isCurrent ? h('span', { class: 'plan-tag' }, 'Aktif') : null),
           h('div', { class: 'plan-price' }, rupiah(plan.price), h('span', {}, ' / 30 hari')),
-          h('ul', { class: 'plan-features' }, features(plan).map((text) => h('li', {}, text))),
+          h('ul', { class: 'plan-features' }, features(plan).filter(Boolean).map((text) => h('li', {}, text))),
           h('button', {
             type: 'button',
             class: lower ? '' : 'primary',
@@ -3245,13 +3411,37 @@
       ].filter(Boolean)); // replaceChildren() bawaan browser menulis null sebagai teks "null"
     }
 
+    // Paket isi ulang Saldo Asisten AI (Rupiah dibayar = saldo yang didapat).
+    function showAssistantPackages() {
+      let selected = data.assistantPackages[Math.min(1, data.assistantPackages.length - 1)];
+      const cards = data.assistantPackages.map((pkg) => h('button', {
+        type: 'button',
+        class: 'pkg',
+        onclick: () => { selected = pkg; mark(); },
+      },
+      h('span', { class: 'pkg-credits' }, rupiah(pkg.amount)),
+      h('span', { class: 'pkg-label' }, 'saldo asisten')));
+      const mark = () => cards.forEach((card, i) => card.classList.toggle('selected', data.assistantPackages[i] === selected));
+      mark();
+      body.replaceChildren(...[
+        head('Isi saldo asisten AI', 'Saldo dipakai setiap kali asisten menjawab pengunjung websitemu. Saldo tidak hangus.'),
+        h('div', { class: 'pkg-grid' }, cards),
+        data.livemode ? null : h('p', { class: 'topup-test' }, 'Mode uji coba — tidak ada uang sungguhan yang ditarik.'),
+        h('div', { class: 'modal-buttons' },
+          h('button', { type: 'button', onclick: close }, 'Batal'),
+          h('button', { type: 'button', class: 'primary', onclick: () => startPayment({ assistantPackageId: selected.id }) }, 'Bayar dengan QRIS')),
+      ].filter(Boolean));
+    }
+
     async function startPayment(item) {
       setPromoLayout(false);
       body.replaceChildren(head('Pembayaran'), loadingView('Membuat kode QRIS…'));
       try {
         const { payment } = item.planId
           ? await api('POST', '/api/billing/subscribe', { planId: item.planId })
-          : await api('POST', '/api/billing/topup', { packageId: item.packageId });
+          : item.assistantPackageId
+            ? await api('POST', '/api/billing/assistant-topup', { packageId: item.assistantPackageId })
+            : await api('POST', '/api/billing/topup', { packageId: item.packageId });
         if (!closed) showPayment(payment);
       } catch (err) {
         if (!closed) body.replaceChildren(head('Pembayaran'), ...errorView(err.message));
@@ -3266,7 +3456,7 @@
         : h('div', { class: 'qr qr-missing' }, 'Kode QR tidak tersedia. Gunakan halaman pembayaran.');
 
       body.replaceChildren(
-        head('Scan untuk membayar', payment.plan ? `Langganan ${payment.plan} 30 hari` : `${payment.credits} kredit AI`),
+        head('Scan untuk membayar', payment.plan ? `Langganan ${payment.plan} 30 hari` : payment.assistant ? `Saldo Asisten AI ${rupiah(payment.amount)}` : `${payment.credits} kredit AI`),
         h('div', { class: 'pay-body' },
           h('div', { class: 'qr-card' },
             h('div', { class: 'qris-label' }, 'QRIS'),
@@ -3282,7 +3472,7 @@
             status,
             payment.checkoutUrl ? h('a', { class: 'pay-link', href: payment.checkoutUrl, target: '_blank', rel: 'noopener' }, 'Buka halaman pembayaran ↗') : null)),
         h('div', { class: 'modal-buttons' },
-          h('button', { type: 'button', onclick: () => { tab = payment.plan ? 'plans' : 'credits'; showPackages(); } }, 'Ganti paket'),
+          h('button', { type: 'button', onclick: () => { tab = payment.plan ? 'plans' : payment.assistant ? 'assistant' : 'credits'; showPackages(); } }, 'Ganti paket'),
           h('button', { type: 'button', onclick: close }, 'Tutup')),
       );
 
@@ -3319,13 +3509,18 @@
         head('Pembayaran berhasil'),
         h('div', { class: 'topup-result ok' },
           h('div', { class: 'result-icon' }, '✓'),
-          payment.plan
+          payment.assistant
+            ? [h('h4', {}, `+${rupiah(payment.amount)} saldo asisten`),
+              h('p', {}, 'Asisten di websitemu siap menjawab pengunjung. Terima kasih!')]
+            : payment.plan
             ? [h('h4', {}, `${plan?.name ?? payment.plan} aktif`),
               h('p', {}, plan ? `Berlaku sampai ${shortDate(plan.expiresAt)}. Bonus storage sudah aktif di semua project-mu. Terima kasih!` : 'Terima kasih!')]
             : [h('h4', {}, `+${payment.credits} kredit ditambahkan`),
               h('p', {}, `Sisa kreditmu sekarang ${credits?.remaining ?? ''} kredit. Terima kasih!`)]),
         h('div', { class: 'modal-buttons' },
-          h('button', { type: 'button', class: 'primary', onclick: () => { close(); setMode('ai'); } }, 'Lanjut pakai AI')),
+          payment.assistant
+            ? h('button', { type: 'button', class: 'primary', onclick: () => { close(); after?.(); } }, 'Kembali ke pengaturan asisten')
+            : h('button', { type: 'button', class: 'primary', onclick: () => { close(); setMode('ai'); } }, 'Lanjut pakai AI')),
       );
     }
 

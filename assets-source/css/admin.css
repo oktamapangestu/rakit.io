@@ -268,3 +268,29 @@ td a:hover { color: var(--white); text-decoration: underline; }
   .plan-fields, .plan-cost, .plan-free { grid-template-columns: 1fr; }
   .plan-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- Asisten AI website ---------- */
+.model-table input {
+  width: 100%;
+  min-width: 70px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--white);
+  font: 13px var(--ui);
+}
+.model-table input.mono { font-family: var(--mono); font-size: 12px; min-width: 120px; }
+.model-table input[type="checkbox"] { width: 16px; height: 16px; min-width: 0; accent-color: var(--accent); }
+.model-table input:focus { outline: none; border-color: var(--accent); }
+.model-table tr.off input:not([type="checkbox"]) { opacity: 0.55; }
+.num-cell { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.row-del { width: 28px; height: 28px; border: 1px solid var(--line-2); border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.row-del:hover { color: #fca5a5; border-color: #fca5a5; }
+.model-actions { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 12px 0 4px; }
+.ghost-btn { height: 34px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel-2); color: var(--text); font: 600 13px var(--ui); cursor: pointer; }
+.ghost-btn:hover { color: var(--white); border-color: var(--faint); }
+.ghost-btn.small { height: 28px; padding: 0 10px; font-size: 12px; }
+.field.inline { max-width: 240px; }
+.sub-title { margin: 22px 0 10px; color: var(--white); font-size: 14px; }

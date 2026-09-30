@@ -30,6 +30,7 @@ src/
   credits.js   kredit AI: kuota langganan, jatah gratis harian, saldo yang dibeli
   billing.js   isi ulang kredit & langganan via QRIS (Kasera Pay) + webhook
   plans.js     paket langganan Pro/Unlimited: kuota AI & bonus storage
+  assistant.js asisten AI untuk website pengguna: saldo, model, proxy /api/ai/chat, widget
   versions.js  riwayat versi file project: simpan otomatis/manual, bandingkan, kembalikan
   userdb.js    database per proyek (SQLite), validasi & aturan akses
   database.js  API editor database (khusus pemilik)
@@ -164,6 +165,32 @@ otomatis, dan bisa diperpanjang kapan saja. Paket dibuka dari badge kredit AI at
   makin besar ditolak sampai pemakaian turun di bawah batas (mengecilkan/menghapus file tetap bisa).
 - Data di tabel `subscriptions` (satu baris per user); pembayarannya di `payments` dengan `package_id = 'plan:<id>'`.
   Batas storage per paket diatur di `src/plans.js`.
+
+## Asisten AI untuk website pengguna
+
+Pemilik website bisa memasang **chatbot AI** untuk pengunjungnya, memakai AI dari rakit.icu (gateway
+`AI_BASE_URL`/`AI_API_KEY`) dan dibayar dari **Saldo Asisten** dalam Rupiah. API key tidak pernah sampai ke browser.
+
+- **Editor** → menu avatar → **Asisten AI website**: aktifkan, pilih model (ditampilkan "≈ Rp per jawaban"),
+  nama & sapaan, instruksi (info usaha yang boleh dijawab), batas pemakaian per hari, isi saldo (QRIS), grafik
+  pemakaian 7 hari, dan tombol pasang otomatis. Pengaturan per project.
+- **Pasang di halaman:** `<script src="/api/ai/widget.js" defer></script>` (gelembung chat; opsi `data-color`,
+  `data-position="left"`, `data-open="true"`; `rakitAssistant.open()`). Atau panggil sendiri
+  `POST /api/ai/chat` dengan `{ messages: [{ role, content }] }` → `{ reply }` (`stream: true` → NDJSON
+  `{type:"delta",text}` … `{type:"done"}`). AI Builder tahu cara memasangnya.
+- **Biaya:** token sebenarnya (laporan provider) × biaya model per 1 juta token × margin. Dana dicadangkan dulu
+  sebesar perkiraan, lalu diselesaikan ke biaya sebenarnya. Urutan dana: **jatah asisten dari langganan**
+  (Pro Rp10.000, Unlimited Rp30.000 per siklus 30 hari, `assistant` di `src/plans.js`) → **saldo** (saldo
+  percobaan sekali per akun + isi ulang, tidak hangus). Isi ulang lewat `ASSISTANT_PACKAGES`.
+- **Dashboard owner** → kartu *Asisten AI website*: daftar model (aktif/nonaktif, ID model di gateway, biaya,
+  margin, perkiraan harga jual & modal per jawaban), tambah/hapus model, saldo percobaan, dan daftar website
+  pemakai dengan tombol **Blokir**. Model yang dinonaktifkan otomatis diganti model aktif pertama di website yang
+  memakainya (pemilik diberi tahu). Default awal: DeepSeek V4.1 Flash & Pro — **cek ID model & biayanya**.
+- **Pengaman:** hanya menerima permintaan dari halaman website itu sendiri (header Origin), 30 pesan/jam per
+  pengunjung, 60 pesan/menit per website, batas harian per website (Rupiah), maks. 20 pesan riwayat & 2.000
+  karakter per pesan, jawaban maks. 800 token, instruksi dasar dikunci di server (tetap pada topik website,
+  tidak membocorkan instruksi), antrean sendiri (6 bersamaan) terpisah dari AI Builder.
+- Tabel: `assistant_wallet`, `assistant_allowance`, `assistant_sites`, `assistant_usage` (dibuat otomatis).
 
 ## Riwayat versi
 

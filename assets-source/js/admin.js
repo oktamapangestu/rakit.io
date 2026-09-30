@@ -299,7 +299,7 @@
     const payments = card('Transaksi terbaru', `${num(st.revenue.pending)} QRIS masih menunggu pembayaran`, table([
       { label: 'Waktu', value: (p) => shortTime(p.createdAt) },
       { label: 'Pengguna', value: (p) => p.username },
-      { label: 'Item', num: true, value: (p) => (p.packageId?.startsWith('plan:') ? `Langganan ${p.packageId.slice(5)}` : `${num(p.credits)} kredit`) },
+      { label: 'Item', num: true, value: (p) => (p.packageId?.startsWith('plan:') ? `Langganan ${p.packageId.slice(5)}` : p.packageId?.startsWith('asst:') ? 'Saldo asisten' : `${num(p.credits)} kredit`) },
       { label: 'Nominal', num: true, value: (p) => rupiah(p.amount) },
       { label: 'Status', value: (p) => h('span', { class: `pill ${p.status}` }, { succeeded: 'Lunas', pending: 'Menunggu', failed: 'Gagal', expired: 'Kedaluwarsa', canceled: 'Batal' }[p.status] ?? p.status, p.livemode ? null : h('span', { class: 'muted' }, ' · uji')) },
     ], st.recentPayments, 'Belum ada transaksi.'));
@@ -455,6 +455,135 @@
     $('#plans').replaceChildren(form);
   }
 
+  // ---------- Asisten AI website: model & pemakaian ----------
+  async function assistantApi(method, path = '', body) {
+    const res = await fetch(`/api/admin/assistant${path}`, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
+    return data;
+  }
+
+  async function loadAssistantAdmin() {
+    try {
+      renderAssistantAdmin(await assistantApi('GET'));
+    } catch (err) {
+      $('#assistantAdmin').replaceChildren(h('p', { class: 'error' }, `Gagal memuat pengaturan asisten: ${err.message}`));
+    }
+  }
+
+  function renderAssistantAdmin(data) {
+    const status = h('span', { class: 'save-status', role: 'status' });
+    const saveBtn = h('button', { type: 'submit', class: 'save-btn', disabled: true }, 'Simpan model');
+    const trialInput = h('input', { type: 'number', min: '0', step: '100', value: String(data.trial) });
+    const rowsEl = h('tbody', {});
+    const rows = [];
+
+    const perAnswer = (cost, markup) => ((data.typicalTokens * cost * markup) / 1e6);
+    function addRow(m) {
+      const input = (value, attrs = {}) => h('input', { value: String(value ?? ''), ...attrs });
+      const r = {
+        enabled: h('input', { type: 'checkbox', checked: m.enabled, title: 'Aktif' }),
+        key: input(m.key, { placeholder: 'kode', maxlength: '30', class: 'mono' }),
+        name: input(m.name, { placeholder: 'Nama tampil' }),
+        tier: input(m.tier, { placeholder: 'Hemat / Pintar', maxlength: '20' }),
+        model: input(m.model, { placeholder: 'id model di gateway', class: 'mono' }),
+        cost: input(m.cost, { type: 'number', min: '0', step: '1' }),
+        markup: input(m.markup, { type: 'number', min: '1', max: '20', step: '0.1' }),
+        price: h('span', { class: 'num-cell' }),
+      };
+      const update = () => {
+        const c = Number(r.cost.value) || 0;
+        const k = Number(r.markup.value) || 0;
+        const sell = perAnswer(c, k);
+        const base = perAnswer(c, 1);
+        r.price.textContent = `≈ Rp${sell.toLocaleString('id-ID', { maximumFractionDigits: 2 })} (modal Rp${base.toLocaleString('id-ID', { maximumFractionDigits: 2 })})`;
+      };
+      r.cost.addEventListener('input', update);
+      r.markup.addEventListener('input', update);
+      update();
+      r.tr = h('tr', { class: m.enabled ? '' : 'off' },
+        h('td', {}, r.enabled), h('td', {}, r.key), h('td', {}, r.name), h('td', {}, r.tier), h('td', {}, r.model),
+        h('td', {}, r.cost), h('td', {}, r.markup), h('td', {}, r.price),
+        h('td', {}, h('button', { type: 'button', class: 'row-del', title: 'Hapus model', onclick: () => {
+          rows.splice(rows.indexOf(r), 1);
+          r.tr.remove();
+          markDirty();
+        } }, '×')));
+      r.enabled.addEventListener('change', () => r.tr.classList.toggle('off', !r.enabled.checked));
+      rows.push(r);
+      rowsEl.append(r.tr);
+    }
+    data.models.forEach(addRow);
+
+    const markDirty = () => { saveBtn.disabled = false; status.textContent = 'Belum disimpan'; status.className = 'save-status dirty'; };
+    const form = h('form', { class: 'card plans-card', novalidate: true },
+      h('div', { class: 'plans-title' },
+        h('div', {},
+          h('h2', {}, 'Asisten AI website'),
+          h('p', { class: 'sub' }, `Model yang bisa dipilih pengguna untuk chatbot websitenya. Biaya = Rp per 1 juta token dari gateway; harga jual = biaya × margin. Perkiraan per jawaban memakai ±${num(data.typicalTokens)} token.`)),
+        h('div', { class: 'plans-actions' }, status, saveBtn)),
+      h('div', { class: 'table-wrap' }, h('table', { class: 'model-table' },
+        h('thead', {}, h('tr', {}, ['Aktif', 'Kode', 'Nama', 'Label', 'ID model', 'Biaya/1jt token', 'Margin ×', 'Harga jual/jawaban', ''].map((t) => h('th', {}, t)))),
+        rowsEl)),
+      h('div', { class: 'model-actions' },
+        h('button', { type: 'button', class: 'ghost-btn', onclick: () => { addRow({ key: '', name: '', tier: '', model: '', cost: '', markup: 3, enabled: false }); markDirty(); } }, '+ Tambah model'),
+        h('label', { class: 'field inline' }, h('span', {}, 'Saldo percobaan per akun (Rp)'), trialInput)),
+      h('h3', { class: 'sub-title' }, 'Website yang memakai asisten'),
+      data.sites.length
+        ? h('div', { class: 'table-wrap' }, h('table', {},
+          h('thead', {}, h('tr', {}, ['Website', 'Pemilik', 'Status', 'Model', 'Hari ini', '30 hari', ''].map((t) => h('th', {}, t)))),
+          h('tbody', {}, data.sites.map((site) => h('tr', {},
+            h('td', {}, h('a', { href: site.siteUrl, target: '_blank', rel: 'noopener' }, site.slug)),
+            h('td', {}, site.username),
+            h('td', {}, h('span', { class: `pill ${site.blocked ? 'failed' : site.enabled ? 'succeeded' : 'pending'}` }, site.blocked ? 'Diblokir' : site.enabled ? 'Aktif' : 'Mati')),
+            h('td', {}, site.modelKey || '—'),
+            h('td', { class: 'num' }, `${num(site.messagesToday)} · ${rupiah(Math.round(site.spentToday))}`),
+            h('td', { class: 'num' }, `${num(site.messages30)} · ${rupiah(Math.round(site.spent30))}`),
+            h('td', {}, h('button', { type: 'button', class: 'ghost-btn small', onclick: async () => {
+              try {
+                renderAssistantAdmin(await assistantApi('POST', '/block', { slug: site.slug, blocked: !site.blocked }));
+              } catch (err) {
+                alertStatus(err.message);
+              }
+            } }, site.blocked ? 'Buka blokir' : 'Blokir')))))))
+        : h('p', { class: 'sub' }, 'Belum ada website yang mengatur asisten.'));
+
+    function alertStatus(message) {
+      status.textContent = message;
+      status.className = 'save-status error-text';
+    }
+    form.addEventListener('input', markDirty);
+    form.addEventListener('change', markDirty);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      saveBtn.disabled = true;
+      status.textContent = 'Menyimpan…';
+      status.className = 'save-status';
+      try {
+        const saved = await assistantApi('PUT', '', {
+          models: rows.map((r) => ({
+            key: r.key.value, name: r.name.value, tier: r.tier.value, model: r.model.value,
+            cost: Number(r.cost.value), markup: Number(r.markup.value), enabled: r.enabled.checked,
+          })),
+          trial: Number(trialInput.value),
+        });
+        renderAssistantAdmin(saved);
+        const done = $('#assistantAdmin .save-status');
+        done.textContent = 'Tersimpan ✓';
+        done.className = 'save-status ok';
+      } catch (err) {
+        saveBtn.disabled = false;
+        alertStatus(err.message);
+      }
+    };
+    $('#assistantAdmin').replaceChildren(form);
+  }
+
   // ---------- Event ----------
   function setDays(value) {
     days = value;
@@ -468,4 +597,5 @@
   setDays([7, 30, 90].includes(days) ? days : 30);
   load();
   loadPlans();
+  loadAssistantAdmin();
 })();
