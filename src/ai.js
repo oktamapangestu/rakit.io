@@ -41,6 +41,11 @@ Database:
   DELETE /api/db/<table>/<id>
   Errors come back as { "error": "message" } with a 4xx status; show that message to the visitor.
 - Every row has "id" and "created_at" automatically. Column types: ${COLUMN_TYPES.join(', ')} (date as "2026-12-31" or "2026-12-31T19:00").
+- Images (product photos, avatars, gallery, proof of payment…): use a column of type "image". NEVER store an image as base64/data URL in a text column — text is limited to 10,000 characters and saving fails. Upload the file first, then save the returned address:
+    const up = await fetch('/api/db/produk/upload?column=gambar', { method: 'POST', body: fileInput.files[0] });
+    const { url } = await up.json();   // e.g. "/uploads/produk/lx3k-9f2a.jpg" (show errors from { error } like any other request)
+    await fetch('/api/db/produk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nama, gambar: url }) });
+  Show it with <img src="\${row.gambar}" alt="...">. Visitors may upload only when the table's "create" or "update" is public; allowed: JPG, PNG, WEBP, GIF, AVIF (max ~1–10 MB depending on the owner's plan). An image column may also hold an https:// URL or a path of an image in the project (e.g. "/images/logo.png").
 - Each operation (${OPERATIONS.join(', ')}) is either public (any visitor) or owner-only (only the owner, in the editor). A request for an owner-only operation is refused with 403. Private columns are never returned publicly.
 - Visitors are anonymous — there are no user accounts yet — so keep update and delete owner-only unless the user explicitly asks otherwise.
 - Data that visitors submit or that everyone should see (guestbooks, comments, RSVPs, contact forms, orders, votes, scores) must be saved in this database — never in localStorage, which only exists in one visitor's own browser.

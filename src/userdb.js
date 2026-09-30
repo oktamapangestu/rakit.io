@@ -1,9 +1,11 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.js';
 import { HttpError } from './http-error.js';
 import { storageFor } from './plans.js';
+import { userRoot, writeImage } from './files.js';
 
 // Database milik proyek user: satu file SQLite per user, dikelola hanya lewat fungsi di sini
 // (tidak ada SQL mentah dari user). Metadata tabel (tipe kolom, flag, aturan akses) disimpan
@@ -17,13 +19,19 @@ export const DB_LIMITS = {
   textLength: 10_000,
   pageSize: 100,
 };
-export const COLUMN_TYPES = ['text', 'number', 'boolean', 'date', 'reference'];
+// image: alamat gambar (file di folder uploads/ website, atau URL https). Isi gambar TIDAK disimpan di database.
+export const COLUMN_TYPES = ['text', 'number', 'boolean', 'date', 'reference', 'image'];
 export const OPERATIONS = ['list', 'view', 'create', 'update', 'delete'];
 const DEFAULT_RULES = Object.fromEntries(OPERATIONS.map((op) => [op, 'owner']));
 
 const NAME_RE = /^[a-z][a-z0-9_]{0,39}$/;
 const SYSTEM_COLUMNS = new Set(['id', 'created_at']);
-const SQL_TYPE = { text: 'TEXT', number: 'REAL', boolean: 'INTEGER', date: 'TEXT', reference: 'INTEGER' };
+const SQL_TYPE = { text: 'TEXT', number: 'REAL', boolean: 'INTEGER', date: 'TEXT', reference: 'INTEGER', image: 'TEXT' };
+// Alamat gambar yang boleh disimpan: path di website sendiri (mis. /uploads/produk/a1b2.jpg, /images/logo.png)
+// atau URL http(s). Data URL (base64) ditolak: gambar harus diupload sebagai file.
+const IMAGE_PATH_RE = /^\/(?!.*\.\.)[A-Za-z0-9._/-]{1,300}\.(png|jpe?g|gif|webp|svg|avif|ico)$/i;
+const IMAGE_URL_RE = /^https?:\/\/[^\s"'<>]{3,1000}$/i;
+const base64Hint = (column) => `Gambar jangan disimpan sebagai teks/base64. Upload filenya dulu dengan POST /api/db/<tabel>/upload?column=${column}, lalu simpan alamat yang dikembalikan di kolom bertipe image.`;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
 const SQLITE_FULL = 13;
 
@@ -163,7 +171,18 @@ function coerce(column, value) {
     case 'text': {
       if (typeof value === 'object') fail('berupa teks');
       const text = String(value);
-      if (text.length > DB_LIMITS.textLength) fail(`maksimal ${DB_LIMITS.textLength} karakter`);
+      if (text.length > DB_LIMITS.textLength) {
+        if (/^data:image\//i.test(text)) throw new HttpError(413, `Kolom "${column.name}": ${base64Hint(column.name)}`);
+        fail(`maksimal ${DB_LIMITS.textLength} karakter`);
+      }
+      return text;
+    }
+    case 'image': {
+      const text = typeof value === 'string' ? value.trim() : '';
+      if (/^data:/i.test(text)) throw new HttpError(400, `Kolom "${column.name}": ${base64Hint(column.name)}`);
+      if (!IMAGE_PATH_RE.test(text) && !IMAGE_URL_RE.test(text)) {
+        fail('alamat gambar, contoh "/uploads/produk/foto.jpg" (hasil upload) atau "https://…"');
+      }
       return text;
     }
     case 'number': {
@@ -414,6 +433,54 @@ export function deleteTable(username, name) {
     db.exec(`DROP TABLE ${ident(table.name)}`);
     db.prepare('DELETE FROM _rakit_tables WHERE name = ?').run(table.name);
   });
+  fs.rmSync(path.join(userRoot(username), 'uploads', name), { recursive: true, force: true });
+}
+
+// ---------- Upload gambar untuk kolom bertipe image ----------
+// File disimpan di website: uploads/<tabel>/<acak>.<ext>, lalu alamatnya disimpan di baris tabel.
+
+// Jenis gambar dari isi file (bukan dari nama/Content-Type kiriman).
+function sniffImage(buf) {
+  const ascii = (a, b) => buf.subarray(a, b).toString('latin1');
+  if (buf.length > 8 && buf.readUInt32BE(0) === 0x89504e47) return 'png';
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (ascii(0, 4) === 'GIF8') return 'gif';
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'webp';
+  if (ascii(4, 8) === 'ftyp' && ['avif', 'avis'].includes(ascii(8, 12))) return 'avif';
+  if (/^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*<svg[\s>]/i.test(buf.subarray(0, 2048).toString('utf8'))) return 'svg';
+  return null;
+}
+
+/**
+ * Simpan gambar untuk kolom `columnName` (bertipe image) di tabel `name`. Mengembalikan { url }.
+ * publicView = dari pengunjung website: hanya boleh bila tabel membuka Tambah atau Ubah untuk publik,
+ * dan SVG ditolak (SVG bisa berisi script).
+ */
+export async function uploadImage(username, name, columnName, buf, { publicView = false } = {}) {
+  const table = getTable(username, name);
+  const column = table.columns.find((c) => c.name === String(columnName ?? ''));
+  if (!column) throw new HttpError(400, `Sertakan ?column=<nama kolom gambar>. Kolom gambar di tabel "${table.name}": ${table.columns.filter((c) => c.type === 'image').map((c) => c.name).join(', ') || '(belum ada)'}`);
+  if (column.type !== 'image') throw new HttpError(400, `Kolom "${column.name}" bukan kolom gambar (tipe image). Ubah tipenya di editor database, atau pakai kolom lain.`);
+  if (publicView && table.rules.create !== 'public' && table.rules.update !== 'public') {
+    throw new HttpError(403, `Pengunjung tidak diizinkan mengupload gambar ke tabel "${table.name}". Pemilik bisa membuka akses Tambah di editor database → Atur → Akses.`);
+  }
+  if (!Buffer.isBuffer(buf) || !buf.length) throw new HttpError(400, 'Kirim file gambar sebagai body request (fetch(url, { method: "POST", body: file }))');
+  const ext = sniffImage(buf);
+  if (!ext || (publicView && ext === 'svg')) throw new HttpError(400, 'File harus berupa gambar JPG, PNG, WEBP, GIF, atau AVIF');
+  const rel = `uploads/${table.name}/${Date.now().toString(36)}-${crypto.randomBytes(5).toString('hex')}.${ext}`;
+  await writeImage(userRoot(username), rel, buf); // cek ukuran per gambar & kuota storage paket
+  return { url: `/${rel}` };
+}
+
+// Hapus file upload lama yang sudah tidak dipakai baris mana pun (dipanggil setelah baris dihapus/diubah).
+function removeUnusedUploads(username, db, table, urls) {
+  const prefix = `/uploads/${table.name}/`;
+  const imageCols = table.columns.filter((c) => c.type === 'image');
+  for (const url of new Set(urls)) {
+    if (typeof url !== 'string' || !url.startsWith(prefix) || url.includes('..')) continue;
+    const stillUsed = imageCols.some((c) => db.prepare(`SELECT 1 FROM ${ident(table.name)} WHERE ${ident(c.name)} = ? LIMIT 1`).get(url));
+    if (!stillUsed) fs.rmSync(path.join(userRoot(username), url.slice(1)), { force: true });
+  }
 }
 
 // ---------- Baris ----------
@@ -540,6 +607,9 @@ export function updateRow(username, name, id, body, { publicView = false } = {})
   assertReferences(db, table, values);
   const keys = Object.keys(values);
   if (!keys.length) throw new HttpError(400, 'Tidak ada kolom yang diubah');
+  // Gambar lama yang diganti, supaya filenya bisa dibersihkan setelah update berhasil.
+  const changedImages = table.columns.filter((c) => c.type === 'image' && keys.includes(c.name));
+  const before = changedImages.length ? db.prepare(`SELECT * FROM ${ident(table.name)} WHERE id = ?`).get(rowId(id)) : null;
   try {
     const { changes } = db.prepare(`UPDATE ${ident(table.name)} SET ${keys.map((k) => `${ident(k)} = ?`).join(', ')} WHERE id = ?`)
       .run(...Object.values(values), rowId(id));
@@ -547,6 +617,7 @@ export function updateRow(username, name, id, body, { publicView = false } = {})
   } catch (err) {
     throw translateError(err);
   }
+  if (before) removeUnusedUploads(username, db, table, changedImages.map((c) => before[c.name]));
   return getRow(username, table.name, id, { publicView });
 }
 
@@ -554,7 +625,9 @@ export function deleteRow(username, name, id) {
   const db = open(username);
   const table = tableOrThrow(db, name);
   const key = rowId(id);
-  return transaction(db, () => {
+  const imageCols = table.columns.filter((c) => c.type === 'image');
+  const before = imageCols.length ? db.prepare(`SELECT * FROM ${ident(table.name)} WHERE id = ?`).get(key) : null;
+  transaction(db, () => {
     // ON DELETE SET NULL: lepaskan rujukan dari tabel lain sebelum baris dihapus.
     for (const { from, column } of referencesTo(db, table.name)) {
       db.prepare(`UPDATE ${ident(from)} SET ${ident(column)} = NULL WHERE ${ident(column)} = ?`).run(key);
@@ -562,6 +635,7 @@ export function deleteRow(username, name, id) {
     const { changes } = db.prepare(`DELETE FROM ${ident(table.name)} WHERE id = ?`).run(key);
     if (!changes) throw new HttpError(404, 'Baris tidak ditemukan');
   });
+  if (before) removeUnusedUploads(username, db, table, imageCols.map((c) => before[c.name]));
 }
 
 // ---------- Ringkasan untuk AI ----------

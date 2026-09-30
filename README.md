@@ -251,6 +251,16 @@ Website user memakainya lewat API otomatis di domainnya sendiri:
 | `PATCH /api/db/<tabel>/<id>` | ubah baris |
 | `DELETE /api/db/<tabel>/<id>` | hapus baris |
 
+| `POST /api/db/<tabel>/upload?column=<kolom>` | upload gambar untuk kolom bertipe Gambar (body = isi file) → `{ url }` |
+
+- **Kolom Gambar** (`image`) menyimpan *alamat* gambar, bukan isinya: file hasil upload (`/uploads/<tabel>/…`),
+  path gambar di project, atau URL `https://`. Base64/data URL ditolak dengan pesan yang mengarahkan ke upload
+  (kolom teks juga menolak base64 panjang), karena teks dibatasi 10.000 karakter dan database 10 MB.
+  Pengunjung hanya boleh upload bila akses **Tambah** atau **Ubah** tabel itu publik; format JPG/PNG/WEBP/GIF/AVIF
+  (dicek dari isi file; SVG hanya untuk pemilik), ukuran & kuota mengikuti paket, maks. 20 upload / 10 menit per
+  pengunjung. File lama dihapus otomatis saat gambarnya diganti atau barisnya dihapus (bila tak dipakai baris
+  lain), dan folder `uploads/<tabel>` ikut terhapus bersama tabelnya. Di tab Data kolom ini tampil sebagai
+  thumbnail; klik dua kali untuk upload/ganti/kosongkan.
 - Setiap operasi per tabel diatur **Publik** atau **Hanya pemilik** (default: semua hanya pemilik).
 - Kolom **privat** tidak pernah dikirim lewat API publik.
 - Tipe kolom: teks, angka, ya/tidak, tanggal. Kolom `id` dan `created_at` otomatis.
