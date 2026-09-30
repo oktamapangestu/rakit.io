@@ -1832,7 +1832,7 @@
   }
 
   // ---------- Database (mode Data) ----------
-  const DB_TYPES = { text: 'Teks', number: 'Angka', boolean: 'Ya/Tidak', date: 'Tanggal', reference: 'Relasi' };
+  const DB_TYPES = { text: 'Teks', number: 'Angka', boolean: 'Ya/Tidak', date: 'Tanggal', reference: 'Relasi', image: 'Gambar' };
   const DB_OPS = [
     ['list', 'Lihat daftar'],
     ['view', 'Lihat satu baris'],
@@ -1907,7 +1907,82 @@
       return new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
     }
     if (column.type === 'boolean') return value ? 'Ya' : 'Tidak';
+    if (column.type === 'image') return h('img', { class: 'db-thumb', src: dbImageSrc(value), alt: column.name, loading: 'lazy' });
     return String(value);
+  }
+
+  // ---------- Kolom gambar ----------
+  // Nilai kolom image = alamat file ("/uploads/..." di website ini) atau URL https.
+  const dbImageSrc = (value) => (String(value).startsWith('/') ? `${state.project.siteUrl}${value}` : String(value));
+
+  async function uploadDbImage(t, column, file) {
+    const res = await fetch(`${tableUrl(t.name)}/upload?column=${encodeURIComponent(column.name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', ...(state.projectSlug ? { 'X-Project': state.projectSlug } : {}) },
+      body: file,
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
+    return data.url;
+  }
+
+  // Isian gambar: pratinjau + upload file + (opsional) alamat URL. getValue() → alamat atau ''.
+  function imageField(t, column, value = '') {
+    let current = value || '';
+    const preview = h('div', { class: 'db-img-preview' });
+    const urlInput = h('input', { type: 'text', placeholder: 'atau tempel alamat https://…', value: current.startsWith('/') ? '' : current });
+    const status = h('span', { class: 'db-img-status' });
+    const render = () => preview.replaceChildren(current
+      ? h('img', { src: dbImageSrc(current), alt: column.name })
+      : h('span', { class: 'null' }, 'Belum ada gambar'));
+    const pick = () => {
+      const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml' });
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        status.textContent = 'Mengupload…';
+        try {
+          current = await uploadDbImage(t, column, file);
+          urlInput.value = '';
+          status.textContent = 'Terupload ✓';
+          render();
+        } catch (err) {
+          status.textContent = '';
+          toast(err.message, 'error');
+        }
+      };
+      input.click();
+    };
+    urlInput.oninput = () => { current = urlInput.value.trim(); render(); };
+    render();
+    const el = h('div', { class: 'db-img-field' },
+      preview,
+      h('div', { class: 'db-img-actions' },
+        h('button', { type: 'button', class: 'db-btn', onclick: pick }, current ? 'Ganti gambar…' : 'Upload gambar…'),
+        h('button', { type: 'button', class: 'db-btn', onclick: () => { current = ''; urlInput.value = ''; status.textContent = ''; render(); } }, 'Kosongkan'),
+        status),
+      urlInput);
+    return { el, getValue: () => current };
+  }
+
+  function editDbImage(t, row, column) {
+    const { body, close } = openPanel('db-modal');
+    const field = imageField(t, column, row[column.name] ?? '');
+    body.append(h('form', {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        try {
+          await saveDbCell(t, row, column, field.getValue() || null);
+          close();
+        } catch { /* pesan error sudah ditampilkan */ }
+      },
+    },
+    h('h3', {}, `Gambar "${column.name}" · baris #${row.id}`),
+    field.el,
+    h('div', { class: 'modal-buttons' },
+      h('button', { type: 'button', onclick: close }, 'Batal'),
+      h('button', { type: 'submit', class: 'primary' }, 'Simpan'))));
   }
 
   function renderDbMain() {
@@ -1976,8 +2051,8 @@
       box.onchange = () => saveDbCell(t, row, column, box.checked).catch(() => { box.checked = !box.checked; });
       return h('td', { class: 'bool' }, box);
     }
-    const td = h('td', { title: 'Klik dua kali untuk mengubah' }, formatDbValue(column, row[column.name]));
-    td.ondblclick = () => editDbCell(td, t, row, column);
+    const td = h('td', { title: 'Klik dua kali untuk mengubah', class: column.type === 'image' ? 'img' : null }, formatDbValue(column, row[column.name]));
+    td.ondblclick = () => (column.type === 'image' ? editDbImage(t, row, column) : editDbCell(td, t, row, column));
     return td;
   }
 
@@ -2107,6 +2182,13 @@
     const { body, close } = openPanel('db-modal');
     const inputs = new Map();
     const fields = t.columns.map((c) => {
+      if (c.type === 'image') {
+        const field = imageField(t, c);
+        inputs.set(c.name, field);
+        return h('div', { class: 'db-field image' },
+          h('span', { class: 'db-field-label' }, c.name, c.required ? h('span', { class: 'req' }, '*') : null, h('span', { class: 'col-type' }, DB_TYPES.image)),
+          field.el);
+      }
       const input = c.type === 'boolean' ? h('input', { type: 'checkbox' })
         : c.type === 'text' ? h('textarea', { rows: '2' })
           : c.type === 'number' ? h('input', { type: 'number', step: 'any' })
@@ -2125,6 +2207,7 @@
         const data = {};
         for (const c of t.columns) {
           const el = inputs.get(c.name);
+          if (c.type === 'image') { if (el.getValue()) data[c.name] = el.getValue(); continue; }
           if (c.type === 'boolean') data[c.name] = el.checked;
           else if (el.value !== '') data[c.name] = el.value;
         }

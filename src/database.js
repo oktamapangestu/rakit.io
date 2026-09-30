@@ -26,6 +26,11 @@ database.delete('/tables/:name', (req, res) => {
   res.json({ ok: true });
 });
 
+// Pemilik mengupload gambar untuk kolom bertipe image (dari tab Data).
+database.post('/tables/:name/upload', express.raw({ type: () => true, limit: '11mb' }), async (req, res) => {
+  res.status(201).json(await userdb.uploadImage(owner(req), req.params.name, req.query.column, req.body));
+});
+
 database.get('/tables/:name/rows', (req, res) => {
   const { limit, offset, sort, expand, ...filters } = req.query;
   res.json(userdb.listRows(owner(req), req.params.name, { limit, offset, sort, expand, filters }));

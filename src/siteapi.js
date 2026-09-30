@@ -49,6 +49,15 @@ siteApi.patch('/api/db/:table/:id', (req, res) => {
   res.json(userdb.updateRow(req.siteUser, table.name, req.params.id, req.body, { publicView: true }));
 });
 
+// Upload gambar untuk kolom bertipe image: body = isi file. Mengembalikan { url } untuk disimpan di baris.
+const uploadLimiter = rateLimit({
+  windowMs: 10 * 60_000, max: 20, key: (req) => `up:${req.siteUser}:${req.ip}`,
+  message: 'Terlalu banyak upload gambar. Coba lagi beberapa menit lagi.',
+});
+siteApi.post('/api/db/:table/upload', uploadLimiter, express.raw({ type: () => true, limit: '11mb' }), async (req, res) => {
+  res.status(201).json(await userdb.uploadImage(req.siteUser, req.params.table, req.query.column, req.body, { publicView: true }));
+});
+
 siteApi.delete('/api/db/:table/:id', (req, res) => {
   const table = publicTable(req, 'delete');
   userdb.deleteRow(req.siteUser, table.name, req.params.id);
