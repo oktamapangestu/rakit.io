@@ -115,6 +115,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS ai_messages_thread ON ai_messages(thread_id, id);
   CREATE INDEX IF NOT EXISTS ai_messages_status ON ai_messages(status);
 
+  -- Riwayat versi file project (lihat versions.js). manifest = JSON { files: {path: {h, s, m}}, dirs: [...] }.
+  CREATE TABLE IF NOT EXISTS versions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind       TEXT NOT NULL,              -- edit | ai | manual | restore
+    label      TEXT NOT NULL DEFAULT '',
+    manifest   TEXT NOT NULL,
+    file_count INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS versions_project ON versions(project_id, created_at);
+
   -- Log setiap request AI, untuk memantau biaya.
   CREATE TABLE IF NOT EXISTS ai_requests (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

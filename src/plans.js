@@ -14,6 +14,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MB = 1024 * 1024;
 
 const FREE_STORAGE = { totalSize: 20 * MB, entries: 500, dbBytes: 10 * MB, imageSize: 1 * MB };
+// Riwayat versi yang disimpan per project: umur maksimal (hari) & jumlah maksimal.
+const FREE_HISTORY = { days: 7, max: 20 };
 
 // Bagian tetap tiap paket. `quotaKey` = field kuota AI yang bisa diatur owner.
 const BASE = {
@@ -22,12 +24,14 @@ const BASE = {
     name: 'Pro',
     quotaKey: 'credits', // kredit AI per 30 hari
     storage: { totalSize: 100 * MB, entries: 2000, dbBytes: 50 * MB, imageSize: 5 * MB },
+    history: { days: 30, max: 200 },
   },
   unlimited: {
     id: 'unlimited',
     name: 'Unlimited',
     quotaKey: 'dailyLimit', // prompt per hari (WIB)
     storage: { totalSize: 250 * MB, entries: 5000, dbBytes: 100 * MB, imageSize: 10 * MB },
+    history: { days: 90, max: 2000 },
   },
 };
 export const PLAN_IDS = Object.keys(BASE);
@@ -139,7 +143,7 @@ export function getPlan(id, settings = planSettings()) {
   if (!Object.hasOwn(BASE, id)) return null;
   const base = BASE[id];
   const { price, quota, enabled } = settings[id];
-  return { id, name: base.name, price, enabled, [base.quotaKey]: quota, storage: base.storage };
+  return { id, name: base.name, price, enabled, [base.quotaKey]: quota, storage: base.storage, history: base.history };
 }
 
 // Paket nonaktif tetap berlaku untuk pelanggan yang sudah membayar, hanya tidak bisa dibeli.
@@ -222,6 +226,12 @@ export function storageFor(slug) {
 }
 
 export const freeStorage = FREE_STORAGE;
+export const freeHistory = FREE_HISTORY;
+
+/** Batas riwayat versi untuk project milik user ini. */
+export function historyFor(userId) {
+  return activePlan(userId)?.history ?? FREE_HISTORY;
+}
 
 export function publicPlans() {
   const settings = planSettings();
@@ -233,5 +243,6 @@ export function publicPlans() {
     credits: p.credits ?? null,
     dailyLimit: p.dailyLimit ?? null,
     storage: p.storage,
+    history: p.history,
   }));
 }

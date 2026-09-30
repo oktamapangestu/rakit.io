@@ -6,7 +6,7 @@ import { q } from './db.js';
 import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
 import { creditInfo, creditPayment } from './credits.js';
-import { assertCanBuy, freeStorage, planForSale, planFromPackageId, planPackageId, publicPlans } from './plans.js';
+import { assertCanBuy, freeHistory, freeStorage, planForSale, planFromPackageId, planPackageId, publicPlans } from './plans.js';
 
 const KASERA_BASE = 'https://pay.kasera.id/v1';
 const PAYMENT_TTL_MINUTES = 30;
@@ -82,7 +82,7 @@ billing.get('/packages', (req, res) => {
     livemode: config.billing.livemode,
     packages: config.billing.packages,
     plans: publicPlans(),
-    free: { storage: freeStorage }, // pembanding "× lipat" di promosi langganan
+    free: { storage: freeStorage, history: freeHistory }, // pembanding "× lipat" di promosi langganan
     credits: creditInfo(req.user.id),
   });
 });

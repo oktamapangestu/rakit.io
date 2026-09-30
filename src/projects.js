@@ -6,6 +6,7 @@ import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
 import { seedTemplate, userRoot } from './files.js';
 import { removeDatabase } from './userdb.js';
+import { removeVersions } from './versions.js';
 import { slugError } from './username.js';
 
 // Project = workspace dengan subdomain sendiri (<slug>.rakit.icu): file, database, preview, dan
@@ -107,5 +108,6 @@ projects.delete('/:slug', async (req, res) => {
   q.deleteProject.run(project.id); // riwayat AI project ikut terhapus (ON DELETE CASCADE)
   removeDatabase(project.slug);
   await fs.rm(userRoot(project.slug), { recursive: true, force: true });
+  await removeVersions(project.slug);
   res.json({ ok: true });
 });
