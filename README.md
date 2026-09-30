@@ -30,6 +30,7 @@ src/
   credits.js   kredit AI: kuota langganan, jatah gratis harian, saldo yang dibeli
   billing.js   isi ulang kredit & langganan via QRIS (Kasera Pay) + webhook
   plans.js     paket langganan Pro/Unlimited: kuota AI & bonus storage
+  versions.js  riwayat versi file project: simpan otomatis/manual, bandingkan, kembalikan
   userdb.js    database per proyek (SQLite), validasi & aturan akses
   database.js  API editor database (khusus pemilik)
   siteapi.js   API publik /api/db/* di domain user
@@ -163,6 +164,27 @@ otomatis, dan bisa diperpanjang kapan saja. Paket dibuka dari badge kredit AI at
   makin besar ditolak sampai pemakaian turun di bawah batas (mengecilkan/menghapus file tetap bisa).
 - Data di tabel `subscriptions` (satu baris per user); pembayarannya di `payments` dengan `package_id = 'plan:<id>'`.
   Batas storage per paket diatur di `src/plans.js`.
+
+## Riwayat versi
+
+Tab **Riwayat** di editor menyimpan "foto" semua file project, supaya user bisa melihat dan kembali ke
+kondisi sebelumnya. Bahasanya sengaja dibuat untuk pemula (tanpa istilah seperti commit/branch).
+
+- Versi dibuat **otomatis** sebelum user mulai mengedit (paling sering sekali per 10 menit, atau langsung
+  setelah AI/restore), **sebelum AI mengubah file**, dan **sebelum dikembalikan** (jadi restore bisa dibatalkan).
+  User juga bisa **Simpan versi sekarang** dengan nama sendiri. Versi yang isinya sama dengan versi terakhir dilewati.
+- Detail versi menunjukkan file yang berbeda / sudah dihapus / baru sejak itu, dengan **Lihat perbedaan**
+  (diff Monaco, atau gambar berdampingan), **Kembalikan file ini**, dan **Kembalikan ke versi ini** (seluruh
+  project; file yang dibuat setelahnya ikut dihapus, dan hasilnya harus muat di kuota paket sekarang).
+- **Database tidak ikut** disimpan/dikembalikan, supaya data kiriman pengunjung tidak hilang.
+- Penyimpanan: isi file disimpan sekali per hash SHA-256 di `data/versions/<slug>/`, dan tiap versi (tabel
+  `versions`) hanya mencatat path → hash. File yang tidak berubah tidak memakan tempat lagi. Riwayat tidak
+  dihitung ke kuota storage.
+- Batas riwayat per project mengikuti paket pemilik: Gratis 7 hari / 20 versi, Pro 30 hari / 200 versi,
+  Unlimited 90 hari / 2.000 versi (`history` di `src/plans.js`). Versi lama dan isi file yang tak terpakai
+  dibersihkan otomatis saat versi baru dibuat. Menghapus project ikut menghapus riwayatnya.
+- API: `GET/POST /api/versions`, `GET /api/versions/:id`, `GET /api/versions/:id/file?path=`,
+  `POST /api/versions/:id/restore` (body `{ path }` untuk satu file).
 
 ## Gambar
 

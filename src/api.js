@@ -9,6 +9,7 @@ import { database } from './database.js';
 import { diagrams } from './diagrams.js';
 import { admin, isAdmin } from './admin.js';
 import { createProject, loadProject, projects, publicProject, slugTaken } from './projects.js';
+import { autoVersionBeforeEdit, versions } from './versions.js';
 import {
   clearSessionCookie, createSession, destroySession, hashPassword, rateLimit,
   requireAuth, requireSameOrigin, setSessionCookie, verifyPassword,
@@ -104,6 +105,11 @@ api.use('/projects', projects);
 
 api.use('/files', requireAuth, loadProject);
 const rootOf = (req) => userRoot(req.project.slug);
+// Sebelum file diubah, simpan versi otomatis (paling sering sekali per 10 menit).
+api.use('/files', async (req, res, next) => {
+  if (!['GET', 'HEAD'].includes(req.method)) await autoVersionBeforeEdit(req.project, req.user.id);
+  next();
+});
 
 api.get('/files', async (req, res) => {
   const files = await listTree(rootOf(req));
@@ -145,6 +151,7 @@ api.delete('/files', async (req, res) => {
 api.use('/ai', ai);
 api.use('/billing', billing);
 api.use('/database', database);
+api.use('/versions', versions);
 api.use('/diagrams', diagrams);
 api.use('/admin', admin);
 

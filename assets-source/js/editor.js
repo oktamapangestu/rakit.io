@@ -210,7 +210,7 @@
       h('div', { class: 'usage-bar' }, h('div', { style: `width:${pct}%` })),
       nearlyFull && ai.credits?.topupEnabled && !ai.credits.plan
         ? h('button', { type: 'button', class: 'usage-upgrade', onclick: () => openTopup('plans') }, 'Storage hampir penuh · tambah dengan langganan')
-        : null,
+        : '', // replaceChildren() bawaan browser menulis null sebagai teks "null"
     );
   }
 
@@ -1201,6 +1201,7 @@
     $('#aiPanel').hidden = mode !== 'ai';
     $('#dataView').hidden = mode !== 'data';
     $('#diagramView').hidden = mode !== 'diagram';
+    $('#historyView').hidden = mode !== 'history';
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.setAttribute('aria-selected', String(btn.dataset.mode === mode));
     });
@@ -1208,6 +1209,8 @@
       dbLoad();
     } else if (mode === 'diagram') {
       diagramLoad();
+    } else if (mode === 'history') {
+      historyLoad();
     } else if (mode === 'ai') {
       renderAiEmpty();
       updateAiComposer();
@@ -1653,7 +1656,8 @@
   }
 
   // `before` = isi file sebelum perubahan AI ('' untuk file baru).
-  function showDiff(change, before) {
+  // caption: keterangan opsional di bawah judul (mis. kiri = versi lama, kanan = sekarang).
+  function showDiff(change, before, caption) {
     const root = $('#modal');
     const body = h('div', { class: 'diff-body' });
     let diffEditor;
@@ -1669,7 +1673,7 @@
 
     root.replaceChildren(h('div', { class: 'modal diff-modal' },
       h('div', { class: 'diff-head' },
-        h('h3', {}, change.path),
+        h('div', {}, h('h3', {}, change.path), caption ? h('p', { class: 'diff-caption' }, caption) : null),
         h('button', { class: 'icon-btn', title: 'Tutup', onclick: close }, svg(ICON.close))),
       body));
     root.hidden = false;
@@ -2755,6 +2759,274 @@
     $('#diagramDownload').onclick = downloadDiagram;
   }
 
+  // ---------- Riwayat versi ----------
+  // Bahasa dibuat sederhana untuk pemula: "versi" = potret semua file project pada satu waktu.
+  const hist = { list: [], history: null, selected: null, detail: null, seq: 0 };
+
+  const HIST_ICON = {
+    manual: 'M4 1.5h8l.5.5v12.3l-.8.4L8 12.1l-3.7 2.6-.8-.4V2zM5 2.5v10.8l2.7-1.9h.6l2.7 1.9V2.5z',
+    ai: SPARK,
+    edit: 'M11.1 1.6a1.6 1.6 0 0 1 2.3 0l1 1a1.6 1.6 0 0 1 0 2.3L5.3 14H2v-3.3zm1.6.7a.6.6 0 0 0-.9 0l-1 1 1.9 1.9 1-1a.6.6 0 0 0 0-.9zM11.9 5.9 10 4 3 11v2h2z',
+    restore: 'M8 1a7 7 0 1 1-7 7h1a6 6 0 1 0 1.76-4.24L5.5 5.5H1V1l1.76 1.76A6.98 6.98 0 0 1 8 1',
+  };
+
+  // Judul & keterangan tiap versi dalam bahasa sehari-hari.
+  function versionText(v) {
+    if (v.kind === 'manual') return { title: v.label || 'Versi yang kamu simpan', sub: 'Disimpan olehmu' };
+    if (v.kind === 'ai') return { title: 'Sebelum AI mengubah', sub: v.label.replace(/^Sebelum AI:\s*/, '') ? `Permintaan: “${v.label.replace(/^Sebelum AI:\s*/, '')}”` : '' };
+    if (v.kind === 'restore') return { title: 'Sebelum dikembalikan', sub: v.label.replace(/^Sebelum dikembalikan ke\s*/, 'Lalu dikembalikan ke ') };
+    return { title: 'Simpanan otomatis', sub: 'Disimpan sendiri sebelum kamu lanjut mengedit' };
+  }
+
+  const timeOf = (ms) => new Date(ms).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  function dayLabel(ms) {
+    const d = new Date(ms);
+    const today = new Date();
+    const yesterday = new Date(Date.now() - 86_400_000);
+    if (d.toDateString() === today.toDateString()) return 'Hari ini';
+    if (d.toDateString() === yesterday.toDateString()) return 'Kemarin';
+    return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  const fullTime = (ms) => new Date(ms).toLocaleString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
+  async function historyLoad(selectId) {
+    const seq = ++hist.seq;
+    if (!hist.list.length) $('#historyList').replaceChildren(h('div', { class: 'history-empty' }, 'Memuat riwayat…'));
+    let data;
+    try {
+      data = await api('GET', '/api/versions');
+    } catch (err) {
+      return $('#historyList').replaceChildren(h('div', { class: 'history-empty error' }, err.message));
+    }
+    if (seq !== hist.seq) return;
+    hist.list = data.versions;
+    hist.history = data.history;
+    const keep = selectId ?? hist.selected;
+    hist.selected = hist.list.some((v) => v.id === keep) ? keep : hist.list[0]?.id ?? null;
+    renderHistoryList();
+    if (hist.selected) showVersion(hist.selected);
+    else renderHistoryWelcome();
+  }
+
+  function renderHistoryList() {
+    const { days, max } = hist.history;
+    const note = h('p', { class: 'history-note' },
+      `Versi disimpan selama ${days} hari (maks. ${max.toLocaleString('id-ID')} versi).`,
+      !ai.credits?.plan && ai.credits?.topupEnabled
+        ? [' ', h('button', { type: 'button', class: 'link-btn', onclick: () => openTopup('plans') }, 'Ingin riwayat lebih lama?')]
+        : null);
+    const saveBtn = h('button', { type: 'button', class: 'history-save', onclick: saveVersion }, svg(HIST_ICON.manual), 'Simpan versi sekarang');
+    if (!hist.list.length) return $('#historyList').replaceChildren(saveBtn, note);
+
+    const items = [];
+    let lastDay = null;
+    for (const v of hist.list) {
+      const day = dayLabel(v.createdAt);
+      if (day !== lastDay) {
+        items.push(h('div', { class: 'history-day' }, day));
+        lastDay = day;
+      }
+      const text = versionText(v);
+      items.push(h('button', {
+        type: 'button',
+        class: `history-item ${v.kind}${v.id === hist.selected ? ' selected' : ''}`,
+        onclick: () => { hist.selected = v.id; renderHistoryList(); showVersion(v.id); },
+      },
+      h('span', { class: 'history-icon' }, svg(HIST_ICON[v.kind] ?? HIST_ICON.edit)),
+      h('span', { class: 'history-text' },
+        h('span', { class: 'history-title' }, text.title),
+        text.sub ? h('span', { class: 'history-sub' }, text.sub) : null),
+      h('span', { class: 'history-time' }, timeOf(v.createdAt))));
+    }
+    $('#historyList').replaceChildren(saveBtn, ...items, note);
+  }
+
+  function renderHistoryWelcome() {
+    $('#historyDetail').replaceChildren(h('div', { class: 'history-welcome' },
+      h('div', { class: 'history-welcome-icon' }, svg(HIST_ICON.restore)),
+      h('h3', {}, 'Belum ada versi tersimpan'),
+      h('p', {}, 'Versi adalah “foto” semua file project-mu pada satu waktu. Kalau nanti ada yang rusak atau kamu berubah pikiran, kamu bisa kembali ke versi sebelumnya.'),
+      h('ul', {},
+        h('li', {}, 'Tersimpan otomatis saat kamu mulai mengedit, dan sebelum AI mengubah file.'),
+        h('li', {}, 'Kamu juga bisa menyimpan versi sendiri kapan saja, misalnya sebelum mencoba desain baru.')),
+      h('button', { type: 'button', class: 'history-primary', onclick: saveVersion }, 'Simpan versi sekarang')));
+  }
+
+  const STATUS_TEXT = {
+    changed: { label: 'Berbeda', hint: 'Isinya berubah sejak versi ini' },
+    missing: { label: 'Sudah dihapus', hint: 'Ada di versi ini, tapi sekarang sudah tidak ada' },
+    new: { label: 'File baru', hint: 'Dibuat setelah versi ini' },
+    same: { label: 'Sama', hint: 'Tidak berubah' },
+  };
+
+  async function showVersion(id) {
+    const seq = ++hist.seq;
+    $('#historyDetail').replaceChildren(h('div', { class: 'history-empty' }, 'Membandingkan dengan kondisi sekarang…'));
+    await saveAll(); // bandingkan dengan isi yang sudah tersimpan
+    let data;
+    try {
+      data = await api('GET', `/api/versions/${id}`);
+    } catch (err) {
+      return $('#historyDetail').replaceChildren(h('div', { class: 'history-empty error' }, err.message));
+    }
+    if (seq !== hist.seq) return;
+    hist.detail = data;
+    const { version, files } = data;
+    const text = versionText(version);
+    const count = (s) => files.filter((f) => f.status === s).length;
+    const differs = files.filter((f) => f.status !== 'same');
+
+    const summary = differs.length
+      ? [
+        count('changed') && `${count('changed')} file berbeda`,
+        count('missing') && `${count('missing')} file sudah dihapus`,
+        count('new') && `${count('new')} file baru`,
+      ].filter(Boolean).join(' · ')
+      : 'Sama persis dengan kondisi sekarang';
+
+    const fileRow = (f) => {
+      const st = STATUS_TEXT[f.status];
+      const canRestore = f.status === 'changed' || f.status === 'missing';
+      return h('div', { class: `history-file ${f.status}` },
+        h('span', { class: 'history-file-name', title: f.path }, fileIcon({ type: 'file', path: f.path }), h('span', {}, f.path)),
+        h('span', { class: `history-badge ${f.status}`, title: st.hint }, st.label),
+        h('span', { class: 'history-file-actions' },
+          f.status !== 'same' ? h('button', { type: 'button', onclick: () => compareFile(version, f) }, 'Lihat perbedaan') : null,
+          canRestore ? h('button', { type: 'button', onclick: () => restoreVersion(version, f.path) }, 'Kembalikan file ini') : null));
+    };
+    const same = files.filter((f) => f.status === 'same');
+
+    $('#historyDetail').replaceChildren(...[
+      h('div', { class: 'history-detail-head' },
+        h('span', { class: `history-icon big ${version.kind}` }, svg(HIST_ICON[version.kind] ?? HIST_ICON.edit)),
+        h('div', {},
+          h('h2', {}, text.title),
+          h('p', {}, `Kondisi project pada ${fullTime(version.createdAt)}`),
+          text.sub ? h('p', { class: 'history-detail-sub' }, text.sub) : null)),
+      h('div', { class: `history-summary${differs.length ? '' : ' same'}` }, summary),
+      differs.length
+        ? h('div', { class: 'history-restore-box' },
+          h('div', {},
+            h('strong', {}, 'Kembalikan semua file ke versi ini?'),
+            h('p', {}, 'Tenang, kondisi sekarang disimpan dulu sebagai versi baru. Jadi kalau berubah pikiran, kamu bisa kembali lagi.')),
+          h('button', { type: 'button', class: 'history-primary', onclick: () => restoreVersion(version) }, 'Kembalikan ke versi ini'))
+        : null,
+      differs.length ? h('h4', { class: 'history-files-title' }, 'Yang berbeda dari sekarang') : null,
+      differs.length ? h('div', { class: 'history-files' }, differs.map(fileRow)) : null,
+      same.length ? h('details', { class: 'history-same' },
+        h('summary', {}, `${same.length} file tidak berubah`),
+        h('div', { class: 'history-files' }, same.map(fileRow))) : null,
+      h('p', { class: 'history-db-note' }, 'Catatan: data di tab Data (database) tidak ikut dikembalikan, supaya data dari pengunjung tidak hilang.'),
+    ].filter(Boolean));
+  }
+
+  async function versionFileText(version, path) {
+    const { content } = await api('GET', `/api/versions/${version.id}/file?path=${encodeURIComponent(path)}`);
+    return content;
+  }
+
+  async function versionImageUrl(version, path) {
+    const res = await fetch(`/api/versions/${version.id}/file?path=${encodeURIComponent(path)}`, {
+      headers: state.projectSlug ? { 'X-Project': state.projectSlug } : {},
+      credentials: 'same-origin',
+    });
+    if (!res.ok) throw new Error('Gambar versi ini tidak bisa dimuat');
+    return URL.createObjectURL(await res.blob());
+  }
+
+  // Bandingkan isi file di versi (kiri) dengan sekarang (kanan).
+  async function compareFile(version, f) {
+    try {
+      if (f.image) return compareImage(version, f);
+      const before = f.status === 'new' ? '' : await versionFileText(version, f.path);
+      const now = f.status === 'missing' ? '' : (await api('GET', `/api/files/content?path=${encodeURIComponent(f.path)}`)).content;
+      showDiff({ path: f.path, content: now }, before, `Kiri: versi ${fullTime(version.createdAt)} · Kanan: sekarang`);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  async function compareImage(version, f) {
+    const root = $('#modal');
+    const urls = [];
+    const close = () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+      root.hidden = true;
+      root.replaceChildren();
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    const side = async (label, loader) => {
+      let content;
+      try {
+        const url = await loader();
+        if (url) urls.push(url);
+        content = url ? h('img', { src: url, alt: label }) : h('span', { class: 'history-none' }, 'Tidak ada');
+      } catch (err) {
+        content = h('span', { class: 'history-none' }, err.message);
+      }
+      return h('figure', {}, h('div', { class: 'image-stage' }, content), h('figcaption', {}, label));
+    };
+    const [left, right] = await Promise.all([
+      side(`Versi ${fullTime(version.createdAt)}`, () => (f.status === 'new' ? null : versionImageUrl(version, f.path))),
+      side('Sekarang', () => (f.status === 'missing' ? null : `${imageUrl(f.path)}`)),
+    ]);
+    root.replaceChildren(h('div', { class: 'modal image-modal history-image-modal', role: 'dialog', 'aria-label': `Perbandingan ${f.path}` },
+      h('div', { class: 'topup-head' },
+        h('div', {}, h('h3', {}, baseName(f.path)), h('p', {}, 'Kiri: versi lama · Kanan: sekarang')),
+        h('button', { class: 'icon-btn', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close))),
+      h('div', { class: 'history-image-compare' }, left, right),
+      h('div', { class: 'modal-buttons' }, h('button', { type: 'button', class: 'primary', onclick: close }, 'Tutup'))));
+    root.hidden = false;
+    root.onmousedown = (e) => { if (e.target === root) close(); };
+    document.addEventListener('keydown', onKey, true);
+  }
+
+  async function saveVersion() {
+    const label = await modal({
+      title: 'Simpan versi',
+      message: 'Beri nama supaya mudah ditemukan nanti (boleh dikosongkan).',
+      input: { placeholder: 'mis. Sebelum ganti warna', value: '' },
+      buttons: [{ label: 'Simpan', primary: true }, { label: 'Batal', value: null }],
+    });
+    if (label === null) return;
+    try {
+      await saveAll();
+      const { id } = await api('POST', '/api/versions', { label });
+      toast('Versi disimpan');
+      if ($('#editorArea').dataset.mode === 'history') historyLoad(id);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  // Kembalikan seluruh project (atau satu file) ke versi.
+  async function restoreVersion(version, path = null) {
+    const files = hist.detail?.files ?? [];
+    const removed = path ? [] : files.filter((f) => f.status === 'new').map((f) => f.path);
+    const ok = await modal({
+      title: path ? 'Kembalikan file ini?' : 'Kembalikan ke versi ini?',
+      message: [
+        path
+          ? `"${path}" akan dibuat sama seperti pada ${fullTime(version.createdAt)}.`
+          : `Semua file akan dibuat sama seperti pada ${fullTime(version.createdAt)}.`,
+        removed.length ? ` File yang dibuat setelahnya akan dihapus: ${removed.join(', ')}.` : '',
+        ' Kondisi sekarang disimpan dulu sebagai versi baru, jadi kamu bisa kembali lagi kapan saja.',
+      ].join(''),
+      buttons: [{ label: 'Ya, kembalikan', value: true, primary: true }, { label: 'Batal', value: null }],
+    });
+    if (!ok) return;
+    try {
+      await saveAll();
+      const { touched } = await api('POST', `/api/versions/${version.id}/restore`, path ? { path } : {});
+      await syncFromServer(touched);
+      toast(touched.length ? (path ? 'File dikembalikan' : 'Project dikembalikan ke versi ini') : 'Tidak ada yang perlu dikembalikan');
+      historyLoad(version.id);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
   // ---------- Langganan & isi ulang kredit (QRIS) ----------
   const rupiah = (n) => `Rp${n.toLocaleString('id-ID')}`;
   const shortDate = (iso) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -2856,6 +3128,7 @@
         [`Database ${mb(plan.storage.dbBytes)} per project`, times(plan.storage.dbBytes, freeStore?.dbBytes)],
         [`Gambar hingga ${mb(plan.storage.imageSize)} per file`, times(plan.storage.imageSize, freeStore?.imageSize)],
         [`${plan.storage.entries.toLocaleString('id-ID')} file & folder`, times(plan.storage.entries, freeStore?.entries)],
+        [`Riwayat versi ${plan.history.days} hari`, times(plan.history.days, data.free?.history?.days)],
       ];
       const cards = data.plans.map((plan, i) => h('div', { class: `promo-card ${plan.id}`, style: `--delay:${120 + i * 90}ms` },
         RIBBON[plan.id] ? h('span', { class: 'promo-ribbon' }, RIBBON[plan.id]) : null,
@@ -2900,6 +3173,7 @@
         `Storage ${mb(plan.storage.totalSize)} per project`,
         `Database ${mb(plan.storage.dbBytes)} per project`,
         `Upload gambar hingga ${mb(plan.storage.imageSize)} per file`,
+        `Riwayat versi ${plan.history.days} hari`,
         `Maks. ${plan.storage.entries.toLocaleString('id-ID')} file & folder`,
       ];
       const cards = data.plans.map((plan) => {

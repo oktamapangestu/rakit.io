@@ -6,6 +6,7 @@ import { requireAuth } from './auth.js';
 import { creditInfo, refundCredits, reserveCredits } from './credits.js';
 import { applyChanges, revertChanges, touchedPaths } from './aiapply.js';
 import { loadProject } from './projects.js';
+import { versionBeforeAi } from './versions.js';
 import { cleanPath, isAllowedFile, isImageFile, LIMITS, listTree, readText, userRoot } from './files.js';
 import { COLUMN_TYPES, hasDatabase, listTables, OPERATIONS, schemaSummary } from './userdb.js';
 import { acquireSlot, countRetry, QueueError, reportBusy, reportSuccess } from './aiqueue.js';
@@ -650,6 +651,8 @@ async function runJob(job, { user, slug, messageId, threadId, prompt, mode, acti
     let applyError = null;
     if (result.changes.length) {
       try {
+        const project = q.projectBySlug.get(slug);
+        if (project) await versionBeforeAi(project, user.id, `Sebelum AI: ${prompt}`);
         snapshot = await applyChanges(slug, result.changes);
         applyState = 'pending';
       } catch (err) {
