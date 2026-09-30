@@ -144,6 +144,46 @@ How to answer — reply with a single <message> block written in markdown, in th
 
 const PROMPTS = { build: BUILD_PROMPT, plan: PLAN_PROMPT };
 
+// ---------- Prompt dengan gambar ----------
+// AI_MODEL belum tentu bisa "melihat". Gambar dideskripsikan dulu oleh model vision (AI_VISION_MODEL),
+// lalu deskripsinya ikut dikirim ke AI_MODEL sebagai bagian dari permintaan.
+
+const VISION_PROMPT = `You look at images a user attached to a request about building or changing their website.
+Describe them so a web developer who cannot see the images can act on them precisely. For each image:
+- What it is: design mockup, hand-drawn sketch/wireframe, screenshot of a website, screenshot of an error, logo, product photo, etc.
+- Layout from top to bottom: sections, columns, alignment, spacing, rough proportions; responsive hints if visible.
+- Colors as hex estimates (background, text, accents, buttons), font style (serif/sans/handwritten, weight, relative sizes), corner radius, shadows.
+- Every piece of visible text, verbatim, in its original language.
+- For error screenshots: transcribe the exact error message and where it appears.
+- For photos/logos: describe the content and how it could be used on the site.
+Number the images ("Image 1", "Image 2", ...). Do not write code. Be concise but complete (max ~350 words per image).`;
+
+const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+const THUMB_MAX_BYTES = 80 * 1024;
+const DATA_URL_RE = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/;
+const MAGIC = {
+  jpeg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  png: (b) => b.length > 8 && b.readUInt32BE(0) === 0x89504e47,
+  webp: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+};
+
+// Validasi daftar gambar (data URL). Mengembalikan data URL yang lolos, atau melempar pesan yang ramah.
+function parseImages(list, maxBytes) {
+  if (list === undefined || list === null) return [];
+  if (!Array.isArray(list)) throw new HttpError(400, 'Format gambar tidak valid');
+  if (list.length > config.ai.maxImages) throw new HttpError(400, `Maksimal ${config.ai.maxImages} gambar per prompt`);
+  return list.map((url) => {
+    const m = typeof url === 'string' ? DATA_URL_RE.exec(url) : null;
+    if (!m) throw new HttpError(400, 'Gambar harus berformat JPG, PNG, atau WEBP');
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length > maxBytes) throw new HttpError(413, `Ukuran gambar maksimal ${Math.round(maxBytes / 1024 / 1024) || 1} MB`);
+    if (!MAGIC[m[1]](buf)) throw new HttpError(400, 'File yang dilampirkan bukan gambar yang valid');
+    return url;
+  });
+}
+
+const imageNote = (description) => `[Gambar yang dilampirkan pengguna — deskripsi dari AI penglihatan]\n${description}`;
+
 class ProviderError extends Error {
   constructor(status, detail, retryAfter = null) {
     super(`AI provider ${status}: ${detail}`);
@@ -153,12 +193,12 @@ class ProviderError extends Error {
 }
 
 // Panggil endpoint chat completions (format OpenAI) dengan streaming SSE.
-async function chatCompletion({ messages, tools, signal, onText, onThinking }) {
+async function chatCompletion({ model = config.ai.model, messages, tools, signal, onText, onThinking }) {
   const res = await fetch(`${config.ai.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${config.ai.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: config.ai.model,
+      model,
       max_tokens: config.ai.maxTokens,
       stream: true,
       stream_options: { include_usage: true },
@@ -511,10 +551,11 @@ const sql = {
     INSERT INTO ai_messages (thread_id, user_id, role, mode, content, status, credit, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `),
+  setAttachments: db.prepare('UPDATE ai_messages SET attachments = ? WHERE id = ?'),
   message: db.prepare('SELECT * FROM ai_messages WHERE id = ? AND user_id = ?'),
   recentMessages: db.prepare('SELECT * FROM ai_messages WHERE thread_id = ? ORDER BY id DESC LIMIT ?'),
   history: db.prepare(`
-    SELECT role, content, changes FROM ai_messages
+    SELECT role, content, changes, attachments FROM ai_messages
     WHERE thread_id = ? AND id < ? AND status IN ('sent', 'done') ORDER BY id DESC LIMIT ?
   `),
   setStatus: db.prepare('UPDATE ai_messages SET status = ? WHERE id = ?'),
@@ -558,6 +599,7 @@ function publicMessage(row) {
     applyState: row.apply_state,
     // Isi file sebelum perubahan, untuk tampilan "lihat" (diff). null = file baru.
     before: snapshot ? Object.fromEntries(snapshot.files.map((f) => [f.path, f.before])) : {},
+    images: row.attachments ? JSON.parse(row.attachments).thumbs ?? [] : [],
     createdAt: row.created_at,
   };
 }
@@ -569,9 +611,12 @@ function threadHistory(threadId, beforeId) {
   const rows = sql.history.all(threadId, beforeId, MAX_HISTORY).reverse();
   return rows.map((r) => {
     const changes = r.changes ? JSON.parse(r.changes) : [];
+    const description = r.attachments ? JSON.parse(r.attachments).description : null;
     return {
       role: r.role,
-      content: r.content + (r.role === 'assistant' && changes.length ? `\n\n(Perubahan: ${changesSummary(changes)})` : ''),
+      content: r.content
+        + (description ? `\n\n${imageNote(description)}` : '')
+        + (r.role === 'assistant' && changes.length ? `\n\n(Perubahan: ${changesSummary(changes)})` : ''),
     };
   });
 }
@@ -589,15 +634,34 @@ function emit(job, event) {
   for (const listener of job.listeners) listener(event);
 }
 
-async function runJob(job, { user, slug, messageId, threadId, prompt, mode, activePath, reservation }) {
+async function runJob(job, { user, slug, messageId, userMessageId, threadId, prompt, mode, activePath, reservation, images = [], thumbs = [] }) {
   const send = (event) => emit(job, event);
   let status = 'error';
   let usage = { input_tokens: 0, output_tokens: 0 };
   try {
+    let request = prompt;
+    if (images.length) {
+      // Langkah 1: model vision mendeskripsikan gambar.
+      send({ type: 'vision' });
+      const seen = await callAI({
+        model: config.ai.visionModel,
+        messages: [
+          { role: 'system', content: VISION_PROMPT },
+          { role: 'user', content: [{ type: 'text', text: `The user's request: ${prompt}` }, ...images.map((url) => ({ type: 'image_url', image_url: { url } }))] },
+        ],
+      }, { signal: job.abort.signal, onQueued: (position, total) => send({ type: 'queued', position, total }), onRetry: (attempt, seconds) => send({ type: 'retry', attempt, max: 3, seconds }) });
+      usage.input_tokens += seen.usage?.prompt_tokens ?? 0;
+      usage.output_tokens += seen.usage?.completion_tokens ?? 0;
+      const description = seen.text.trim();
+      if (!description) throw aiFailure('bad_output', 502, 'AI gagal membaca gambar. Coba lagi. Kredit dikembalikan.');
+      sql.setAttachments.run(JSON.stringify({ thumbs, description }), userMessageId);
+      request = `${prompt}\n\n${imageNote(description)}`;
+    }
+
     const context = await projectContext(slug, activePath);
     const merged = [
-      ...sanitizeHistory(threadHistory(threadId, messageId)),
-      { role: 'user', content: `${context}\n\n---\n\nRequest:\n${prompt}` },
+      ...sanitizeHistory(threadHistory(threadId, userMessageId)),
+      { role: 'user', content: `${context}\n\n---\n\nRequest:\n${request}` },
     ].reduce((acc, m) => {
       // Riwayat bisa berakhir dengan pesan user; gabungkan agar role tetap bergantian.
       const last = acc.at(-1);
@@ -635,7 +699,8 @@ async function runJob(job, { user, slug, messageId, threadId, prompt, mode, acti
     let result;
     if (mode === 'plan') {
       const reply = await callAI({ messages: convo }, hooks);
-      usage = { input_tokens: reply.usage?.prompt_tokens ?? 0, output_tokens: reply.usage?.completion_tokens ?? 0 };
+      usage.input_tokens += reply.usage?.prompt_tokens ?? 0;
+      usage.output_tokens += reply.usage?.completion_tokens ?? 0;
       if (process.env.AI_DEBUG) console.log(`----- AI plan (${reply.finishReason}) -----\n${reply.text}`);
       checkFinish(reply);
       const text = planMessage(reply.text);
@@ -643,7 +708,8 @@ async function runJob(job, { user, slug, messageId, threadId, prompt, mode, acti
     } else {
       const existingTables = hasDatabase(slug) ? listTables(slug).map((t) => t.name) : [];
       result = await runBuilder({ messages: convo, existingTables, hooks });
-      usage = result.usage;
+      usage.input_tokens += result.usage.input_tokens;
+      usage.output_tokens += result.usage.output_tokens;
     }
     if (!result.message && !result.changes.length) {
       throw aiFailure('bad_output', 502, 'AI tidak memberi jawaban. Coba lagi.');
@@ -747,7 +813,12 @@ ai.post('/prompt', loadProject, async (req, res) => {
   let threadId = Number(req.body?.threadId) || null;
   if (threadId && !sql.thread.get(threadId, req.user.id, req.project.id)) threadId = null;
 
-  const reservation = reserveCredits(req.user.id);
+  // Lampiran gambar (maks. 3): gambar ukuran kerja untuk AI + thumbnail kecil untuk riwayat chat.
+  const images = parseImages(req.body?.images, IMAGE_MAX_BYTES);
+  if (images.length && !config.ai.visionModel) throw new HttpError(400, 'Lampiran gambar belum tersedia di server ini');
+  const thumbs = images.length ? parseImages(req.body?.thumbs, THUMB_MAX_BYTES).slice(0, images.length) : [];
+
+  const reservation = reserveCredits(req.user.id, images.length ? config.ai.imagePromptCredits : config.ai.creditsPerPrompt);
   running.add(req.user.id);
 
   const now = Date.now();
@@ -760,11 +831,12 @@ ai.post('/prompt', loadProject, async (req, res) => {
     sql.touchThread.run(now, threadId);
   }
   const userMessageId = Number(sql.insertMessage.run(threadId, req.user.id, 'user', mode, prompt, 'sent', null, now).lastInsertRowid);
+  if (images.length) sql.setAttachments.run(JSON.stringify({ thumbs, description: null }), userMessageId);
   const messageId = Number(sql.insertMessage.run(threadId, req.user.id, 'assistant', mode, '', 'queued', JSON.stringify(reservation), now).lastInsertRowid);
 
   const job = { userId: req.user.id, events: [], listeners: new Set(), abort: new AbortController(), finished: false };
   jobs.set(messageId, job);
-  runJob(job, { user: req.user, slug: req.project.slug, messageId, threadId, prompt, mode, activePath, reservation });
+  runJob(job, { user: req.user, slug: req.project.slug, messageId, userMessageId, threadId, prompt, mode, activePath, reservation, images, thumbs });
 
   res.status(201).json({
     threadId,

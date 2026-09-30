@@ -21,7 +21,10 @@ import {
 
 export const api = express.Router();
 
-api.use(express.json({ limit: '1mb' }));
+// Prompt AI boleh membawa gambar (maks. 3 × ±2 MB base64), endpoint lain cukup 1 MB.
+const jsonSmall = express.json({ limit: '1mb' });
+const jsonLarge = express.json({ limit: '10mb' });
+api.use((req, res, next) => (req.path === '/ai/prompt' ? jsonLarge : jsonSmall)(req, res, next));
 api.use(requireSameOrigin);
 
 // Batas per akun (atau per IP bila belum login) supaya satu pengguna tidak bisa membanjiri server.

@@ -145,6 +145,8 @@ db.exec(`
 const hasColumn = (table, column) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
 if (!hasColumn('users', 'google_id')) db.exec('ALTER TABLE users ADD COLUMN google_id TEXT');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google ON users(google_id) WHERE google_id IS NOT NULL');
+// Lampiran gambar pesan AI: JSON { thumbs: [dataURL kecil], description: teks dari model vision }.
+if (!hasColumn('ai_messages', 'attachments')) db.exec('ALTER TABLE ai_messages ADD COLUMN attachments TEXT');
 if (!hasColumn('ai_threads', 'project_id')) db.exec('ALTER TABLE ai_threads ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE');
 // Dulu 1 akun = 1 website di <username>.rakit.icu: jadikan itu project pertamanya (URL tetap sama).
 db.exec(`

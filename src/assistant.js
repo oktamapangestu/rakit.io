@@ -105,7 +105,8 @@ const sql = {
 
 const DEFAULT_MODELS = [
   { key: 'flash', name: 'DeepSeek V4.1 Flash', tier: 'Hemat', model: 'deepseek-v4.1-flash', cost: 150, markup: 3, enabled: true },
-  { key: 'pro', name: 'DeepSeek V4.1 Pro', tier: 'Pintar', model: 'deepseek-v4.1-pro', cost: 431, markup: 3, enabled: true },
+  // deepseek-v4.1-pro belum tersedia di gateway; pakai v4-pro sampai ada.
+  { key: 'pro', name: 'DeepSeek V4 Pro', tier: 'Pintar', model: 'deepseek-v4-pro', cost: 431, markup: 3, enabled: true },
 ];
 const DEFAULT_TRIAL = 500; // Rupiah, saldo percobaan sekali per akun
 

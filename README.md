@@ -111,6 +111,12 @@ Konfigurasi di `.env`:
   diterapkan server beserta snapshot, jadi Simpan/Batalkan tetap bisa setelah refresh. Job yang terputus karena
   server restart ditandai gagal dan kreditnya dikembalikan. Riwayat disimpan maks. 50 percakapan per user dan
   dihapus otomatis setelah 90 hari tidak dipakai.
+- **Prompt dengan gambar** (maks. 3: desain, sketsa, screenshot error): tombol *Gambar* di kotak prompt, tempel
+  (Ctrl/⌘+V), atau seret file. Gambar diperkecil di browser (sisi terpanjang 1280 px, JPEG) lalu dideskripsikan
+  oleh `AI_VISION_MODEL` (default `deepseek-v4.1-flash`, karena `deepseek-v4-pro` tidak bisa melihat gambar);
+  deskripsinya ikut dikirim ke `AI_MODEL` dan disimpan di riwayat (kolom `ai_messages.attachments`, beserta
+  thumbnail), jadi prompt lanjutan tetap "ingat" gambarnya. Memakai `AI_IMAGE_PROMPT_CREDITS` kredit (default 2).
+  Isi file divalidasi (JPG/PNG/WEBP asli, maks. 2 MB per gambar).
 - Kredit dipotong di awal dan **dikembalikan** kalau request gagal, dihentikan, atau ditolak.
 - Setiap request dicatat di tabel `ai_requests` (token input/output) untuk memantau biaya:
   ```sql

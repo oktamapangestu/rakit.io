@@ -1070,6 +1070,7 @@
     stream: null, // AbortController koneksi event (menutupnya TIDAK membatalkan job)
     threadId: null, // percakapan yang sedang dibuka
     mode: storage.get('rakit.aiMode', 'build'), // 'build' (Builder) | 'plan' (Plan)
+    images: [], // lampiran prompt berikutnya: [{ full, thumb }] (data URL JPEG)
     pendingCard: null, // kartu perubahan yang menunggu Simpan/Batalkan
     applying: false, // sedang Simpan/Batalkan
   };
@@ -1164,9 +1165,13 @@
     badge.title = `${plan.name} aktif sampai ${shortDate(plan.expiresAt)}${expiring ? ' · klik untuk perpanjang' : ''}`;
   }
 
+  // Biaya prompt yang sedang disusun: prompt dengan gambar memakai lebih banyak kredit.
+  const promptCost = () => (ai.images.length && ai.credits?.images ? ai.credits.images.cost : ai.credits?.costPerPrompt ?? 1);
+
   function updateAiComposer() {
     const c = ai.credits;
-    const canSend = c?.enabled && c.remaining >= c.costPerPrompt && !ai.busy && !ai.applying;
+    $('#aiAttach').hidden = !c?.enabled || !c.images;
+    const canSend = c?.enabled && c.remaining >= promptCost() && !ai.busy && !ai.applying;
     $('#aiSend').disabled = !canSend || !$('#aiInput').value.trim();
     $('#aiInput').disabled = !c?.enabled;
     $('#aiContext').textContent = state.active ? `konteks: ${state.active}` : 'konteks: semua file';
@@ -1251,7 +1256,10 @@
   }
 
   // ---------- Riwayat percakapan ----------
-  const userBubble = (m) => h('div', { class: 'msg user' }, m.mode === 'plan' ? h('span', { class: 'msg-mode' }, 'Plan') : null, m.content);
+  const userBubble = (m) => h('div', { class: 'msg user' },
+    m.mode === 'plan' ? h('span', { class: 'msg-mode' }, 'Plan') : null,
+    m.images?.length ? h('div', { class: 'msg-images' }, m.images.map((src) => h('img', { src, alt: 'Gambar terlampir' }))) : null,
+    m.content);
   const errorBubble = (text, code) => h('div', { class: 'msg error' },
     text,
     code === 'no_credits' && ai.credits?.topupEnabled
@@ -1367,6 +1375,86 @@
 
   // ---------- Prompt & job ----------
 
+  // ---------- Lampiran gambar di prompt ----------
+  // Gambar diperkecil di browser (sisi terpanjang 1280 px, JPEG) supaya cepat dikirim; thumbnail untuk riwayat chat.
+  async function shrinkImage(file, maxSide, quality) {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; // latar putih untuk gambar transparan
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    return canvas.toDataURL('image/jpeg', quality);
+  }
+
+  async function addPromptImages(files) {
+    const limit = ai.credits?.images;
+    if (!limit) return;
+    const list = [...files].filter((f) => /^image\/(png|jpe?g|webp|gif|bmp)$/i.test(f.type));
+    if (!list.length) return toast('Lampirkan file gambar (PNG, JPG, atau WEBP)', 'error');
+    for (const file of list) {
+      if (ai.images.length >= limit.max) {
+        toast(`Maksimal ${limit.max} gambar per prompt`, 'error');
+        break;
+      }
+      try {
+        let full = await shrinkImage(file, 1280, 0.85);
+        if (full.length > 2.6e6) full = await shrinkImage(file, 1024, 0.7);
+        ai.images.push({ full, thumb: await shrinkImage(file, 200, 0.7) });
+      } catch {
+        toast(`"${file.name}" tidak bisa dibaca sebagai gambar`, 'error');
+      }
+    }
+    renderAttachments();
+    $('#aiInput').focus();
+  }
+
+  function renderAttachments() {
+    const box = $('#aiAttachments');
+    box.hidden = !ai.images.length;
+    const cost = ai.credits?.images?.cost;
+    box.replaceChildren(
+      ...ai.images.map((img, i) => h('span', { class: 'ai-thumb' },
+        h('img', { src: img.thumb, alt: `Gambar ${i + 1}` }),
+        h('button', { type: 'button', title: 'Hapus gambar', 'aria-label': 'Hapus gambar', onclick: () => { ai.images.splice(i, 1); renderAttachments(); } }, '×'))),
+      ai.images.length ? h('span', { class: 'ai-attach-note' }, `Prompt dengan gambar memakai ${cost} kredit`) : '',
+    );
+    updateAiComposer();
+  }
+
+  function bindAiAttachments() {
+    $('#aiAttach').onclick = () => {
+      const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', multiple: true });
+      input.onchange = () => addPromptImages(input.files);
+      input.click();
+    };
+    // Tempel screenshot langsung ke kotak prompt.
+    $('#aiInput').addEventListener('paste', (e) => {
+      const files = [...(e.clipboardData?.files ?? [])];
+      if (files.length && ai.credits?.images) {
+        e.preventDefault();
+        addPromptImages(files);
+      }
+    });
+    const form = $('#aiForm');
+    form.addEventListener('dragover', (e) => {
+      if (![...(e.dataTransfer?.types ?? [])].includes('Files') || !ai.credits?.images) return;
+      e.preventDefault();
+      form.classList.add('drop');
+    });
+    form.addEventListener('dragleave', () => form.classList.remove('drop'));
+    form.addEventListener('drop', (e) => {
+      if (!e.dataTransfer?.files?.length || !ai.credits?.images) return;
+      e.preventDefault();
+      form.classList.remove('drop');
+      addPromptImages(e.dataTransfer.files);
+    });
+  }
+
   async function sendPrompt() {
     const input = $('#aiInput');
     const prompt = input.value.trim();
@@ -1377,7 +1465,10 @@
     const box = $('#aiMessages');
     box.querySelector('.ai-empty')?.remove();
     const mode = ai.mode;
-    box.append(userBubble({ mode, content: prompt }));
+    const attached = ai.images;
+    box.append(userBubble({ mode, content: prompt, images: attached.map((i) => i.thumb) }));
+    ai.images = [];
+    renderAttachments();
     input.value = '';
     autoGrow();
     aiScroll();
@@ -1387,7 +1478,10 @@
     let started;
     try {
       await saveAll(); // pastikan AI membaca versi terbaru
-      started = await api('POST', '/api/ai/prompt', { prompt, mode, activePath: state.active, threadId: ai.threadId });
+      started = await api('POST', '/api/ai/prompt', {
+        prompt, mode, activePath: state.active, threadId: ai.threadId,
+        ...(attached.length ? { images: attached.map((i) => i.full), thumbs: attached.map((i) => i.thumb) } : {}),
+      });
     } catch (err) {
       ai.busy = false;
       updateAiComposer();
@@ -1418,6 +1512,7 @@
       const secs = Math.max(0, Math.round((Date.now() - started) / 1000));
       status.textContent = {
         prepare: () => 'Menyiapkan…',
+        vision: () => `AI sedang melihat gambar… ${secs} dtk`,
         queued: () => `Menunggu antrean AI… posisi ${phase.position} dari ${phase.total}`,
         thinking: () => `AI sedang berpikir… ${secs} dtk`,
         writing: () => `Menulis kode… ${(phase.chars / 1000).toFixed(1)}k karakter`,
@@ -1448,7 +1543,8 @@
         if (!res.ok) throw new Error(`Gagal (${res.status})`);
         for await (const event of readEvents(res)) {
           if (event.credits) { ai.credits = event.credits; renderCredits(); }
-          if (event.type === 'queued') setPhase({ kind: 'queued', position: event.position, total: event.total });
+          if (event.type === 'vision') setPhase({ kind: 'vision' });
+          else if (event.type === 'queued') setPhase({ kind: 'queued', position: event.position, total: event.total });
           else if (event.type === 'running' || (event.type === 'thinking' && phase.kind !== 'writing')) setPhase({ kind: 'thinking' });
           else if (event.type === 'retry') setPhase({ kind: 'retry', attempt: event.attempt, max: event.max });
           else if (event.type === 'progress') setPhase({ kind: 'writing', chars: event.chars });
@@ -1724,6 +1820,7 @@
     $('#planBadge').onclick = () => openTopup('plans');
     $('#aiTopupBtn').onclick = () => openTopup();
     $('#aiForm').onsubmit = (e) => { e.preventDefault(); sendPrompt(); };
+    bindAiAttachments();
     const input = $('#aiInput');
     input.addEventListener('input', () => { autoGrow(); updateAiComposer(); });
     input.addEventListener('keydown', (e) => {

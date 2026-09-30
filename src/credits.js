@@ -56,6 +56,8 @@ export function creditInfo(userId) {
     purchased,
     remaining: planRemaining + bonusLeft + freeRemaining + purchased,
     costPerPrompt: config.ai.creditsPerPrompt,
+    // Lampiran gambar di prompt (null = tidak tersedia)
+    images: config.ai.visionModel ? { cost: config.ai.imagePromptCredits, max: config.ai.maxImages } : null,
     resetsAt: new Date(wibDay().resetsAt).toISOString(), // jatah gratis terisi lagi 00.00 WIB
     plan: plan && {
       id: plan.id,
@@ -72,9 +74,8 @@ export function creditInfo(userId) {
 
 // Potong kredit sebelum memanggil AI. Mengembalikan catatan reservasi { source, period, cost }
 // yang bisa disimpan, supaya kredit tetap bisa dikembalikan walau server sempat restart.
-export function reserveCredits(userId) {
+export function reserveCredits(userId, cost = config.ai.creditsPerPrompt) {
   const period = freePeriod();
-  const cost = config.ai.creditsPerPrompt;
 
   const quota = planQuota(activePlan(userId));
   if (quota) {
@@ -98,7 +99,9 @@ export function reserveCredits(userId) {
   if (q.spendBalance.run(cost, userId, cost).changes === 1) {
     return { source: 'purchased', period, cost };
   }
-  const err = new HttpError(402, config.billing.enabled
+  const err = new HttpError(402, cost > config.ai.creditsPerPrompt
+    ? `Prompt dengan gambar butuh ${cost} kredit dan kreditmu belum cukup. Kirim tanpa gambar, atau ${config.billing.enabled ? 'isi ulang kredit' : 'tunggu kredit terisi lagi besok'}.`
+    : config.billing.enabled
     ? 'Kredit AI kamu habis. Kredit gratis terisi lagi besok pukul 00.00 WIB, atau berlangganan / isi ulang untuk lanjut sekarang.'
     : 'Kredit AI gratis hari ini sudah habis. Terisi lagi besok pukul 00.00 WIB.');
   err.code = 'no_credits';

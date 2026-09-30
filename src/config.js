@@ -38,6 +38,11 @@ export const config = {
     // Bonus kredit sekali untuk akun baru (habis pakai, tidak kembali); diatur owner di dashboard.
     bonusCredits: Math.max(0, Number(env.AI_BONUS_CREDITS ?? 20) || 0),
     creditsPerPrompt: Number(env.AI_CREDITS_PER_PROMPT || 1),
+    // Prompt dengan gambar: model yang bisa "melihat" (vision) mendeskripsikan gambar, lalu AI_MODEL membangun.
+    // Kosongkan AI_VISION_MODEL untuk mematikan lampiran gambar.
+    visionModel: env.AI_VISION_MODEL ?? 'deepseek-v4.1-flash',
+    imagePromptCredits: Math.max(1, Number(env.AI_IMAGE_PROMPT_CREDITS || 2)),
+    maxImages: 3,
   },
   billing: {
     enabled: Boolean(env.KASERA_API_KEY),
