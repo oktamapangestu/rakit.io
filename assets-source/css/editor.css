@@ -1761,17 +1761,59 @@ button.credit-badge:disabled { cursor: default; }
 
 .diagram-body { flex: 1; display: flex; min-height: 0; border-top: 1px solid var(--line); }
 .diagram-canvas {
+  position: relative;
   flex: 1;
   min-width: 0;
-  overflow: auto;
-  padding: 24px;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  outline: none;
+  touch-action: none; /* gestur sentuh ditangani sendiri (geser & cubit) */
+  cursor: grab;
   background-image: radial-gradient(var(--line) 1px, transparent 1px);
   background-size: 18px 18px;
-  display: flex;
 }
-.diagram-stage { transform-origin: top left; margin: auto; }
+.diagram-canvas.panning { cursor: grabbing; }
+.diagram-canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-line); }
+.diagram-canvas .db-empty { margin: auto; cursor: default; }
+.diagram-stage { position: absolute; top: 0; left: 0; transform-origin: 0 0; user-select: none; }
 .diagram-stage svg { display: block; max-width: none; height: auto; }
-.diagram-loading { margin: auto; color: var(--muted); }
+.diagram-loading { display: flex; align-items: center; gap: 10px; margin: auto; color: var(--muted); }
+.diagram-error { font: 12px var(--mono); color: #fecaca; }
+.diagram-hint {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgb(10 13 20 / 0.75);
+  color: var(--muted);
+  font-size: 11.5px;
+  pointer-events: none;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.9;
+  transition: opacity 0.3s;
+}
+.diagram-hint.gone { opacity: 0; }
+.findings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font: 600 12px var(--ui);
+  cursor: pointer;
+}
+.findings-toggle:hover, .findings-toggle[aria-pressed="true"] { color: var(--white); background: var(--raised); }
+.findings-toggle .count { min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--line-2); color: var(--text); font-size: 11px; text-align: center; }
+.findings-toggle.alert .count { background: rgb(248 113 113 / 0.25); color: #fecaca; }
 .diagram-empty-icon { background: rgb(252 211 77 / 0.12); color: #fcd34d; }
 
 .diagram-findings { width: 300px; flex-shrink: 0; overflow-y: auto; padding: 14px; border-left: 1px solid var(--line); }

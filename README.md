@@ -272,16 +272,38 @@ menu avatar editor. Pengguna lain diarahkan kembali ke editor, dan API `/api/adm
 
 Tab **Diagram** di editor (di samping Data) menggambar diagram dari file & database project aktif, tanpa AI:
 
-- **ERD** — tabel, kolom, tipe, wajib/privat. Relasi ditebak dari nama kolom (`produk_id` → tabel `produk`),
-  karena database belum menyimpan relasi resmi. Menandai tabel yang bisa diubah/dihapus siapa pun.
+- **Use Case** — aktor (Pengunjung, Pemilik) dan apa yang bisa mereka lakukan: membuka halaman, melihat/mengirim
+  data (mengikuti akses publik tabel), mengelola data.
+- **Activity** — alur pengunjung: buka beranda → pilih halaman → baca/kirim data di halaman itu, termasuk
+  cabang berhasil/gagal saat mengirim form. Langkah yang akan ditolak server ditandai merah.
+- **Sequence** — urutan pesan Pengunjung → Halaman → API database → Tabel, dengan metode HTTP (GET/POST/PATCH/
+  DELETE) dan jawaban (200/201, 403 akses privat, 404 tabel belum ada).
+- **Class** — tiap tabel jadi class; kolom jadi atribut (`-` = privat, `?` = tidak wajib); relasi jadi asosiasi.
+- **State** — siklus hidup data per tabel (ditambah → tersimpan → diubah/dihapus) beserta siapa yang boleh,
+  plus kolom ya/tidak dan kolom status.
+- **ERD** — tabel, kolom, tipe, wajib/privat. Relasi dari kolom bertipe Relasi, sisanya ditebak dari nama kolom
+  (`produk_id` → tabel `produk`). Menandai tabel yang bisa diubah/dihapus siapa pun.
 - **Peta halaman** — halaman HTML, link antar halaman, dan file CSS/JS yang dimuat. Menandai **link rusak**,
   file yang hilang, dan halaman yang tidak ditautkan dari mana pun.
 - **Alur data** — halaman → script → tabel beserta operasinya. Menandai request yang **pasti ditolak**
   (akses tabel masih "Hanya kamu") dan tabel yang belum ada.
 
-Setiap temuan punya tombol aksi (Atur akses, Buat tabel, Minta AI perbaiki). Diagram digambar dengan Mermaid
-(dimuat dari CDN hanya saat tab dibuka); kodenya bisa disalin dan hasilnya diunduh sebagai SVG. Pemakaian
-`/api/db/...` dideteksi dari kode, jadi URL yang dibuat dinamis bisa terlewat.
+Pemakaian database dihitung per halaman **termasuk file .js yang dimuat halaman itu**. Setiap temuan punya tombol
+aksi (Atur akses, Buat tabel, Minta AI perbaiki); panel **Temuan** bisa dilipat (tombol di toolbar, beserta
+jumlahnya). Diagram digambar dengan Mermaid (dimuat dari CDN hanya saat tab dibuka); kodenya bisa disalin dan
+hasilnya diunduh sebagai SVG. Pemakaian `/api/db/...` dideteksi dari kode, jadi URL yang dibuat dinamis bisa terlewat.
+
+**Zoom & geser kanvas:**
+
+| | Zoom | Geser |
+|---|---|---|
+| Mouse | scroll roda (ke arah kursor), klik dua kali (Shift = perkecil) | seret; Shift + scroll = mendatar |
+| Touchpad | cubit (juga Safari), atau Ctrl/⌘ + scroll | geser dua jari |
+| Layar sentuh | cubit dua jari | seret satu jari |
+| Keyboard (kanvas difokus) | `+` / `−`, `0` pas layar, `1` ukuran asli | tombol panah (Shift = lebih jauh) |
+
+Zoom 10%–500%; tombol persen di toolbar = pas layar. Selama belum di-zoom/geser, diagram otomatis pas ulang saat
+ukuran panel berubah.
 
 ## Batasan (ubah di `src/files.js` → `LIMITS`)
 

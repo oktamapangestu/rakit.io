@@ -2335,7 +2335,13 @@
   // ---------- Diagram (ERD, peta halaman, alur data) ----------
   // Dibuat otomatis dari file & database project, digambar dengan Mermaid (dimuat hanya saat tab dibuka).
   const MERMAID_URL = 'https://cdn.jsdelivr.net/npm/mermaid@12.0.0/dist/mermaid.esm.min.mjs';
-  const diagram = { kind: storage.get('rakit.diagram', 'erd'), data: null, code: '', zoom: 1, mermaid: null, seq: 0 };
+  // view: posisi & skala kanvas (x, y dalam px layar; z = zoom); w/h = ukuran asli SVG; touched = user sudah zoom/geser.
+  const diagram = {
+    kind: storage.get('rakit.diagram', 'erd'), data: null, code: '', mermaid: null, seq: 0,
+    view: { x: 0, y: 0, z: 1, w: 0, h: 0, touched: false },
+  };
+  const ZOOM_MIN = 0.1;
+  const ZOOM_MAX = 5;
   const OP_LABEL = { list: 'baca daftar', view: 'baca', create: 'tambah', update: 'ubah', delete: 'hapus' };
   const OP_RULE = { list: 'Lihat daftar', view: 'Lihat satu baris', create: 'Tambah', update: 'Ubah', delete: 'Hapus' };
 
@@ -2469,101 +2475,106 @@
     return { code: lines.join('\n'), findings: useCaseFindings(d) };
   }
 
-  // Activity: alur satu transaksi data dari halaman → API → tabel, plus navigasi link antar-halaman.
+  // Pemakaian database oleh sebuah halaman: dari kode di halaman itu sendiri DAN dari file .js yang dimuatnya.
+  function pageCallsFor(d, pagePath) {
+    const scripts = new Set(d.assets.filter((a) => a.from === pagePath && a.kind === 'js').map((a) => a.to));
+    return d.calls.filter((c) => c.file === pagePath || scripts.has(c.file));
+  }
+  const HTTP_METHOD = { list: 'GET', view: 'GET', create: 'POST', update: 'PATCH', delete: 'DELETE' };
+  const homePage = (d) => d.pages.find((p) => p.path === 'index.html') ?? d.pages[0];
+  const pageLabel = (p) => mmText(p.title || p.path);
+
+  // Activity: apa yang dilakukan pengunjung — buka beranda, pilih halaman, lalu baca/kirim data di halaman itu.
   function activityDiagram(d) {
-    const flows = d.forms.map((f) => ({ page: f.page, table: null }));
-    // Pasangkan form dengan tabel yang dipanggil di halaman yang sama (aksi "kirim data").
-    const pageCalls = new Map();
-    for (const c of d.calls) {
-      if (!pageCalls.has(c.file)) pageCalls.set(c.file, []);
-      pageCalls.get(c.file).push(c);
+    if (!d.pages.length) return { empty: ['Belum ada alur', 'Buat halaman (.html) untuk melihat alur aktivitas pengunjung.'], findings: [] };
+    const home = homePage(d);
+    const others = d.pages.filter((p) => p !== home && p.path !== '404.html').slice(0, 8);
+    const lines = ['flowchart TD', '  mulai(["Mulai"]):::start', `  p0["Buka ${pageLabel(home)}"]:::act`, '  mulai --> p0'];
+    const pageNode = new Map([[home.path, 'p0']]);
+    if (others.length) {
+      lines.push('  pilih{"Mau ke halaman mana?"}:::decide', '  p0 --> pilih');
+      others.forEach((p, i) => {
+        pageNode.set(p.path, `p${i + 1}`);
+        lines.push(`  p${i + 1}["Buka ${pageLabel(p)}${p.orphan ? ' (tidak ditautkan)' : ''}"]:::${p.orphan ? 'warn' : 'act'}`, `  pilih --> p${i + 1}`);
+      });
     }
-    for (const f of flows) {
-      const calls = pageCalls.get(f.page) ?? [];
-      f.table = calls.find((c) => c.op === 'create')?.table ?? calls[0]?.table ?? null;
-    }
-    const hasData = d.tables.length && d.pages.length;
-    if (!d.pages.length) return { empty: ['Belum ada alur', 'Buat halaman dengan form untuk melihat alur aktivitas.'], findings: [] };
-
-    const lines = ['flowchart TD', '  mulai(["Mulai"]):::start'];
-    const steps = [];
-
-    if (hasData || flows.length) {
-      for (const [i, f] of flows.slice(0, 12).entries()) {
-        const pageLabel = d.pages.find((p) => p.path === f.page)?.title || f.page;
-        steps.push({ id: `fill${i}`, label: `Buka ${mmText(pageLabel)} & isi form`, cls: 'act' });
-        if (f.table) {
-          steps.push({ id: `post${i}`, label: `Kirim ke tabel ${mmText(f.table)}`, cls: 'api' });
-          steps.push({ id: `valid${i}`, label: 'Validasi & simpan', cls: 'act' });
+    lines.push('  selesai(["Selesai"]):::stop');
+    const findings = [];
+    let n = 0;
+    for (const [path, node] of pageNode) {
+      const calls = pageCallsFor(d, path);
+      if (!calls.length) {
+        lines.push(`  ${node} --> selesai`);
+        continue;
+      }
+      const seen = new Set();
+      for (const c of calls) {
+        const key = `${c.op}:${c.table}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const bad = c.status !== 'ok';
+        const note = c.status === 'owner_only' ? ' — ditolak, akses privat' : c.status === 'missing' ? ' — tabel belum ada' : '';
+        const i = n++;
+        if (c.op === 'create') {
+          lines.push(
+            `  f${i}["Isi form"]:::act`, `  k${i}["Kirim ke tabel ${mmText(c.table)}${note}"]:::${bad ? 'bad' : 'api'}`,
+            `  c${i}{"Berhasil?"}:::decide`, `  ok${i}["Tampilkan pesan berhasil"]:::act`, `  e${i}["Tampilkan pesan error"]:::bad`,
+            `  ${node} --> f${i} --> k${i} --> c${i}`, `  c${i} -->|ya| ok${i} --> selesai`, `  c${i} -->|tidak| e${i} --> f${i}`,
+          );
+        } else {
+          const verb = { list: 'Tampilkan daftar', view: 'Tampilkan detail', update: 'Ubah data', delete: 'Hapus data' }[c.op];
+          lines.push(`  a${i}["${verb} ${mmText(c.table)}${note}"]:::${bad ? 'bad' : 'api'}`, `  ${node} --> a${i} --> selesai`);
         }
       }
     }
-    // Alur navigasi antar-halaman (klik link) sebagai pergantian proses.
-    const navLinks = d.links.filter((l) => !l.broken).slice(0, 10);
-    for (const [i, l] of navLinks.entries()) {
-      steps.push({ id: `nav${i}`, label: `Klik link → ${mmText(l.to)}`, cls: 'nav' });
-    }
-    if (!steps.length) steps.push({ id: 'view', label: 'Pengunjung membuka halaman', cls: 'act' });
-
-    for (const s of steps) lines.push(`  ${s.id}["${s.label}"]:::${s.cls}`);
-    lines.push(`  selesai(["Selesai"]):::stop`);
-    const chain = ['mulai', ...steps.map((s) => s.id), 'selesai'];
-    for (let i = 0; i < chain.length - 1; i++) lines.push(`  ${chain[i]} --> ${chain[i + 1]}`);
-
     lines.push(
       '  classDef start fill:#11251a,stroke:#34d399,stroke-width:2px,color:#d1fae5',
       '  classDef stop fill:#2a1f4d,stroke:#a78bfa,stroke-width:2px,color:#f5f7fb',
       '  classDef act fill:#1b2130,stroke:#8b5cf6,color:#f5f7fb',
       '  classDef api fill:#1b2a3d,stroke:#60a5fa,color:#dbeafe',
-      '  classDef nav fill:#161b27,stroke:#7c869b,color:#d8dde8',
+      '  classDef decide fill:#2a2410,stroke:#fbbf24,color:#fef3c7',
+      '  classDef warn fill:#1b2130,stroke:#7c869b,stroke-dasharray:4 3,color:#d8dde8',
+      '  classDef bad fill:#3b1219,stroke:#f87171,color:#fecaca',
     );
-    const findings = [];
-    const docall = d.forms.filter((f) => f.method === 'post').length;
-    if (docall) findings.push({ level: 'info', text: `${docall} form mengirim data (POST). Alur di atas mengikuti halaman yang memakai tabel.` });
+    if (d.pages.length - 1 > others.length) findings.push({ level: 'info', text: `Hanya 8 halaman pertama yang digambar (dari ${d.pages.length}).` });
+    findings.push({ level: 'info', text: 'Kotak kuning = pilihan pengunjung. Kotak merah = langkah yang akan gagal. Dibaca dari kode halaman & script-nya.' });
     return { code: lines.join('\n'), findings };
   }
 
-  // Sequence: urutan interaksi Pengunjung → Halaman → API → Database saat baca & kirim data.
+  // Sequence: urutan pesan Pengunjung → Halaman → API → Tabel saat halaman membaca/mengirim data.
   function sequenceDiagram(d) {
-    const used = [...new Set(d.calls.map((c) => c.table))];
-    if (!d.pages.length || (!used.length && !d.tables.length)) {
-      return { empty: ['Belum ada interaksi', 'Halaman yang membaca/mengirim data akan membentuk diagram sequence.'], findings: [] };
+    const pages = d.pages.map((p) => ({ page: p, calls: pageCallsFor(d, p.path) })).filter((x) => x.calls.length).slice(0, 4);
+    if (!pages.length) {
+      return { empty: ['Belum ada interaksi data', "Diagram ini muncul setelah halaman atau script-nya memakai fetch('/api/db/...')."], findings: [] };
     }
-    const lines = ['sequenceDiagram', '  autonumber'];
-    const pageIds = new Map();
-    let pi = 0;
-    const pageId = (p) => { if (!pageIds.has(p)) pageIds.set(p, `P${++pi}`); return pageIds.get(p); };
-    const dbIds = new Map();
-    let di = 0;
-    const dbId = (t) => { if (!dbIds.has(t)) dbIds.set(t, `DB${++di}`); return dbIds.get(t); };
-
-    for (const p of d.pages.slice(0, 4)) lines.push(`  participant ${pageId(p.path)} as ${mmText(p.title || p.path)}`);
-    lines.push('  participant API as API Rakit');
-    for (const t of used.slice(0, 4)) lines.push(`  participant ${dbId(t)} as ${mmText(t)}`);
-    lines.push('  actor U as Pengunjung');
-
-    let any = false;
-    for (const p of d.pages.slice(0, 4)) {
-      const calls = d.calls.filter((c) => c.file === p.path);
-      if (!calls.length) continue;
-      lines.push(`  U->>${pageId(p.path)}: Buka ${mmText(p.title || p.path)}`);
-      for (const c of calls.slice(0, 5)) {
-        const target = dbId(c.table);
-        if (c.status === 'owner_only') lines.push(`  Note over ${pageId(p.path)},API: akses ${OP_LABEL[c.op]} masih privat — akan 403`);
-        lines.push(`  ${pageId(p.path)}->>API: ${c.op === 'create' ? 'POST' : c.op === 'list' ? 'GET' : c.op === 'view' ? 'GET' : c.op === 'update' ? 'PUT' : 'DELETE'} /api/db/${mmText(c.table)}`);
-        lines.push(`  API->>${target}: ${OP_LABEL[c.op] ?? c.op}`);
-        lines.push(`  ${target}-->>API: hasil`);
-        lines.push(`  API-->>${pageId(p.path)}: 200 OK`);
-        any = true;
-      }
-      lines.push(`  ${pageId(p.path)}-->>U: tampilkan halaman`);
-    }
-    if (!any) lines.push('  Note over U,API: Belum ada halaman yang memakai database.');
+    const tables = [...new Set(pages.flatMap((x) => x.calls.map((c) => c.table)))].slice(0, 5);
+    const tableId = new Map(tables.map((t, i) => [t, `T${i + 1}`]));
+    const lines = ['sequenceDiagram', '  autonumber', '  actor U as Pengunjung'];
+    pages.forEach((x, i) => lines.push(`  participant P${i + 1} as ${pageLabel(x.page)}`));
+    lines.push('  participant API as API database');
+    for (const t of tables) lines.push(`  participant ${tableId.get(t)} as Tabel ${mmText(t)}`);
 
     const findings = [];
-    for (const c of d.calls.filter((x) => x.status === 'owner_only').slice(0, 5)) {
-      findings.push({ level: 'error', text: `${c.file} memanggil "${c.table}" (${OP_LABEL[c.op]}) tapi aksesnya masih privat → 403.`, actions: [['Atur akses', () => openTableAccess(c.table)]] });
-    }
+    pages.forEach((x, i) => {
+      const P = `P${i + 1}`;
+      lines.push(`  U->>${P}: Buka halaman`);
+      for (const c of x.calls.slice(0, 5)) {
+        const T = tableId.get(c.table);
+        lines.push(`  ${P}->>API: ${HTTP_METHOD[c.op]} /api/db/${mmText(c.table)}`);
+        if (c.status === 'owner_only') {
+          lines.push(`  API-->>${P}: 403 ditolak (akses ${OP_LABEL[c.op]} masih privat)`);
+          findings.push({ level: 'error', text: `${c.file} ${OP_LABEL[c.op]} tabel "${c.table}", tapi aksesnya masih privat. Pengunjung akan mendapat error 403.`, actions: [['Atur akses', () => openTableAccess(c.table)]] });
+        } else if (c.status === 'missing' || !T) {
+          lines.push(`  API-->>${P}: 404 tabel belum ada`);
+          findings.push({ level: 'error', text: `${c.file} memakai tabel "${c.table}" yang belum ada.`, actions: [['Buat tabel', () => { setMode('data'); setTimeout(() => openCreateTable(c.table), 300); }]] });
+        } else {
+          lines.push(`  API->>${T}: ${OP_LABEL[c.op]}`, `  ${T}-->>API: data`, `  API-->>${P}: ${c.op === 'create' ? '201 tersimpan' : '200 OK'}`);
+        }
+      }
+      lines.push(`  ${P}-->>U: Tampilkan hasil`);
+    });
+    if (!findings.length) findings.push({ level: 'ok', text: 'Semua permintaan data diizinkan oleh aturan akses tabel.' });
+    findings.push({ level: 'info', text: 'Dibaca dari kode halaman dan file .js yang dimuatnya. URL yang dibuat dinamis bisa terlewat.' });
     return { code: lines.join('\n'), findings };
   }
 
@@ -2613,42 +2624,37 @@
     return { code: lines.join('\n'), findings };
   }
 
-  // State: perubahan kondisi baris/data. Dari kolom boolean/status & operasi database yang tersedia.
+  // State: siklus hidup satu baris data di tiap tabel — dibuat, disimpan, diubah, dihapus — dan siapa yang boleh.
   function stateDiagram(d) {
     if (!d.tables.length) {
-      return { empty: ['Belum ada state', 'State dibuat dari tabel: kolom boolean/status dan operasi tambah/ubah/hapus.'], findings: [] };
+      return { empty: ['Belum ada state', 'State dibuat dari tabel: siapa yang boleh menambah, mengubah, dan menghapus data.'], findings: [] };
     }
-    const lines = ['stateDiagram-v2', '  [*] --> Kosong'];
+    const who = (t, op) => (t.rules?.[op] === 'public' ? 'pengunjung & pemilik' : 'pemilik');
+    const lines = ['stateDiagram-v2'];
     const findings = [];
-    const KEYWORDS = new Set(['class', 'end', 'state', 'direction', 'graph', 'subgraph', 'note', 'click', 'style', 'namespace']);
-    const safeId = (raw) => {
-      let id = String(raw).replace(/[^A-Za-z0-9_]/g, '_');
-      if (!/^[A-Za-z_]/.test(id)) id = `t_${id}`;
-      if (KEYWORDS.has(id.toLowerCase())) id = `${id}_x`;
-      return id;
-    };
-    const used = new Set();
-    for (const t of d.tables.slice(0, 8)) {
-      const ops = ['create', 'update', 'delete'].filter((op) => t.rules?.[op] === 'public');
+    d.tables.slice(0, 6).forEach((t, i) => {
+      const s = `s${i}`;
       const boolCol = t.columns.find((c) => c.type === 'boolean');
       const statusCol = t.columns.find((c) => /status|state|tahap|kondisi/i.test(c.name));
-      let prefix = safeId(t.name);
-      while (used.has(prefix)) prefix = `${prefix}_`;
-      used.add(prefix);
-      lines.push(`  state "${mmText(t.name)}" as ${prefix} {`);
-      lines.push(`    [*] --> ${prefix}_baru`);
-      if (ops.includes('create')) lines.push(`    ${prefix}_baru --> ${prefix}_terisi : tambah`);
-      else lines.push(`    ${prefix}_baru --> ${prefix}_terisi : tambah (pemilik)`);
-      if (ops.includes('update')) lines.push(`    ${prefix}_terisi --> ${prefix}_terubah : ubah`);
-      if (statusCol) lines.push(`    ${prefix}_terisi --> ${prefix}_${safeId(statusCol.name)} : ubah status`);
-      if (boolCol) lines.push(`    ${prefix}_terisi --> ${prefix}_${safeId(boolCol.name)} : set ${mmText(boolCol.name)}`);
-      lines.push(`    ${prefix}_terisi --> [*] : hapus`);
-      if (ops.includes('delete')) lines.push(`    ${prefix}_terubah --> [*] : hapus (publik!)`);
-      else lines.push(`    ${prefix}_terubah --> [*] : hapus (pemilik)`);
+      lines.push(`  state "Tabel ${mmText(t.name)}" as ${s} {`);
+      lines.push(`    state "Tersimpan" as ${s}_ada`);
+      lines.push(`    [*] --> ${s}_ada : ditambah (${who(t, 'create')})`);
+      lines.push(`    ${s}_ada --> ${s}_ada : diubah (${who(t, 'update')})`);
+      if (boolCol) {
+        lines.push(`    state "${mmText(boolCol.name)} = ya" as ${s}_ya`);
+        lines.push(`    ${s}_ada --> ${s}_ya : tandai ${mmText(boolCol.name)}`, `    ${s}_ya --> ${s}_ada : batalkan`);
+      }
+      if (statusCol) {
+        lines.push(`    state "${mmText(statusCol.name)} berganti" as ${s}_st`);
+        lines.push(`    ${s}_ada --> ${s}_st : ubah ${mmText(statusCol.name)}`, `    ${s}_st --> ${s}_ada`);
+        findings.push({ level: 'info', text: `"${t.name}" punya kolom ${statusCol.name}, jadi datanya bisa berpindah status.` });
+      }
+      lines.push(`    ${s}_ada --> [*] : dihapus (${who(t, 'delete')})`);
       lines.push('  }');
-      if (ops.includes('delete')) findings.push({ level: 'warn', text: `"${t.name}" boleh dihapus siapa pun (akses Hapus publik).`, actions: [['Atur akses', () => openTableAccess(t.name)]] });
-      if (statusCol) findings.push({ level: 'info', text: `State "${t.name}" memakai kolom status: ${statusCol.name}.` });
-    }
+      if (t.rules?.delete === 'public') findings.push({ level: 'warn', text: `Data "${t.name}" boleh dihapus siapa pun (akses Hapus publik).`, actions: [['Atur akses', () => openTableAccess(t.name)]] });
+    });
+    if (d.tables.length > 6) findings.push({ level: 'info', text: `Hanya 6 tabel pertama yang digambar (dari ${d.tables.length}).` });
+    findings.push({ level: 'info', text: 'Pemilik selalu bisa menambah, mengubah, dan menghapus data. "Pengunjung" berarti aksesnya dibuka publik.' });
     return { code: lines.join('\n'), findings };
   }
 
@@ -2757,6 +2763,11 @@
 
   function renderFindings(findings) {
     const icon = { error: '✕', warn: '!', info: 'i', ok: '✓' };
+    const problems = findings.filter((f) => f.level === 'error' || f.level === 'warn').length;
+    const toggle = $('#diagramFindingsToggle');
+    toggle.querySelector('.count').textContent = String(findings.length);
+    toggle.classList.toggle('alert', problems > 0);
+    toggle.title = problems ? `${problems} hal perlu diperhatikan` : 'Catatan tentang diagram ini';
     $('#diagramFindings').replaceChildren(
       h('h4', {}, 'Temuan'),
       findings.length ? h('ul', {}, findings.map((f) => h('li', { class: f.level },
@@ -2766,61 +2777,234 @@
         : h('p', { class: 'f-empty' }, 'Tidak ada catatan.'));
   }
 
-  function applyZoom() {
-    const stage = $('#diagramCanvas .diagram-stage');
-    if (stage) stage.style.transform = `scale(${diagram.zoom})`;
-    $('#diagramZoomFit').textContent = `${Math.round(diagram.zoom * 100)}%`;
+  function setFindingsOpen(open) {
+    $('#diagramFindings').hidden = !open;
+    $('#diagramFindingsToggle').setAttribute('aria-pressed', String(open));
+    storage.set('rakit.diagramFindings', open);
   }
 
-  function fitDiagram() {
-    const svg = $('#diagramCanvas svg');
-    if (!svg) return;
-    const box = $('#diagramCanvas');
-    const width = svg.viewBox.baseVal?.width || svg.getBoundingClientRect().width / diagram.zoom;
-    const height = svg.viewBox.baseVal?.height || svg.getBoundingClientRect().height / diagram.zoom;
-    diagram.zoom = Math.max(0.2, Math.min(1.5, (box.clientWidth - 48) / width, (box.clientHeight - 48) / height));
-    applyZoom();
+  // ---------- Zoom & geser kanvas diagram ----------
+  // Mouse: scroll = zoom di posisi kursor, seret = geser. Touchpad: cubit = zoom, dua jari = geser.
+  // Layar sentuh: cubit & seret. Keyboard (kanvas difokus): + − 0 1 dan panah.
+  const clampZoom = (z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+
+  function applyView() {
+    const v = diagram.view;
+    const stage = $('#diagramCanvas .diagram-stage');
+    if (stage) stage.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.z})`;
+    $('#diagramCanvas .diagram-hint')?.classList.toggle('gone', v.touched); // petunjuk hilang setelah dipakai
+    $('#diagramZoomFit').textContent = `${Math.round(v.z * 100)}%`;
   }
+
+  // Zoom dengan titik (cx, cy) di kanvas tetap di tempat — terasa seperti "zoom ke arah kursor".
+  function zoomAt(factor, cx, cy) {
+    const v = diagram.view;
+    const z = clampZoom(v.z * factor);
+    if (z === v.z) return;
+    v.x = cx - ((cx - v.x) * z) / v.z;
+    v.y = cy - ((cy - v.y) * z) / v.z;
+    v.z = z;
+    v.touched = true;
+    applyView();
+  }
+
+  function zoomAtCenter(factor) {
+    const box = $('#diagramCanvas');
+    zoomAt(factor, box.clientWidth / 2, box.clientHeight / 2);
+  }
+
+  function panBy(dx, dy) {
+    const v = diagram.view;
+    v.x += dx;
+    v.y += dy;
+    v.touched = true;
+    applyView();
+  }
+
+  // Pas di layar (maks. 150% supaya diagram kecil tidak terlalu besar), di tengah kanvas.
+  function fitDiagram() {
+    const v = diagram.view;
+    const box = $('#diagramCanvas');
+    if (!v.w || !box.clientWidth) return;
+    const pad = 32;
+    v.z = clampZoom(Math.min(1.5, (box.clientWidth - pad * 2) / v.w, (box.clientHeight - pad * 2) / v.h));
+    v.x = (box.clientWidth - v.w * v.z) / 2;
+    v.y = Math.max(pad, (box.clientHeight - v.h * v.z) / 2);
+    v.touched = false;
+    applyView();
+  }
+
+  function actualSize() {
+    const v = diagram.view;
+    const box = $('#diagramCanvas');
+    zoomAt(1 / v.z, box.clientWidth / 2, box.clientHeight / 2);
+  }
+
+  // Scroll dari touchpad (dua jari) datang sebagai banyak event kecil, sering dengan deltaX; roda mouse sebagai
+  // lompatan besar per "klik". Setelah terdeteksi touchpad, anggap tetap touchpad selama gerakan berlangsung.
+  let lastTrackpadAt = 0;
+  function isTrackpadScroll(e) {
+    const now = performance.now();
+    const looks = e.deltaMode === 0 && (e.deltaX !== 0 || Math.abs(e.deltaY) < 40 || !Number.isInteger(e.deltaY));
+    if (looks) lastTrackpadAt = now;
+    return now - lastTrackpadAt < 300;
+  }
+
+  function bindCanvasGestures() {
+    const canvas = $('#diagramCanvas');
+    const point = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
+    const hasStage = () => Boolean(canvas.querySelector('.diagram-stage'));
+
+    canvas.addEventListener('wheel', (e) => {
+      if (!hasStage()) return;
+      e.preventDefault();
+      const [cx, cy] = point(e);
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.clientHeight : 1;
+      const dx = e.deltaX * unit;
+      const dy = e.deltaY * unit;
+      if (e.ctrlKey || e.metaKey) {
+        // Cubit di touchpad (browser mengirimnya sebagai wheel + ctrlKey) atau Ctrl/⌘ + scroll.
+        zoomAt(Math.exp(-dy * 0.01), cx, cy);
+      } else if (isTrackpadScroll(e)) {
+        panBy(-dx, -dy);
+      } else if (e.shiftKey) {
+        panBy(-(dx || dy), 0);
+      } else {
+        zoomAt(Math.exp(-dy * 0.002), cx, cy);
+      }
+    }, { passive: false });
+
+    // Safari (macOS) mengirim cubit touchpad sebagai gesture event.
+    let gestureZoom = 1;
+    canvas.addEventListener('gesturestart', (e) => { e.preventDefault(); gestureZoom = diagram.view.z; });
+    canvas.addEventListener('gesturechange', (e) => {
+      e.preventDefault();
+      const [cx, cy] = point(e);
+      zoomAt((gestureZoom * e.scale) / diagram.view.z, cx, cy);
+    });
+
+    // Seret dengan mouse / satu jari = geser; dua jari di layar sentuh = cubit (zoom) sambil geser.
+    const pointers = new Map();
+    let pinch = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!hasStage() || (e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('a, button')) return;
+      canvas.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, point(e));
+      canvas.classList.add('panning');
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        pinch = { dist: Math.hypot(a[0] - b[0], a[1] - b[1]), mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+      }
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      const prev = pointers.get(e.pointerId);
+      const now = point(e);
+      pointers.set(e.pointerId, now);
+      if (pointers.size === 1) {
+        panBy(now[0] - prev[0], now[1] - prev[1]);
+      } else if (pointers.size === 2 && pinch) {
+        const [a, b] = [...pointers.values()];
+        const dist = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        panBy(mid[0] - pinch.mid[0], mid[1] - pinch.mid[1]);
+        if (pinch.dist > 0) zoomAt(dist / pinch.dist, mid[0], mid[1]);
+        pinch = { dist, mid };
+      }
+    });
+    const release = (e) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinch = null;
+      if (!pointers.size) canvas.classList.remove('panning');
+    };
+    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointercancel', release);
+
+    canvas.addEventListener('dblclick', (e) => {
+      if (!hasStage()) return;
+      const [cx, cy] = point(e);
+      zoomAt(e.shiftKey ? 1 / 1.6 : 1.6, cx, cy);
+    });
+
+    canvas.addEventListener('keydown', (e) => {
+      if (!hasStage() || e.ctrlKey || e.metaKey || e.altKey) return;
+      const step = e.shiftKey ? 180 : 60;
+      const keys = {
+        '+': () => zoomAtCenter(1.25), '=': () => zoomAtCenter(1.25), '-': () => zoomAtCenter(1 / 1.25),
+        0: fitDiagram, 1: actualSize,
+        ArrowLeft: () => panBy(step, 0), ArrowRight: () => panBy(-step, 0), ArrowUp: () => panBy(0, step), ArrowDown: () => panBy(0, -step),
+      };
+      if (!keys[e.key]) return;
+      e.preventDefault();
+      keys[e.key]();
+    });
+
+    // Ukuran panel berubah (geser splitter, buka/tutup Temuan): pas-kan ulang selama user belum zoom/geser.
+    new ResizeObserver(() => { if (!diagram.view.touched && hasStage()) fitDiagram(); }).observe(canvas);
+  }
+
+  // Mermaid kadang meninggalkan elemen sementara di <body> (terutama saat gagal): bersihkan. SVG yang sedang
+  // tampil memakai id yang sama (gayanya bergantung pada id itu), jadi isi kanvas tidak boleh ikut terhapus.
+  const cleanupMermaid = (id) => ['', 'd', 'i'].forEach((p) => {
+    const el = document.getElementById(`${p}${id}`);
+    if (el && !$('#diagramCanvas').contains(el)) el.remove();
+  });
 
   async function renderDiagram() {
+    if (!DIAGRAMS[diagram.kind]) diagram.kind = 'erd'; // nilai lama di localStorage yang sudah tidak ada
     document.querySelectorAll('[data-diagram]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.diagram === diagram.kind)));
     const canvas = $('#diagramCanvas');
     if (!diagram.data) return;
+    const seq = ++diagram.seq; // hanya render terakhir yang boleh tampil (tab bisa diganti cepat)
     const { code = '', empty, findings } = DIAGRAMS[diagram.kind](diagram.data);
     diagram.code = code;
     renderFindings(findings);
     if (empty) {
+      diagram.view.w = 0;
       canvas.replaceChildren(h('div', { class: 'db-empty' },
         h('div', { class: 'db-empty-icon diagram-empty-icon' }, svg(ICON.table)), h('h3', {}, empty[0]), h('p', {}, empty[1])));
       return;
     }
-    canvas.replaceChildren(h('div', { class: 'diagram-loading' }, 'Menggambar diagram…'));
+    canvas.replaceChildren(h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Menggambar diagram…'));
+    const id = `diagram-${seq}`;
     try {
       const mermaid = await loadMermaid();
-      const { svg: markup } = await mermaid.render(`diagram-${++diagram.seq}`, code);
+      const { svg: markup } = await mermaid.render(id, code);
+      if (seq !== diagram.seq) return;
       // Parse di dokumen terpisah lalu pindahkan elemen SVG-nya (tanpa innerHTML). Parser HTML dipakai karena
       // label Mermaid berisi HTML (mis. <br>) yang tidak valid sebagai XML murni.
       const svgEl = new DOMParser().parseFromString(markup, 'text/html').querySelector('svg');
       if (!svgEl) throw new Error('Mermaid tidak menghasilkan SVG');
-      const stage = h('div', { class: 'diagram-stage' });
       const imported = document.importNode(svgEl, true);
-      // Mermaid memberi width="100%": ganti dengan ukuran aslinya supaya zoom & scroll bekerja.
       const vb = imported.viewBox?.baseVal;
-      // Inline style, karena aturan global `svg { width: 16px }` (untuk ikon) mengalahkan atribut width/height.
-      if (vb?.width) {
-        Object.assign(imported.style, { width: `${vb.width}px`, height: `${vb.height}px`, maxWidth: 'none' });
-      }
-      stage.append(imported);
-      canvas.replaceChildren(stage);
+      const width = vb?.width || 800;
+      const height = vb?.height || 600;
+      // Mermaid memberi width="100%": ganti dengan ukuran aslinya. Inline style, karena aturan global
+      // `svg { width: 16px }` (untuk ikon) mengalahkan atribut width/height.
+      Object.assign(imported.style, { width: `${width}px`, height: `${height}px`, maxWidth: 'none' });
+      Object.assign(diagram.view, { w: width, h: height });
+      canvas.replaceChildren(
+        h('div', { class: 'diagram-stage' }, imported),
+        h('div', { class: 'diagram-hint' }, 'Scroll atau cubit untuk zoom · seret untuk geser · klik dua kali untuk memperbesar'),
+      );
       fitDiagram();
     } catch (err) {
+      if (seq !== diagram.seq) return;
       console.error(err);
-      canvas.replaceChildren(h('div', { class: 'db-empty' }, h('h3', {}, 'Diagram gagal digambar'), h('p', {}, err.message || String(err))));
+      diagram.view.w = 0;
+      canvas.replaceChildren(h('div', { class: 'db-empty' }, h('h3', {}, 'Diagram gagal digambar'),
+        h('p', {}, 'Coba muat ulang. Kalau masih gagal, salin kode Mermaid-nya dan laporkan ke kami.'),
+        h('p', { class: 'diagram-error' }, String(err.message || err).slice(0, 300))));
+    } finally {
+      cleanupMermaid(id);
     }
   }
 
   async function diagramLoad() {
-    $('#diagramCanvas').replaceChildren(h('div', { class: 'diagram-loading' }, 'Membaca file & database…'));
+    $('#diagramCanvas').replaceChildren(h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Membaca file & database…'));
     try {
       await saveAll(); // diagram dibaca dari server, jadi simpan perubahan dulu
       diagram.data = await api('GET', '/api/diagrams');
@@ -2836,6 +3020,8 @@
     if (!svgEl) return toast('Belum ada diagram untuk diunduh', 'error');
     const clone = svgEl.cloneNode(true);
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(diagram.view.w));
+    clone.setAttribute('height', String(diagram.view.h));
     clone.style.background = '#11151f';
     const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' });
     const a = h('a', { href: URL.createObjectURL(blob), download: `${state.project.slug}-${diagram.kind}.svg` });
@@ -2849,12 +3035,15 @@
     document.querySelectorAll('[data-diagram]').forEach((btn) => {
       btn.onclick = () => { diagram.kind = btn.dataset.diagram; storage.set('rakit.diagram', diagram.kind); renderDiagram(); };
     });
-    $('#diagramZoomIn').onclick = () => { diagram.zoom = Math.min(3, diagram.zoom * 1.25); applyZoom(); };
-    $('#diagramZoomOut').onclick = () => { diagram.zoom = Math.max(0.2, diagram.zoom / 1.25); applyZoom(); };
+    $('#diagramZoomIn').onclick = () => zoomAtCenter(1.25);
+    $('#diagramZoomOut').onclick = () => zoomAtCenter(1 / 1.25);
     $('#diagramZoomFit').onclick = fitDiagram;
     $('#diagramRefresh').onclick = diagramLoad;
     $('#diagramCopy').onclick = () => (diagram.code ? copyText(diagram.code, 'Kode Mermaid disalin') : toast('Belum ada diagram', 'error'));
     $('#diagramDownload').onclick = downloadDiagram;
+    $('#diagramFindingsToggle').onclick = () => setFindingsOpen($('#diagramFindings').hidden);
+    setFindingsOpen(storage.get('rakit.diagramFindings', true));
+    bindCanvasGestures();
   }
 
   // ---------- Riwayat versi ----------
@@ -3772,7 +3961,8 @@
     for (const path of first) await openFile(path);
     if (first.length) activate(first[0]);
     else activate(null);
-    setMode('ai'); // editor selalu dibuka di mode AI
+    // Editor dibuka di mode AI, kecuali user sudah pindah tab selama editor masih dimuat (mis. ke Diagram).
+    if ($('#editorArea').dataset.mode === 'ai') setMode('ai');
     // Tampilkan lagi percakapan terakhir (dan sambung ke job yang masih berjalan, bila ada).
     if (!ai.credits) await loadCredits();
     await initAiHistory();
