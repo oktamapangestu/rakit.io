@@ -588,15 +588,32 @@ kbd {
   border: 1px solid var(--line);
 }
 .url-pill .lock { width: 12px; height: 12px; color: var(--ok); }
+.url-pill:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+/* Host tetap (tidak bisa diubah), path setelahnya bisa diedit. */
+.preview-host {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font: 12px var(--mono);
+  cursor: text;
+  user-select: none;
+}
 .preview-url {
   flex: 1;
-  min-width: 0;
+  min-width: 40px;
+  margin-left: -6px; /* rapat dengan host, seperti satu alamat */
+  padding: 2px 0;
   border: 0;
   background: none;
   color: var(--text);
   font: 12px var(--mono);
   outline: none;
 }
+.preview-url:focus { color: var(--white); }
 
 .stage {
   flex: 1;

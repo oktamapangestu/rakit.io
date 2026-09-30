@@ -71,6 +71,7 @@
     saveTimers: new Map(),
     saveChains: new Map(),
     previewPath: 'index.html',
+    previewRoute: null, // alamat yang diketik user di bar preview (path + ?query + #hash); null = ikuti previewPath
     autosave: storage.get('rakit.autosave', true),
   };
   let monaco;
@@ -275,6 +276,7 @@
       expandTo(path);
       if (extOf(path) === 'html' && state.previewPath !== path) {
         state.previewPath = path;
+        state.previewRoute = null;
         reloadPreview();
       }
     } else {
@@ -469,6 +471,7 @@
     if (state.selected) state.selected = map(state.selected);
     if (within(state.previewPath, from)) {
       state.previewPath = map(state.previewPath);
+      state.previewRoute = null;
       reloadPreview();
     }
     activate(state.active);
@@ -681,7 +684,7 @@
       '-',
     ] : entry.type === 'file' ? [
       { label: 'Buka', run: () => openFile(entry.path) },
-      extOf(entry.path) === 'html' && { label: 'Preview halaman ini', run: () => { state.previewPath = entry.path; reloadPreview(); } },
+      extOf(entry.path) === 'html' && { label: 'Preview halaman ini', run: () => { state.previewPath = entry.path; state.previewRoute = null; reloadPreview(); } },
       { label: 'Salin URL publik', run: () => copyText(urlFor(entry.path)) },
       '-',
     ] : [];
@@ -704,17 +707,52 @@
   }
 
   // ---------- Preview ----------
+  // Alamat halaman (tanpa host) untuk sebuah file: index.html → "/", blog/index.html → "/blog/".
+  function routeFor(path) {
+    return `/${path === 'index.html' ? '' : path.endsWith('/index.html') ? path.slice(0, -'index.html'.length) : path}`;
+  }
+
   function urlFor(path) {
-    const clean = path === 'index.html' ? '' : path.endsWith('/index.html') ? path.slice(0, -'index.html'.length) : path;
-    return `${state.project.siteUrl}/${clean}`;
+    return `${state.project.siteUrl}${routeFor(path)}`;
   }
 
   function reloadPreview() {
-    const url = urlFor(state.previewPath);
-    $('#previewUrl').value = url;
+    const route = state.previewRoute ?? routeFor(state.previewPath);
+    const url = `${state.project.siteUrl}${route}`;
+    $('#previewHost').textContent = state.project.siteUrl;
+    if (document.activeElement !== $('#previewUrl')) $('#previewUrl').value = route;
     $('#openPreview').href = url;
     // Server mengirim Cache-Control: no-cache, jadi cukup set ulang src untuk memuat versi terbaru.
     $('#previewFrame').src = url;
+  }
+
+  // Bar alamat preview: host tetap (website project ini), path/query/hash bisa diubah.
+  function bindPreviewUrl() {
+    const input = $('#previewUrl');
+    const current = () => state.previewRoute ?? routeFor(state.previewPath);
+    const go = () => {
+      let value = input.value.trim();
+      const host = state.project.siteUrl;
+      // Tempel alamat lengkap website ini tetap boleh; host lain ditolak.
+      if (value.toLowerCase().startsWith(host.toLowerCase())) value = value.slice(host.length);
+      else if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(value)) {
+        toast(`Preview hanya bisa membuka halaman di ${host.replace(/^https?:\/\//, '')}`, 'error');
+        input.value = current();
+        input.select(); // siap diketik ulang
+        return;
+      }
+      if (!value.startsWith('/')) value = `/${value}`;
+      state.previewRoute = value.replace(/\s/g, '%20');
+      input.blur();
+      reloadPreview();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); go(); }
+      if (e.key === 'Escape') { e.preventDefault(); input.value = current(); input.blur(); }
+    });
+    input.addEventListener('focus', () => input.select());
+    input.addEventListener('blur', () => { input.value = current(); }); // batal kalau tidak ditekan Enter
+    $('#previewHost').addEventListener('click', () => input.focus());
   }
 
   let previewTimer;
@@ -1009,6 +1047,7 @@
     $('#refreshBtn').onclick = () => loadTree().catch((err) => toast(err.message, 'error'));
     $('#collapseBtn').onclick = () => { state.expanded.clear(); renderTree(); };
     $('#reloadPreview').onclick = reloadPreview;
+    bindPreviewUrl();
     $('#togglePreview').onclick = togglePreview;
     $('#toggleSidebar').onclick = toggleSidebar;
 
