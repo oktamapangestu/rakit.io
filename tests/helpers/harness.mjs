@@ -43,7 +43,8 @@ const readBody = (req) => new Promise((resolve) => {
 });
 
 // ---------- Provider AI tiruan (format OpenAI chat completions, streaming) ----------
-// ai.script: antrean perilaku untuk request berikutnya — { text } | { toolCalls } | { status } | { hang: true }.
+// ai.script: antrean perilaku untuk request berikutnya — { text, chunks, reasoning, toolCalls, finish, usage }
+// | { status, retryAfter } | { hang: true } | { cut: true }.
 // Kosong = menjawab "Halo dari AI tiruan".
 async function startMockAI() {
   const ai = { script: [], requests: [], waiters: [], open: new Set() };
@@ -51,9 +52,10 @@ async function startMockAI() {
     const body = JSON.parse(await readBody(req) || '{}');
     ai.requests.push(body);
     ai.waiters.splice(0).forEach((resolve) => resolve(body));
-    const step = ai.script.shift() ?? {};
+    // ai.respond(body): perilaku bawaan bila antrean script kosong (mis. menurut body.model).
+    const step = ai.script.shift() ?? ai.respond?.(body) ?? {};
     if (step.status) {
-      res.writeHead(step.status, { 'Content-Type': 'application/json' });
+      res.writeHead(step.status, { 'Content-Type': 'application/json', ...(step.retryAfter ? { 'Retry-After': String(step.retryAfter) } : {}) });
       return res.end(JSON.stringify({ error: { message: `mock ${step.status}` } }));
     }
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
@@ -62,15 +64,16 @@ async function startMockAI() {
       res.on('close', () => ai.open.delete(res));
       return res.write(': menunggu\n\n');
     }
-    // step.toolCalls: jawaban berupa panggilan tool (mode Builder).
-    const event = step.toolCalls ? {
-      choices: [{ delta: { tool_calls: step.toolCalls }, finish_reason: 'tool_calls' }],
-      usage: { prompt_tokens: 100, completion_tokens: 20 },
-    } : {
-      choices: [{ delta: { content: step.text ?? 'Halo dari AI tiruan' }, finish_reason: 'stop' }],
-      usage: { prompt_tokens: 100, completion_tokens: 20 },
-    };
-    res.end(`data: ${JSON.stringify(event)}\n\ndata: [DONE]\n\n`);
+    const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+    if (step.reasoning) send({ choices: [{ delta: { reasoning_content: step.reasoning } }] });
+    // step.chunks: teks dikirim sepotong-sepotong · step.toolCalls: panggilan tool (mode Builder).
+    for (const chunk of step.chunks ?? []) send({ choices: [{ delta: { content: chunk } }] });
+    if (step.cut) return setTimeout(() => res.destroy(), 50); // koneksi putus di tengah jawaban
+    const delta = step.toolCalls ? { tool_calls: step.toolCalls, ...(step.text ? { content: step.text } : {}) }
+      : { content: step.chunks ? '' : step.text ?? 'Halo dari AI tiruan' };
+    send({ choices: [{ delta, finish_reason: step.finish ?? (step.toolCalls ? 'tool_calls' : 'stop') }] });
+    send({ choices: [], usage: step.usage ?? { prompt_tokens: 100, completion_tokens: 20 } });
+    res.end('data: [DONE]\n\n');
   });
   const port = await listen(server);
   ai.url = `http://127.0.0.1:${port}`;
@@ -199,11 +202,20 @@ class Client {
     return this.post('/api/ai/prompt', { prompt, mode: 'plan', ...extra });
   }
 
+  /** Ikuti job sampai selesai; mengembalikan semua event-nya. */
+  async jobEvents(id) {
+    const res = await this.raw('GET', `/api/ai/jobs/${id}/events`);
+    return (await res.text()).split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  }
+
   /** Ikuti job sampai selesai; mengembalikan event terakhir ({ type: 'done' | 'error', ... }). */
   async finishJob(id) {
-    const res = await this.raw('GET', `/api/ai/jobs/${id}/events`);
-    const events = (await res.text()).split('\n').filter(Boolean).map((line) => JSON.parse(line));
-    return events.at(-1);
+    return (await this.jobEvents(id)).at(-1);
+  }
+
+  /** Kirim prompt mode Builder dan tunggu hasil akhirnya. */
+  build(prompt, extra) {
+    return this.prompt(prompt, { mode: 'build', ...extra });
   }
 
   /** Kirim prompt dan tunggu hasil akhirnya. */
@@ -225,69 +237,75 @@ export async function startStack(env = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rakit-test-'));
   const origin = `http://localhost:${port}`;
 
-  const child = spawn(process.env.RAKIT_SERVER_CMD || 'node src/server.js', {
-    cwd: ROOT,
-    shell: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      PORT: String(port),
-      // Port kedua untuk server yang berdiri di belakang server utama (dipakai scripts/go-with-node.sh).
-      UPSTREAM_PORT: String(upstreamPort),
-      BASE_DOMAIN: 'localhost',
-      PROTOCOL: 'http',
-      DATA_DIR: dataDir,
-      AI_BASE_URL: ai.url,
-      AI_API_KEY: 'test-key',
-      AI_MODEL: 'mock-main',
-      AI_VISION_MODEL: 'mock-vision',
-      AI_BONUS_CREDITS: '2',
-      AI_DAILY_CREDITS: '2',
-      AI_CREDITS_PER_PROMPT: '1',
-      AI_IMAGE_PROMPT_CREDITS: '2',
-      KASERA_API_KEY: 'kp_test_mock',
-      KASERA_WEBHOOK_SECRET: WEBHOOK_SECRET,
-      KASERA_BASE_URL: kasera.url,
-      GOOGLE_CLIENT_ID: 'google-client-test',
-      GOOGLE_CLIENT_SECRET: 'google-secret-test',
-      GOOGLE_TOKEN_URL: google.url,
-      CREDIT_PACKAGES: '20:10000,50:20000',
-      ASSISTANT_PACKAGES: '10000,25000',
-      PLAN_PRO: '49000:3',
-      PLAN_UNLIMITED: '98000:2',
-      ADMIN_EMAILS: ADMIN_EMAIL,
-      ...env,
-    },
-  });
+  const serverEnv = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    PORT: String(port),
+    // Port kedua untuk server yang berdiri di belakang server utama (dipakai scripts/go-with-node.sh).
+    UPSTREAM_PORT: String(upstreamPort),
+    BASE_DOMAIN: 'localhost',
+    PROTOCOL: 'http',
+    DATA_DIR: dataDir,
+    AI_BASE_URL: ai.url,
+    AI_API_KEY: 'test-key',
+    AI_MODEL: 'mock-main',
+    AI_VISION_MODEL: 'mock-vision',
+    AI_BONUS_CREDITS: '2',
+    AI_DAILY_CREDITS: '2',
+    AI_CREDITS_PER_PROMPT: '1',
+    AI_IMAGE_PROMPT_CREDITS: '2',
+    KASERA_API_KEY: 'kp_test_mock',
+    KASERA_WEBHOOK_SECRET: WEBHOOK_SECRET,
+    KASERA_BASE_URL: kasera.url,
+    GOOGLE_CLIENT_ID: 'google-client-test',
+    GOOGLE_CLIENT_SECRET: 'google-secret-test',
+    GOOGLE_TOKEN_URL: google.url,
+    CREDIT_PACKAGES: '20:10000,50:20000',
+    ASSISTANT_PACKAGES: '10000,25000',
+    PLAN_PRO: '49000:3',
+    PLAN_UNLIMITED: '98000:2',
+    ADMIN_EMAILS: ADMIN_EMAIL,
+    ...env,
+  };
   let log = '';
-  child.stdout.on('data', (d) => { log += d; });
-  child.stderr.on('data', (d) => { log += d; });
-  let exited = false;
-  child.on('exit', () => { exited = true; });
-
+  let child;
+  let exited = true;
+  const launch = () => {
+    exited = false;
+    child = spawn(process.env.RAKIT_SERVER_CMD || 'node src/server.js', { cwd: ROOT, shell: true, stdio: ['ignore', 'pipe', 'pipe'], env: serverEnv });
+    child.stdout.on('data', (d) => { log += d; });
+    child.stderr.on('data', (d) => { log += d; });
+    const self = child;
+    child.on('exit', () => { if (child === self) exited = true; });
+  };
+  const kill = async () => {
+    if (exited) return;
+    const dying = child;
+    await new Promise((resolve) => { dying.once('exit', resolve); dying.kill('SIGTERM'); setTimeout(resolve, 3000); });
+    exited = true;
+  };
   const stop = async () => {
-    if (!exited) {
-      child.kill('SIGTERM');
-      await new Promise((resolve) => { child.once('exit', resolve); setTimeout(resolve, 3000); });
-    }
+    await kill();
     ai.close();
     kasera.close();
     google.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
   };
-
-  const deadline = Date.now() + 15_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${origin}/api/config`)).ok) break;
-    } catch { /* belum siap */ }
-    if (exited || Date.now() > deadline) {
-      await stop();
-      throw new Error(`Server tidak menyala:\n${log}`);
+  const ready = async () => {
+    const deadline = Date.now() + 15_000;
+    for (;;) {
+      try {
+        if ((await fetch(`${origin}/api/config`)).ok) return;
+      } catch { /* belum siap */ }
+      if (exited || Date.now() > deadline) {
+        await stop();
+        throw new Error(`Server tidak menyala:\n${log}`);
+      }
+      await new Promise((r) => setTimeout(r, 100));
     }
-    await new Promise((r) => setTimeout(r, 100));
-  }
+  };
+  launch();
+  await ready();
 
   // opts.json: body JSON (Content-Type diisi otomatis) · opts.body: body mentah (string/Buffer).
   const plainRequest = (host, urlPath, { method = 'GET', headers = {}, json, body } = {}) => new Promise((resolve, reject) => {
@@ -310,6 +328,14 @@ export async function startStack(env = {}) {
     kasera,
     google,
     log: () => log,
+    /** Matikan lalu nyalakan lagi server dengan data yang sama (meniru restart/deploy). */
+    async restart() {
+      await kill();
+      // Beri waktu port dilepas sebelum dipakai lagi.
+      await new Promise((r) => setTimeout(r, 300));
+      launch();
+      await ready();
+    },
 
     /** Request ke website project (<slug>.localhost) lewat header Host. Mengembalikan { status, headers, body }. */
     site: (slug, urlPath = '/', opts) => plainRequest(`${slug}.localhost:${port}`, urlPath, opts),
