@@ -10,8 +10,8 @@
   --muted: #8b93a7;
   --faint: #5b6478;
   --white: #f5f7fb;
-  --accent: #8b5cf6;
-  --grad: linear-gradient(135deg, #3b82f6, #a855f7);
+  --accent: #16a34a;
+  --grad: linear-gradient(135deg, #059669, #15803d);
   /* Warna seri grafik (tervalidasi terhadap --panel: kontras ≥ 3:1, aman buta warna) */
   --series-users: #3987e5;
   --series-revenue: #199e70;
@@ -251,7 +251,7 @@ td a:hover { color: var(--white); text-decoration: underline; }
   font: 600 14px var(--ui);
   font-variant-numeric: tabular-nums;
 }
-.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgb(139 92 246 / 0.2); }
+.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgb(34 197 94 / 0.2); }
 .plan-storage { margin: 10px 0 0; color: var(--faint); font-size: 12px; }
 .estimate { display: grid; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; }
 .estimate div { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); }

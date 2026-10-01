@@ -1,4 +1,4 @@
-(()=>{"use strict";if(window.rakitAssistant)return;const p=document.currentScript,T=/^#[0-9a-f]{3,8}$/i.test(p?.dataset.color??"")?p.dataset.color:"#8b5cf6",b=p?.dataset.position==="left",k="rakit-asisten",S=20;let r=[];try{r=JSON.parse(sessionStorage.getItem(k)||"[]")}catch{r=[]}const u=()=>{try{sessionStorage.setItem(k,JSON.stringify(r.slice(-S)))}catch{}},$=`
+(()=>{"use strict";if(window.rakitAssistant)return;const p=document.currentScript,T=/^#[0-9a-f]{3,8}$/i.test(p?.dataset.color??"")?p.dataset.color:"#16a34a",b=p?.dataset.position==="left",k="rakit-asisten",S=20;let r=[];try{r=JSON.parse(sessionStorage.getItem(k)||"[]")}catch{r=[]}const u=()=>{try{sessionStorage.setItem(k,JSON.stringify(r.slice(-S)))}catch{}},$=`
     :host { all: initial; }
     * { box-sizing: border-box; }
     .wrap { position: fixed; bottom: 20px; ${b?"left":"right"}: 20px; z-index: 2147483000;

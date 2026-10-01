@@ -1,13 +1,13 @@
 // Widget Asisten AI untuk website di rakit.io.
 // Pasang: <script src="/api/ai/widget.js" defer></script>
-// Opsi (atribut di tag script): data-color="#8b5cf6", data-position="left", data-open="true".
+// Opsi (atribut di tag script): data-color="#16a34a", data-position="left", data-open="true".
 // Bisa juga dibuka lewat JavaScript: rakitAssistant.open() / rakitAssistant.close().
 (() => {
   'use strict';
   if (window.rakitAssistant) return; // sudah terpasang
 
   const script = document.currentScript;
-  const color = /^#[0-9a-f]{3,8}$/i.test(script?.dataset.color ?? '') ? script.dataset.color : '#8b5cf6';
+  const color = /^#[0-9a-f]{3,8}$/i.test(script?.dataset.color ?? '') ? script.dataset.color : '#16a34a';
   const left = script?.dataset.position === 'left';
   const STORE = 'rakit-asisten';
   const MAX_HISTORY = 20;

@@ -2483,7 +2483,7 @@
         background: '#11151f',
         primaryColor: '#1b2130',
         primaryTextColor: '#f5f7fb',
-        primaryBorderColor: '#8b5cf6',
+        primaryBorderColor: '#16a34a',
         secondaryColor: '#161b27',
         tertiaryColor: '#161b27',
         lineColor: '#7c869b',
@@ -2587,9 +2587,9 @@
     }
 
     lines.push(
-      '  classDef actor fill:#2a1f4d,stroke:#a78bfa,stroke-width:2px,color:#f5f7fb',
+      '  classDef actor fill:#14301f,stroke:#4ade80,stroke-width:2px,color:#f5f7fb',
       '  classDef owner fill:#1b2a3d,stroke:#60a5fa,stroke-width:2px,color:#dbeafe',
-      '  classDef page fill:#1b2130,stroke:#8b5cf6,color:#f5f7fb',
+      '  classDef page fill:#1b2130,stroke:#16a34a,color:#f5f7fb',
       '  classDef read fill:#11251a,stroke:#34d399,color:#d1fae5',
       '  classDef write fill:#2a2410,stroke:#fbbf24,color:#fef3c7',
       '  classDef manage fill:#1b2130,stroke:#7c869b,color:#d8dde8',
@@ -2651,8 +2651,8 @@
     }
     lines.push(
       '  classDef start fill:#11251a,stroke:#34d399,stroke-width:2px,color:#d1fae5',
-      '  classDef stop fill:#2a1f4d,stroke:#a78bfa,stroke-width:2px,color:#f5f7fb',
-      '  classDef act fill:#1b2130,stroke:#8b5cf6,color:#f5f7fb',
+      '  classDef stop fill:#14301f,stroke:#4ade80,stroke-width:2px,color:#f5f7fb',
+      '  classDef act fill:#1b2130,stroke:#16a34a,color:#f5f7fb',
       '  classDef api fill:#1b2a3d,stroke:#60a5fa,color:#dbeafe',
       '  classDef decide fill:#2a2410,stroke:#fbbf24,color:#fef3c7',
       '  classDef warn fill:#1b2130,stroke:#7c869b,stroke-dasharray:4 3,color:#d8dde8',
@@ -2797,8 +2797,8 @@
       lines.push(`  ${id(a.from)} -.- ${id(`a:${a.to}`)}`);
     }
     lines.push(
-      '  classDef home fill:#2a1f4d,stroke:#a78bfa,stroke-width:2px,color:#f5f7fb',
-      '  classDef page fill:#1b2130,stroke:#8b5cf6,color:#f5f7fb',
+      '  classDef home fill:#14301f,stroke:#4ade80,stroke-width:2px,color:#f5f7fb',
+      '  classDef page fill:#1b2130,stroke:#16a34a,color:#f5f7fb',
       '  classDef orphan fill:#1b2130,stroke:#7c869b,stroke-dasharray:4 3,color:#d8dde8',
       '  classDef asset fill:#11151f,stroke:#3a4560,color:#8b93a7',
       '  classDef broken fill:#3b1219,stroke:#f87171,color:#fecaca',
@@ -2844,7 +2844,7 @@
     }
     lines.push(
       ...edgeStyles,
-      '  classDef page fill:#1b2130,stroke:#8b5cf6,color:#f5f7fb',
+      '  classDef page fill:#1b2130,stroke:#16a34a,color:#f5f7fb',
       '  classDef script fill:#2b2410,stroke:#facc15,color:#f5f7fb',
       '  classDef table fill:#0f2a22,stroke:#10b981,color:#f5f7fb',
       '  classDef broken fill:#3b1219,stroke:#f87171,color:#fecaca',
@@ -3978,26 +3978,26 @@
         'editor.foreground': '#d8dde8',
         'editor.lineHighlightBackground': '#161b27',
         'editor.lineHighlightBorder': '#00000000',
-        'editor.selectionBackground': '#8b5cf640',
-        'editor.inactiveSelectionBackground': '#8b5cf622',
-        'editorCursor.foreground': '#a78bfa',
+        'editor.selectionBackground': '#16a34a40',
+        'editor.inactiveSelectionBackground': '#16a34a22',
+        'editorCursor.foreground': '#4ade80',
         'editorLineNumber.foreground': '#343c4f',
-        'editorLineNumber.activeForeground': '#a78bfa',
+        'editorLineNumber.activeForeground': '#4ade80',
         'editorIndentGuide.background1': '#1c2231',
         'editorIndentGuide.activeBackground1': '#2f3850',
-        'editorBracketMatch.background': '#8b5cf626',
-        'editorBracketMatch.border': '#8b5cf680',
+        'editorBracketMatch.background': '#16a34a26',
+        'editorBracketMatch.border': '#16a34a80',
         'editorWidget.background': '#161b27',
         'editorWidget.border': '#2a3244',
         'editorSuggestWidget.background': '#161b27',
         'editorSuggestWidget.border': '#2a3244',
-        'editorSuggestWidget.selectedBackground': '#8b5cf630',
+        'editorSuggestWidget.selectedBackground': '#16a34a30',
         'editorHoverWidget.background': '#161b27',
         'editorHoverWidget.border': '#2a3244',
         'minimap.background': '#11151f',
         'scrollbarSlider.background': '#ffffff12',
         'scrollbarSlider.hoverBackground': '#ffffff20',
-        'scrollbarSlider.activeBackground': '#8b5cf660',
+        'scrollbarSlider.activeBackground': '#16a34a60',
         'editorGutter.background': '#11151f',
       },
     });
