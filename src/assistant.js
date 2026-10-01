@@ -8,8 +8,8 @@ import { rateLimit, requireAuth } from './auth.js';
 import { loadProject } from './projects.js';
 import { activePlan, cycleOf, wibDay } from './plans.js';
 
-// Asisten AI untuk website pengguna, memakai AI dari rakit.icu dan dibayar dari "Saldo Asisten" (Rupiah).
-// Pengunjung website memanggil https://<slug>.rakit.icu/api/ai/chat; API key provider tidak pernah
+// Asisten AI untuk website pengguna, memakai AI dari rakit.io dan dibayar dari "Saldo Asisten" (Rupiah).
+// Pengunjung website memanggil https://<slug>.rakit.io/api/ai/chat; API key provider tidak pernah
 // sampai ke browser. Biaya dihitung dari token yang benar-benar terpakai × harga model (diatur owner).
 //
 // Uang disimpan dalam milirupiah (mRp, 1/1000 Rupiah) supaya pecahan per pesan tetap akurat.

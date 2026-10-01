@@ -1,4 +1,4 @@
-// Widget Asisten AI untuk website di rakit.icu.
+// Widget Asisten AI untuk website di rakit.io.
 // Pasang: <script src="/api/ai/widget.js" defer></script>
 // Opsi (atribut di tag script): data-color="#8b5cf6", data-position="left", data-open="true".
 // Bisa juga dibuka lewat JavaScript: rakitAssistant.open() / rakitAssistant.close().

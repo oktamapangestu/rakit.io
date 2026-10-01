@@ -108,7 +108,7 @@ async function createPayment(req, res, { packageId, credits, price, label }) {
       idempotencyKey: id,
       body: {
         amount: price,
-        description: `${label} rakit.icu`,
+        description: `${label} rakit.io`,
         external_id: id,
         merchant_ref: `user-${req.user.id}`,
         payment_methods: ['qris'],

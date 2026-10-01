@@ -4,7 +4,7 @@ import { rateLimit } from './auth.js';
 import * as userdb from './userdb.js';
 import { siteAssistant } from './assistant.js';
 
-// API publik di domain user: https://<user>.rakit.icu/api/db/<tabel>
+// API publik di domain user: https://<user>.rakit.io/api/db/<tabel>
 // Hanya operasi yang dibuka "Publik" oleh pemilik di editor database yang boleh dipakai.
 export const siteApi = express.Router();
 

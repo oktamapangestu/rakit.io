@@ -4,7 +4,7 @@
   const $ = (s, el = document) => el.querySelector(s);
   const registerForm = $('#registerForm');
   const loginForm = $('#loginForm');
-  let baseDomain = 'rakit.icu';
+  let baseDomain = 'rakit.io';
 
   fetch('/api/config')
     .then((r) => r.json())

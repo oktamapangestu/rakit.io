@@ -313,7 +313,7 @@
     $('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     $('#title').textContent = state.active ?? '';
     const projectName = state.project ? `${state.project.name} · ` : '';
-    document.title = `${state.active ? `${isDirty(state.active) ? '● ' : ''}${baseName(state.active)} · ` : ''}${projectName}rakit.icu`;
+    document.title = `${state.active ? `${isDirty(state.active) ? '● ' : ''}${baseName(state.active)} · ` : ''}${projectName}rakit.io`;
   }
 
   function renderBreadcrumbs() {
@@ -858,7 +858,7 @@
 
   function openNewProject() {
     const { body, close } = openPanel('db-modal');
-    const base = state.project.siteHost.slice(state.project.slug.length); // ".rakit.icu"
+    const base = state.project.siteHost.slice(state.project.slug.length); // ".rakit.io"
     const slugInput = h('input', { placeholder: 'tokokue', spellcheck: 'false', autocomplete: 'off', maxlength: '30' });
     const nameInput = h('input', { placeholder: 'Toko Kue Bu Sari', maxlength: '60' });
     const preview = h('strong', {}, `namamu${base}`);
@@ -931,7 +931,7 @@
     $('#siteLink').href = p.siteUrl;
     $('#visitSite').href = p.siteUrl;
     $('#projectSwitch').title = `Project: ${p.name} — ganti atau buat project`;
-    document.title = `${p.name} · rakit.icu`;
+    document.title = `${p.name} · rakit.io`;
   }
 
   // ---------- Status bar ----------
@@ -3717,7 +3717,7 @@
         h('button', { class: 'icon-btn promo-close', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close)),
         h('div', { class: 'promo-hero' },
           h('span', { class: 'promo-orb a' }), h('span', { class: 'promo-orb b' }),
-          h('span', { class: 'promo-kicker' }, svg(SPARK), 'Upgrade rakit.icu'),
+          h('span', { class: 'promo-kicker' }, svg(SPARK), 'Upgrade rakit.io'),
           h('h2', {}, 'Bangun lebih banyak, lebih cepat.'),
           h('p', {}, 'Kredit AI berlimpah, storage lega, dan upload gambar lebih besar.'),
           bonus
@@ -3777,8 +3777,8 @@
 
       body.replaceChildren(...[
         intro
-          ? head('Bangun lebih banyak dengan rakit.icu', 'Kamu sedang memakai paket Gratis. Berlangganan untuk kredit AI lebih banyak dan storage lebih besar. Bayar sekali dengan QRIS untuk 30 hari, tanpa tagihan otomatis.')
-          : head('Langganan rakit.icu', 'Bayar sekali dengan QRIS untuk 30 hari, tanpa tagihan otomatis. Bonus storage langsung aktif setelah pembayaran.'),
+          ? head('Bangun lebih banyak dengan rakit.io', 'Kamu sedang memakai paket Gratis. Berlangganan untuk kredit AI lebih banyak dan storage lebih besar. Bayar sekali dengan QRIS untuk 30 hari, tanpa tagihan otomatis.')
+          : head('Langganan rakit.io', 'Bayar sekali dengan QRIS untuk 30 hari, tanpa tagihan otomatis. Bonus storage langsung aktif setelah pembayaran.'),
         intro ? null : tabs(),
         status,
         h('div', { class: 'plan-grid' }, cards),

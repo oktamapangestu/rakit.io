@@ -3,7 +3,7 @@ import { requireAuth } from './auth.js';
 import { loadProject } from './projects.js';
 import * as userdb from './userdb.js';
 
-// API editor database — hanya untuk pemilik proyek (sesi login di rakit.icu).
+// API editor database — hanya untuk pemilik proyek (sesi login di rakit.io).
 export const database = express.Router();
 
 database.use(requireAuth, loadProject);
