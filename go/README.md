@@ -45,8 +45,8 @@ Aturan migrasi: sebuah rute baru dipindah ke Go setelah ada test-nya dan test it
 | 2 | Halaman & aset aplikasi (`/`, `/editor`, `/admin`, `/panduan`, `/js`, `/css`) + baca sesi | `server.js`, `auth.js` | selesai |
 | 3 | API situs: `/api/db/*` di domain project (baris, relasi, upload gambar, batas request) | `siteapi.js`, `userdb.js` | selesai |
 | 4 | Akun (daftar, masuk, keluar, Google), project, file, riwayat versi | `api.js`, `projects.js`, `files.js`, `versions.js`, `google.js` | selesai |
-| 5 | Editor database & diagram | `database.js`, `diagrams.js` | berikutnya |
-| 6 | Kredit, langganan, pembayaran, webhook | `credits.js`, `plans.js`, `billing.js` | |
+| 5 | Editor database (tabel, kolom, aturan, baris, upload) & bahan diagram | `database.js`, `diagrams.js` | selesai |
+| 6 | Kredit, langganan, pembayaran, webhook | `credits.js`, `plans.js`, `billing.js` | berikutnya |
 | 7 | AI editor (job, antrean, model cadangan) & asisten website | `ai.js`, `aiqueue.js`, `aimodels.js`, `assistant.js` | |
 | 8 | Dashboard owner, lalu Node dimatikan | `admin.js` | |
 
@@ -55,8 +55,8 @@ Yang perlu dijaga selama dua server berjalan bersama:
 - **Keadaan di memori** (rate limit, job AI, antrean, status model) hanya ada di satu proses. Karena itu
   satu kelompok rute dipindah utuh, tidak dipecah antara Go dan Node.
 - **Kredit & job AI saling terikat** (potong kredit → job → refund), jadi tahap 6 dan 7 dipindah berdekatan.
-- **Database project** (`data/db/<slug>.db`) sudah dibuka kedua server sekaligus: Go untuk API publik, Node
-  untuk editor database dan AI Builder. Keduanya memakai WAL + `busy_timeout`, dan Go membuang koneksinya bila
+- **Database project** (`data/db/<slug>.db`) masih dibuka kedua server sekaligus: Go untuk API publik dan
+  editor database, Node untuk AI Builder (membuat tabel, membaca ringkasan skema). Keduanya memakai WAL + `busy_timeout`, dan Go membuang koneksinya bila
   file dihapus/diganti Node (project dihapus lalu dibuat lagi).
 - **Database utama** (`data/rakit.db`): skemanya masih dibuat dan dimigrasikan Node (`src/db.js`), jadi Node
   harus pernah menyala lebih dulu. Sejak tahap 4 Go ikut menulis ke sana (akun, sesi, project, versi); kedua

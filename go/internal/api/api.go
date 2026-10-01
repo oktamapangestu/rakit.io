@@ -1,6 +1,7 @@
 // Package api: API aplikasi di domain utama (/api/...) yang sudah dipindah ke Go — akun, project,
-// file, dan riwayat versi. Padanan src/api.js, src/projects.js, dan rute di src/versions.js.
-// Rute /api lain (AI, pembayaran, database, asisten, diagram, admin) masih diteruskan ke Node.
+// file, riwayat versi, editor database, dan diagram. Padanan src/api.js, src/projects.js,
+// src/database.js, src/diagrams.js, dan rute di src/versions.js.
+// Rute /api lain (AI, pembayaran, asisten, admin) masih diteruskan ke Node.
 package api
 
 import (
@@ -64,6 +65,7 @@ type request struct {
 	rest []string    // segmen path setelah grup rute, sudah di-decode
 
 	body       map[string]any
+	raw        []byte // body JSON mentah (untuk yang butuh urutan kunci)
 	bodyLoaded bool
 }
 
@@ -89,7 +91,7 @@ func segments(r *http.Request) ([]string, bool) {
 	return parts, true
 }
 
-var groups = map[string]bool{"config": true, "register": true, "login": true, "logout": true, "me": true, "projects": true, "files": true, "versions": true}
+var groups = map[string]bool{"config": true, "register": true, "login": true, "logout": true, "me": true, "projects": true, "files": true, "versions": true, "database": true, "diagrams": true}
 
 // Matches: apakah path /api ini sudah ditangani Go.
 func Matches(r *http.Request) bool {
@@ -149,6 +151,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = h.files(req)
 	case "versions":
 		err = h.versionRoutes(req)
+	case "database":
+		err = h.database(req)
+	case "diagrams":
+		err = h.diagrams(req)
 	}
 	if err != nil {
 		httpx.Fail(w, err)
@@ -223,6 +229,7 @@ func (q *request) load() error {
 	if (raw[0] != '{' && raw[0] != '[') || json.Unmarshal(raw, &parsed) != nil {
 		return httpx.Errorf(400, "JSON tidak valid")
 	}
+	q.raw = raw
 	if obj, ok := parsed.(map[string]any); ok {
 		q.body = obj
 	}

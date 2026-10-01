@@ -141,38 +141,57 @@ func translate(err error) error {
 	return err
 }
 
-// acquire membuka (atau memakai ulang) database project dan menyiapkan satu koneksi. Tidak pernah
-// membuat file baru: bila project belum punya database, mengembalikan ok = false.
-func (d *DB) acquire(ctx context.Context, slug string) (c *conn, release func(), ok bool, err error) {
+const metaTableSQL = `CREATE TABLE IF NOT EXISTS _rakit_tables (
+	name       TEXT PRIMARY KEY,
+	columns    TEXT NOT NULL,
+	rules      TEXT NOT NULL,
+	created_at TEXT NOT NULL
+)`
+
+// acquire membuka (atau memakai ulang) database project dan menyiapkan satu koneksi. Tanpa `create`
+// (API publik) file baru tidak pernah dibuat: bila project belum punya database, ok = false.
+func (d *DB) acquire(ctx context.Context, slug string, create bool) (c *conn, release func(), ok bool, err error) {
 	file := d.path(slug)
 	info, statErr := os.Stat(file)
+	if statErr != nil && !os.IsNotExist(statErr) {
+		return nil, nil, false, statErr
+	}
+	missing := statErr != nil
 
 	d.mu.Lock()
 	h := d.pool[slug]
-	// File dihapus atau diganti (project dihapus lalu dibuat lagi oleh Node): buang koneksi lama.
-	if h != nil && (statErr != nil || !os.SameFile(h.info, info)) {
+	// File dihapus atau diganti (project dihapus lalu dibuat lagi oleh server lain): buang koneksi lama.
+	if h != nil && (missing || !os.SameFile(h.info, info)) {
 		d.evict(slug, h)
 		h = nil
 	}
-	if statErr != nil {
+	if missing && !create {
 		d.mu.Unlock()
-		if os.IsNotExist(statErr) {
-			return nil, nil, false, nil
-		}
-		return nil, nil, false, statErr
+		return nil, nil, false, nil
 	}
 	if h == nil {
 		q := url.Values{}
-		q.Set("mode", "rw")
+		q.Set("mode", "rwc")
 		q.Add("_pragma", "busy_timeout(3000)")
 		q.Add("_pragma", "journal_mode(WAL)")
 		db, openErr := sql.Open("sqlite", "file:"+filepath.ToSlash(file)+"?"+q.Encode())
+		if openErr == nil {
+			// Satu koneksi per file: operasi berurutan, seperti di Node.
+			db.SetMaxOpenConns(1)
+			if openErr = os.MkdirAll(filepath.Dir(file), 0o755); openErr == nil {
+				_, openErr = db.ExecContext(ctx, metaTableSQL)
+			}
+			if openErr == nil {
+				info, openErr = os.Stat(file)
+			}
+			if openErr != nil {
+				db.Close()
+			}
+		}
 		if openErr != nil {
 			d.mu.Unlock()
 			return nil, nil, false, openErr
 		}
-		// Satu koneksi per file: operasi berurutan, seperti di Node.
-		db.SetMaxOpenConns(1)
 		h = &handle{db: db, info: info}
 		d.pool[slug] = h
 		if len(d.pool) > poolMax {
@@ -340,13 +359,14 @@ func (d *DB) Remove(slug string) {
 	}
 }
 
-// with membuka database project, mengambil tabel `name`, lalu menjalankan fn.
-func (d *DB) with(ctx context.Context, slug, name string, fn func(c *conn, t *Table) error) error {
-	c, release, ok, err := d.acquire(ctx, slug)
+// with membuka database project, mengambil tabel `name`, lalu menjalankan fn. owner = dari editor
+// database pemilik: database dibuat bila belum ada. Untuk API publik, jangan membuat file database
+// baru hanya karena ada request.
+func (d *DB) with(ctx context.Context, slug, name string, owner bool, fn func(c *conn, t *Table) error) error {
+	c, release, ok, err := d.acquire(ctx, slug, owner)
 	if err != nil {
 		return err
 	}
-	// Untuk API publik: jangan membuat file database baru hanya karena ada request.
 	if !ok {
 		return notFound(name)
 	}
@@ -361,7 +381,7 @@ func (d *DB) with(ctx context.Context, slug, name string, fn func(c *conn, t *Ta
 // GetTable mengembalikan metadata tabel (404 bila tidak ada).
 func (d *DB) GetTable(ctx context.Context, slug, name string) (*Table, error) {
 	var out *Table
-	err := d.with(ctx, slug, name, func(_ *conn, t *Table) error {
+	err := d.with(ctx, slug, name, false, func(_ *conn, t *Table) error {
 		out = t
 		return nil
 	})
@@ -548,7 +568,7 @@ func parseSort(sort string, visible []Column) (string, error) {
 
 func (d *DB) ListRows(ctx context.Context, slug, name string, opts ListOptions) (*ListResult, error) {
 	var result *ListResult
-	err := d.with(ctx, slug, name, func(c *conn, t *Table) error {
+	err := d.with(ctx, slug, name, !opts.Public, func(c *conn, t *Table) error {
 		visible := t.visible(opts.Public)
 		expand, err := normalizeExpand(t, opts.Expand, opts.Public)
 		if err != nil {
@@ -637,7 +657,7 @@ func (c *conn) getRow(t *Table, id int64, publicView bool, expand []string) (*Ro
 
 func (d *DB) GetRow(ctx context.Context, slug, name, id string, publicView bool, expand []string) (*Row, error) {
 	var row *Row
-	err := d.with(ctx, slug, name, func(c *conn, t *Table) error {
+	err := d.with(ctx, slug, name, !publicView, func(c *conn, t *Table) error {
 		key, err := rowID(id)
 		if err != nil {
 			return err
@@ -675,7 +695,7 @@ func jsNow() string { return time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 // InsertRow menambah baris. body = objek JSON berurutan; isObject = false bila body bukan objek.
 func (d *DB) InsertRow(ctx context.Context, slug, name string, body []Field, isObject, publicView bool) (*Row, error) {
 	var row *Row
-	err := d.with(ctx, slug, name, func(c *conn, t *Table) error {
+	err := d.with(ctx, slug, name, !publicView, func(c *conn, t *Table) error {
 		values, err := buildValues(t, body, isObject, false)
 		if err != nil {
 			return err
@@ -705,7 +725,7 @@ func (d *DB) InsertRow(ctx context.Context, slug, name string, body []Field, isO
 
 func (d *DB) UpdateRow(ctx context.Context, slug, name, id string, body []Field, isObject, publicView bool) (*Row, error) {
 	var row *Row
-	err := d.with(ctx, slug, name, func(c *conn, t *Table) error {
+	err := d.with(ctx, slug, name, !publicView, func(c *conn, t *Table) error {
 		values, err := buildValues(t, body, isObject, true)
 		if err != nil {
 			return err
@@ -761,7 +781,7 @@ func (d *DB) UpdateRow(ctx context.Context, slug, name, id string, body []Field,
 }
 
 func (d *DB) DeleteRow(ctx context.Context, slug, name, id string) error {
-	return d.with(ctx, slug, name, func(c *conn, t *Table) error {
+	return d.with(ctx, slug, name, true, func(c *conn, t *Table) error {
 		key, err := rowID(id)
 		if err != nil {
 			return err
