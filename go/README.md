@@ -41,8 +41,8 @@ Aturan migrasi: sebuah rute baru dipindah ke Go setelah ada test-nya dan test it
 | 0 | Test alur uang (kredit, QRIS, langganan) | — | selesai |
 | 1 | Website project `<slug>.rakit.icu` (file statis) | `sites.js` | selesai |
 | 2 | Halaman & aset aplikasi (`/`, `/editor`, `/admin`, `/panduan`, `/js`, `/css`) + baca sesi | `server.js`, `auth.js` | selesai |
-| 3 | API situs: `/api/db/*` di domain project | `siteapi.js`, `userdb.js` | berikutnya |
-| 4 | Akun, project, file, riwayat versi | `api.js`, `projects.js`, `files.js`, `versions.js`, `google.js` | |
+| 3 | API situs: `/api/db/*` di domain project (baris, relasi, upload gambar, batas request) | `siteapi.js`, `userdb.js` | selesai |
+| 4 | Akun, project, file, riwayat versi | `api.js`, `projects.js`, `files.js`, `versions.js`, `google.js` | berikutnya |
 | 5 | Editor database & diagram | `database.js`, `diagrams.js` | |
 | 6 | Kredit, langganan, pembayaran, webhook | `credits.js`, `plans.js`, `billing.js` | |
 | 7 | AI editor (job, antrean, model cadangan) & asisten website | `ai.js`, `aiqueue.js`, `aimodels.js`, `assistant.js` | |
@@ -53,8 +53,14 @@ Yang perlu dijaga selama dua server berjalan bersama:
 - **Keadaan di memori** (rate limit, job AI, antrean, status model) hanya ada di satu proses. Karena itu
   satu kelompok rute dipindah utuh, tidak dipecah antara Go dan Node.
 - **Kredit & job AI saling terikat** (potong kredit → job → refund), jadi tahap 6 dan 7 dipindah berdekatan.
-- **Skema database** masih dibuat dan dimigrasikan Node (`src/db.js`). Sebelum Go mulai menulis ke database
-  (tahap 3 ke atas), Node perlu `PRAGMA busy_timeout` supaya tidak langsung gagal saat Go sedang menulis.
+- **Database project** (`data/db/<slug>.db`) sudah dibuka kedua server sekaligus: Go untuk API publik, Node
+  untuk editor database dan AI Builder. Keduanya memakai WAL + `busy_timeout`, dan Go membuang koneksinya bila
+  file dihapus/diganti Node (project dihapus lalu dibuat lagi).
+- **Database utama** (`data/rakit.db`): skemanya masih dibuat dan dimigrasikan Node (`src/db.js`), dan Go baru
+  membacanya. Sebelum Go mulai menulis ke sana (tahap 4 ke atas), Node perlu `PRAGMA busy_timeout` supaya tidak
+  langsung gagal saat Go sedang menulis.
+- **Konversi nilai** di `internal/userdb` meniru JavaScript (`Number()`, `parseInt`, `Date.parse`);
+  `go test ./...` membandingkannya dengan jawaban Node yang direkam di `testdata/js.json`.
 
 ## Deploy tahap ini
 

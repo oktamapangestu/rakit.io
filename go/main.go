@@ -19,9 +19,12 @@ import (
 	"rakit.icu/server/internal/app"
 	"rakit.icu/server/internal/auth"
 	"rakit.icu/server/internal/config"
+	"rakit.icu/server/internal/plans"
 	"rakit.icu/server/internal/proxy"
+	"rakit.icu/server/internal/siteapi"
 	"rakit.icu/server/internal/sites"
 	"rakit.icu/server/internal/store"
+	"rakit.icu/server/internal/userdb"
 )
 
 // Username = subdomain, jadi harus valid sebagai label DNS (sama dengan src/username.js).
@@ -58,10 +61,11 @@ func main() {
 	}
 	site := sites.New(cfg, db)
 	pages := app.New(cfg, auth.New(cfg, db))
+	siteDB := siteapi.New(userdb.New(cfg, plans.New(db)))
 
 	// Routing berdasarkan host:
 	// - rakit.icu          -> halaman & aset aplikasi (Go); /api dan /auth masih di Node
-	// - <slug>.rakit.icu   -> website project (Go), kecuali /api di domain itu
+	// - <slug>.rakit.icu   -> website project & /api/db (Go); /api lainnya (asisten AI) masih di Node
 	// - lainnya (www, host tak dikenal) -> Node
 	under := func(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
 	suffix := "." + cfg.BaseDomain
@@ -75,7 +79,11 @@ func main() {
 			return
 		}
 		if sub, ok := strings.CutSuffix(host, suffix); ok && sub != "www" && usernameRE.MatchString(sub) {
-			if !under(r.URL.Path, "/api") {
+			switch {
+			case siteapi.Matches(r.URL.Path):
+				siteDB.Serve(w, r, sub)
+				return
+			case !under(r.URL.Path, "/api"):
 				site.Serve(w, r, sub)
 				return
 			}

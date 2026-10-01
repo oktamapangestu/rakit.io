@@ -255,14 +255,17 @@ export async function startStack(env = {}) {
     await new Promise((r) => setTimeout(r, 100));
   }
 
-  const plainRequest = (host, urlPath, { method = 'GET', headers = {} } = {}) => new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, method, path: urlPath, headers: { Host: host, ...headers } }, (res) => {
+  // opts.json: body JSON (Content-Type diisi otomatis) · opts.body: body mentah (string/Buffer).
+  const plainRequest = (host, urlPath, { method = 'GET', headers = {}, json, body } = {}) => new Promise((resolve, reject) => {
+    const payload = json !== undefined ? JSON.stringify(json) : body;
+    const allHeaders = { Host: host, ...(json !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers };
+    const req = http.request({ host: '127.0.0.1', port, method, path: urlPath, headers: allHeaders }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }));
     });
     req.on('error', reject);
-    req.end();
+    req.end(payload);
   });
 
   let counter = 0;

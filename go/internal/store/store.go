@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/url"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -63,4 +64,16 @@ func (s *Store) SessionUser(tokenHash string, nowMs int64) (*User, error) {
 		return nil, err
 	}
 	return &u, nil
+}
+
+// ActivePlanOfProject: id paket langganan pemilik project yang masih berlaku, atau "".
+func (s *Store) ActivePlanOfProject(slug string) (string, error) {
+	var plan string
+	err := s.db.QueryRow(`
+		SELECT sub.plan FROM projects p JOIN subscriptions sub ON sub.user_id = p.user_id
+		WHERE p.slug = ? AND sub.expires_at > ?`, slug, time.Now().UnixMilli()).Scan(&plan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return plan, err
 }

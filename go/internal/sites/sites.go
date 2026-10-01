@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"rakit.icu/server/internal/config"
+	"rakit.icu/server/internal/files"
 )
 
 // Projects: yang dibutuhkan dari database.
@@ -31,21 +32,21 @@ func New(cfg *config.Config, projects Projects) *Handler {
 }
 
 type siteFile struct {
-	abs  string
-	info os.FileInfo
-	ext  string
+	abs   string
+	info  os.FileInfo
+	ctype string
 }
 
 func findFile(root, rel string) *siteFile {
-	clean, err := cleanPath(rel)
+	clean, err := files.CleanPath(rel)
 	if err != nil {
 		return nil
 	}
-	ext := extOf(clean)
-	if _, ok := mimeTypes[ext]; !ok {
+	ctype := files.ContentType(clean)
+	if ctype == "" {
 		return nil
 	}
-	abs, err := resolveIn(root, clean)
+	abs, err := files.ResolveIn(root, clean)
 	if err != nil {
 		return nil
 	}
@@ -54,15 +55,15 @@ func findFile(root, rel string) *siteFile {
 	if err != nil || !info.Mode().IsRegular() {
 		return nil
 	}
-	return &siteFile{abs: abs, info: info, ext: ext}
+	return &siteFile{abs: abs, info: info, ctype: ctype}
 }
 
 func isDir(root, rel string) bool {
-	clean, err := cleanPath(rel)
+	clean, err := files.CleanPath(rel)
 	if err != nil {
 		return false
 	}
-	abs, err := resolveIn(root, clean)
+	abs, err := files.ResolveIn(root, clean)
 	if err != nil {
 		return false
 	}
@@ -73,7 +74,7 @@ func isDir(root, rel string) bool {
 func sendFile(w http.ResponseWriter, r *http.Request, file *siteFile, status int) {
 	etag := fmt.Sprintf(`W/"%x-%x"`, file.info.Size(), file.info.ModTime().UnixNano())
 	h := w.Header()
-	h.Set("Content-Type", mimeTypes[file.ext])
+	h.Set("Content-Type", file.ctype)
 	h.Set("Cache-Control", "no-cache") // selalu revalidasi, supaya preview langsung ter-update
 	h.Set("ETag", etag)
 	h.Set("X-Content-Type-Options", "nosniff")
