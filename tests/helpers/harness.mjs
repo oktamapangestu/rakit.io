@@ -1,4 +1,4 @@
-// Harness test HTTP: menyalakan server rakit.icu (proses terpisah) dengan folder data sementara,
+// Harness test HTTP: menyalakan server rakit.io (proses terpisah) dengan folder data sementara,
 // plus provider AI & Kasera Pay tiruan. Test hanya berbicara lewat HTTP dan database SQLite, jadi
 // test yang sama dipakai untuk membuktikan backend lain (mis. versi Go) berperilaku sama:
 //

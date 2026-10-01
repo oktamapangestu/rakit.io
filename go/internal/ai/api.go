@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"rakit.icu/server/internal/files"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/files"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/store"
 )
 
 // ---------- Percakapan ----------

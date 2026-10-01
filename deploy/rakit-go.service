@@ -1,4 +1,4 @@
-# Unit systemd untuk server Go rakit.icu — salin ke /etc/systemd/system/rakit-go.service
+# Unit systemd untuk server Go rakit.io — salin ke /etc/systemd/system/rakit-go.service
 #
 #   sudo cp deploy/rakit-go.service /etc/systemd/system/rakit-go.service
 #   sudo systemctl daemon-reload
@@ -8,7 +8,7 @@
 # membuat skema database saat menyala. Nginx diarahkan ke port 3011 (deploy/nginx-rakit.conf).
 # PORT di bawah menimpa PORT di .env. Server Node lama (rakit.service) tidak perlu menyala.
 [Unit]
-Description=rakit.icu - editor kode online (Go)
+Description=rakit.io - editor kode online (Go)
 After=network.target
 
 [Service]

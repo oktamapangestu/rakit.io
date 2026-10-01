@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/plans"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/plans"
+	"rakit.io/server/internal/store"
 )
 
 // BonusPeriod: satu baris per user, period tetap (bukan per-hari) sehingga tak menumpuk & tak kembali.

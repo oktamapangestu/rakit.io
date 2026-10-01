@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
-	"rakit.icu/server/internal/plans"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/plans"
+	"rakit.io/server/internal/store"
 )
 
 // Antrean kecil khusus asisten, terpisah dari AI Builder, supaya lonjakan pengunjung tidak mengganggu editor.

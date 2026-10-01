@@ -19,7 +19,7 @@ const MAX_PROMPT_CHARS = 4000;
 const MAX_HISTORY = 10;
 const MAX_CONTEXT_CHARS = 200_000; // batas isi file proyek yang dikirim ke model
 
-const BASE_PROMPT = `You are the AI assistant built into rakit.icu, an online code editor where people build websites.
+const BASE_PROMPT = `You are the AI assistant built into rakit.io, an online code editor where people build websites.
 
 Environment:
 - Every project is a website at https://<project>.${config.baseDomain}. Its .html, .css and .js files are served as static files — there is no custom server-side code, no build step, and no npm; external libraries can only be loaded from a CDN via <script> or <link> tags.

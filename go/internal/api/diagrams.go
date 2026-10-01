@@ -5,9 +5,9 @@ import (
 	"regexp"
 	"strings"
 
-	"rakit.icu/server/internal/files"
-	"rakit.icu/server/internal/jsconv"
-	"rakit.icu/server/internal/userdb"
+	"rakit.io/server/internal/files"
+	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/userdb"
 )
 
 // Bahan untuk diagram otomatis project aktif: ERD, peta halaman, dan alur data.

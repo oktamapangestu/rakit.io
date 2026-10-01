@@ -1,4 +1,4 @@
-# Unit systemd untuk rakit.icu — salin ke /etc/systemd/system/rakit.service
+# Unit systemd untuk rakit.io — salin ke /etc/systemd/system/rakit.service
 #
 #   sudo cp deploy/rakit.service /etc/systemd/system/rakit.service
 #   sudo systemctl daemon-reload
@@ -7,7 +7,7 @@
 # Catatan: app hanya mendengarkan di 127.0.0.1 (lihat HOST/PORT di .env) dan
 # diakses publik lewat Nginx reverse proxy (lihat deploy/nginx-rakit.conf).
 [Unit]
-Description=rakit.icu - editor kode online
+Description=rakit.io - editor kode online
 After=network.target
 
 [Service]

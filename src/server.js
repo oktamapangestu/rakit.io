@@ -61,7 +61,7 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 'loopback'); // di belakang Caddy/Nginx di mesin yang sama
 
-// Routing berdasarkan host: rakit.icu -> aplikasi, <user>.rakit.icu -> website user.
+// Routing berdasarkan host: rakit.io -> aplikasi, <user>.rakit.io -> website user.
 app.use((req, res, next) => {
   const host = (req.hostname || '').toLowerCase();
   if (host === config.baseDomain) return next();
@@ -143,6 +143,6 @@ app.use((err, req, res, next) => {
 setInterval(cleanupSessions, 60 * 60 * 1000).unref();
 
 app.listen(config.port, () => {
-  console.log(`rakit.icu berjalan di ${config.appOrigin}`);
+  console.log(`rakit.io berjalan di ${config.appOrigin}`);
   console.log(`Website user: ${config.siteUrl('<username>')}`);
 });

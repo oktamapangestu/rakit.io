@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/crypto/scrypt"
 
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/store"
 )
 
 const sessionTTL = 30 * 24 * time.Hour
@@ -33,7 +33,7 @@ type Auth struct {
 }
 
 func New(cfg *config.Config, sessions Sessions) *Auth {
-	// __Host- mencegah subdomain user (mis. budi.rakit.icu) menimpa cookie sesi rakit.icu.
+	// __Host- mencegah subdomain user (mis. budi.rakit.io) menimpa cookie sesi rakit.io.
 	name := "rakit_sid"
 	if cfg.SecureCookies {
 		name = "__Host-rakit_sid"
@@ -70,7 +70,7 @@ func (a *Auth) User(r *http.Request) *store.User {
 	return user
 }
 
-// cookie: tanpa Domain, jadi tidak dikirim ke *.rakit.icu.
+// cookie: tanpa Domain, jadi tidak dikirim ke *.rakit.io.
 func (a *Auth) cookie(value string) *http.Cookie {
 	return &http.Cookie{Name: a.cookieName, Value: value, Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode}
 }

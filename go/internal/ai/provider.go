@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"rakit.icu/server/internal/aiqueue"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
+	"rakit.io/server/internal/aiqueue"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
 )
 
 type message = map[string]any

@@ -157,7 +157,7 @@ func (s *Store) LinkGoogle(googleID string, userID int64) error {
 
 // ---------- Project ----------
 
-// Project = workspace dengan subdomain sendiri: <slug>.rakit.icu.
+// Project = workspace dengan subdomain sendiri: <slug>.rakit.io.
 type Project struct {
 	ID        int64
 	UserID    int64

@@ -4,11 +4,11 @@ import (
 	"regexp"
 	"strings"
 
-	"rakit.icu/server/internal/accounts"
-	"rakit.icu/server/internal/auth"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/accounts"
+	"rakit.io/server/internal/auth"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/store"
 )
 
 var emailRE = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)

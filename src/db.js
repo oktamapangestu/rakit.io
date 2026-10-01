@@ -28,7 +28,7 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires_at);
 
-  -- Project = workspace dengan subdomain sendiri: <slug>.rakit.icu. File di sites/<slug>, database di db/<slug>.db.
+  -- Project = workspace dengan subdomain sendiri: <slug>.rakit.io. File di sites/<slug>, database di db/<slug>.db.
   CREATE TABLE IF NOT EXISTS projects (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -150,7 +150,7 @@ db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google ON users(google_id) WHER
 // Lampiran gambar pesan AI: JSON { thumbs: [dataURL kecil], description: teks dari model vision }.
 if (!hasColumn('ai_messages', 'attachments')) db.exec('ALTER TABLE ai_messages ADD COLUMN attachments TEXT');
 if (!hasColumn('ai_threads', 'project_id')) db.exec('ALTER TABLE ai_threads ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE');
-// Dulu 1 akun = 1 website di <username>.rakit.icu: jadikan itu project pertamanya (URL tetap sama).
+// Dulu 1 akun = 1 website di <username>.rakit.io: jadikan itu project pertamanya (URL tetap sama).
 db.exec(`
   INSERT INTO projects (user_id, slug, name, created_at)
   SELECT u.id, u.username, u.username, u.created_at FROM users u

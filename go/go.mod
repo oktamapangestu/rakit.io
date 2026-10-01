@@ -1,4 +1,4 @@
-module rakit.icu/server
+module rakit.io/server
 
 go 1.26.0
 

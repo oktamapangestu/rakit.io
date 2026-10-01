@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"rakit.icu/server/internal/userdb"
+	"rakit.io/server/internal/userdb"
 )
 
 // orderedQuery membaca query string dengan urutan kunci terjaga.

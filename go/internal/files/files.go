@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/plans"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/plans"
 )
 
 const maxDepth = 8

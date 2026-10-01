@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
-	"rakit.icu/server/internal/plans"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/plans"
 )
 
 // ---------- Untuk dashboard owner platform ----------

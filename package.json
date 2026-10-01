@@ -1,8 +1,8 @@
 {
-  "name": "rakit-icu",
+  "name": "rakit-io",
   "version": "0.1.0",
   "private": true,
-  "description": "Editor kode online ala VS Code dengan hosting HTML/CSS/JS di *.rakit.icu",
+  "description": "Editor kode online ala VS Code dengan hosting HTML/CSS/JS di *.rakit.io",
   "type": "module",
   "engines": {
     "node": ">=22.13"

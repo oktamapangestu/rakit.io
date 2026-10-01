@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
 )
 
 // Pengelolaan tabel dari editor database pemilik: buat, ubah, hapus, dan ringkasan pemakaian.

@@ -15,20 +15,20 @@ import (
 	"strings"
 	"time"
 
-	"rakit.icu/server/internal/admin"
-	"rakit.icu/server/internal/ai"
-	"rakit.icu/server/internal/aimodels"
-	"rakit.icu/server/internal/assistant"
-	"rakit.icu/server/internal/auth"
-	"rakit.icu/server/internal/billing"
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/credits"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
-	"rakit.icu/server/internal/plans"
-	"rakit.icu/server/internal/store"
-	"rakit.icu/server/internal/userdb"
-	"rakit.icu/server/internal/versions"
+	"rakit.io/server/internal/admin"
+	"rakit.io/server/internal/ai"
+	"rakit.io/server/internal/aimodels"
+	"rakit.io/server/internal/assistant"
+	"rakit.io/server/internal/auth"
+	"rakit.io/server/internal/billing"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/credits"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/plans"
+	"rakit.io/server/internal/store"
+	"rakit.io/server/internal/userdb"
+	"rakit.io/server/internal/versions"
 )
 
 const jsonLimit = 1024 * 1024
@@ -128,7 +128,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Semua *.rakit.icu dianggap "same-site" oleh browser, jadi SameSite=Lax saja tidak cukup untuk
+	// Semua *.rakit.io dianggap "same-site" oleh browser, jadi SameSite=Lax saja tidak cukup untuk
 	// mencegah website user mengirim request ke API. Wajibkan Origin = origin aplikasi.
 	if !reading(r) && r.Method != http.MethodOptions {
 		ok := r.Header.Get("Sec-Fetch-Site") == "same-origin"

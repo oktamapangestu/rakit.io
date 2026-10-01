@@ -16,7 +16,7 @@ type Config struct {
 	Protocol   string
 	BaseDomain string
 	DataDir    string
-	AppOrigin  string // alamat aplikasi utama, mis. https://rakit.icu
+	AppOrigin  string // alamat aplikasi utama, mis. https://rakit.io
 	PublicDir  string // folder halaman & aset aplikasi (public/)
 
 	SecureCookies bool
@@ -272,10 +272,10 @@ func (c *Config) IsAdmin(email string) bool {
 	return false
 }
 
-// SiteHost: host website project, mis. budi.rakit.icu.
+// SiteHost: host website project, mis. budi.rakit.io.
 func (c *Config) SiteHost(slug string) string { return slug + "." + c.BaseDomain }
 
-// SiteURL: alamat website project, mis. https://budi.rakit.icu.
+// SiteURL: alamat website project, mis. https://budi.rakit.io.
 func (c *Config) SiteURL(slug string) string {
 	return c.Protocol + "://" + slug + "." + c.BaseDomain + c.portSuffix
 }

@@ -1,4 +1,4 @@
-// Package siteapi: API publik di domain project — https://<slug>.rakit.icu/api/db/<tabel>.
+// Package siteapi: API publik di domain project — https://<slug>.rakit.io/api/db/<tabel>.
 // Hanya operasi yang dibuka "Publik" oleh pemilik di editor database yang boleh dipakai.
 // Padanan bagian /api/db di src/siteapi.js.
 package siteapi
@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/userdb"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/userdb"
 )
 
 const (

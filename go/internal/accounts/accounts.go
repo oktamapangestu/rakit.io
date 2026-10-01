@@ -6,11 +6,11 @@ import (
 	"regexp"
 	"strings"
 
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/files"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/files"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/store"
 )
 
 // Username = subdomain, jadi harus valid sebagai label DNS.

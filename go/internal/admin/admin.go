@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"rakit.icu/server/internal/aimodels"
-	"rakit.icu/server/internal/aiqueue"
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/credits"
-	"rakit.icu/server/internal/plans"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/aimodels"
+	"rakit.io/server/internal/aiqueue"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/credits"
+	"rakit.io/server/internal/plans"
+	"rakit.io/server/internal/store"
 )
 
 const (

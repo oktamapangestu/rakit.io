@@ -9,7 +9,7 @@ import { removeDatabase } from './userdb.js';
 import { removeVersions } from './versions.js';
 import { slugError } from './username.js';
 
-// Project = workspace dengan subdomain sendiri (<slug>.rakit.icu): file, database, preview, dan
+// Project = workspace dengan subdomain sendiri (<slug>.rakit.io): file, database, preview, dan
 // riwayat AI-nya terpisah. Kredit AI tetap milik akun, dipakai bersama semua project.
 
 export const publicProject = (p) => ({

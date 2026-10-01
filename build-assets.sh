@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Minify aset frontend rakit.icu.
+# Minify aset frontend rakit.io.
 # Sumber asli: assets-source/js, assets-source/css
 # Hasil:       public/js, public/css  (nama file sama, isi diminify)
 set -euo pipefail

@@ -1,8 +1,8 @@
 package api
 
 import (
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
 )
 
 // ---------- /api/ai ----------

@@ -1,7 +1,7 @@
 # Backend Go
 
-Server rakit.icu sekarang berjalan **sendiri di Go**: aplikasi di `rakit.icu`, website project di
-`<slug>.rakit.icu`, AI, pembayaran, dan dashboard owner. Go membaca `.env`, folder `data/`, dan database
+Server rakit.io sekarang berjalan **sendiri di Go**: aplikasi di `rakit.io`, website project di
+`<slug>.rakit.io`, AI, pembayaran, dan dashboard owner. Go membaca `.env`, folder `data/`, dan database
 SQLite yang sama dengan server Node lama, dan membuat/memperbarui skema database sendiri saat menyala.
 
 Kode Node (`src/`) masih disimpan sebagai jalan kembali bila ada masalah setelah deploy (lihat
@@ -39,7 +39,7 @@ Untuk mencari data race: `cd go && go build -race -o bin/rakit . && cd .. && RAK
 | # | Bagian | Padanan di Node | Status |
 |---|---|---|---|
 | 0 | Test alur uang (kredit, QRIS, langganan) | — | selesai |
-| 1 | Website project `<slug>.rakit.icu` (file statis) | `sites.js` | selesai |
+| 1 | Website project `<slug>.rakit.io` (file statis) | `sites.js` | selesai |
 | 2 | Halaman & aset aplikasi (`/`, `/editor`, `/admin`, `/panduan`, `/js`, `/css`) + baca sesi | `server.js`, `auth.js` | selesai |
 | 3 | API situs: `/api/db/*` di domain project (baris, relasi, upload gambar, batas request) | `siteapi.js`, `userdb.js` | selesai |
 | 4 | Akun (daftar, masuk, keluar, Google), project, file, riwayat versi | `api.js`, `projects.js`, `files.js`, `versions.js`, `google.js` | selesai |

@@ -1,5 +1,5 @@
-// Package assistant: asisten AI untuk website pengguna, memakai AI dari rakit.icu dan dibayar dari
-// "Saldo Asisten" (Rupiah). Pengunjung website memanggil https://<slug>.rakit.icu/api/ai/chat; API key
+// Package assistant: asisten AI untuk website pengguna, memakai AI dari rakit.io dan dibayar dari
+// "Saldo Asisten" (Rupiah). Pengunjung website memanggil https://<slug>.rakit.io/api/ai/chat; API key
 // provider tidak pernah sampai ke browser. Biaya dihitung dari token yang benar-benar terpakai × harga
 // model (diatur owner).
 //
@@ -16,11 +16,11 @@ import (
 	"strings"
 	"time"
 
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
-	"rakit.icu/server/internal/plans"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/plans"
+	"rakit.io/server/internal/store"
 )
 
 const (

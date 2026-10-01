@@ -25,11 +25,11 @@ import (
 
 	qrcode "github.com/skip2/go-qrcode"
 
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/credits"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/plans"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/credits"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/plans"
+	"rakit.io/server/internal/store"
 )
 
 const (
@@ -284,7 +284,7 @@ func (s *Service) create(ctx context.Context, user *store.User, packageID string
 	}
 	trx, err := s.kasera(ctx, "POST", "/transactions", map[string]any{
 		"amount":             price,
-		"description":        label + " rakit.icu",
+		"description":        label + " rakit.io",
 		"external_id":        id,
 		"merchant_ref":       fmt.Sprintf("user-%d", user.ID),
 		"payment_methods":    []string{"qris"},

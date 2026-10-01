@@ -4,9 +4,9 @@ import (
 	"os"
 	"path"
 
-	"rakit.icu/server/internal/files"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/files"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/store"
 )
 
 func removeAll(dir string) error { return os.RemoveAll(dir) }

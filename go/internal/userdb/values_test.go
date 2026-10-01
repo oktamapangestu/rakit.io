@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"rakit.icu/server/internal/jsconv"
+	"rakit.io/server/internal/jsconv"
 )
 
 // testdata/js.json berisi jawaban Node (V8) untuk masukan yang sama, supaya konversi di Go

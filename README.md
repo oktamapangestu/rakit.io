@@ -1,7 +1,7 @@
-# rakit.icu
+# rakit.io
 
 Editor kode online ala VS Code (Monaco) dengan live preview. Setiap user yang mendaftar
-otomatis mendapat website di `https://<username>.rakit.icu`. File kode **.html, .css, .js**, plus gambar yang diunggah.
+otomatis mendapat website di `https://<username>.rakit.io`. File kode **.html, .css, .js**, plus gambar yang diunggah.
 
 ## Jalankan lokal
 
@@ -21,7 +21,7 @@ Butuh Node.js ≥ 22.13 (memakai SQLite bawaan `node:sqlite`).
 
 ```
 src/
-  server.js    routing berdasarkan host: rakit.icu -> aplikasi, <user>.rakit.icu -> website user
+  server.js    routing berdasarkan host: rakit.io -> aplikasi, <user>.rakit.io -> website user
   api.js       REST API: register/login/logout/me + CRUD file
   auth.js      hash password (scrypt), sesi di SQLite, cek Origin (anti-CSRF), rate limit
   files.js     penyimpanan file per user di disk, validasi path, kuota
@@ -69,7 +69,7 @@ berkas berubah tanpa perlu membersihkan cache.
   (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`; redirect URI `<domain>/auth/google/callback`). Akun Google baru
   mendapat username dari email. Email yang sudah terdaftar dengan password **tidak** ditautkan otomatis ke Google
   (pendaftaran password tidak memverifikasi email), jadi pemiliknya masuk memakai password.
-- **Project = workspace**: setiap project punya subdomain sendiri (`<slug>.rakit.icu`), file (`data/sites/<slug>`),
+- **Project = workspace**: setiap project punya subdomain sendiri (`<slug>.rakit.io`), file (`data/sites/<slug>`),
   database (`data/db/<slug>.db`), dan riwayat AI sendiri. Maksimal `MAX_PROJECTS` (default 5) per akun; kuota
   file & database dihitung per project. Ganti, buat, ganti nama, atau hapus project lewat tombol folder di chip
   alamat website (atau menu avatar di HP). Project terakhir tidak bisa dihapus.
@@ -144,7 +144,7 @@ Kredit yang dibeli tidak hangus dan dipakai setelah kredit gratis harian habis.
 | `KASERA_WEBHOOK_SECRET` | Signing secret endpoint webhook di dashboard Kasera. |
 | `CREDIT_PACKAGES` | Paket `kredit:harga`, dipisah koma. Default `20:10000,50:20000,150:50000`. |
 
-Di dashboard Kasera, daftarkan URL webhook: `https://rakit.icu/api/billing/webhook`.
+Di dashboard Kasera, daftarkan URL webhook: `https://rakit.io/api/billing/webhook`.
 
 - Kredit ditambahkan saat webhook `payment.paid` masuk (tanda tangan `Kasera-Signature-V1` diverifikasi,
   nominal dicocokkan). Selama modal pembayaran terbuka, status juga dicek langsung ke API Kasera, jadi
@@ -182,7 +182,7 @@ otomatis, dan bisa diperpanjang kapan saja. Paket dibuka dari badge kredit AI at
 
 ## Asisten AI untuk website pengguna
 
-Pemilik website bisa memasang **chatbot AI** untuk pengunjungnya, memakai AI dari rakit.icu (gateway
+Pemilik website bisa memasang **chatbot AI** untuk pengunjungnya, memakai AI dari rakit.io (gateway
 `AI_BASE_URL`/`AI_API_KEY`) dan dibayar dari **Saldo Asisten** dalam Rupiah. API key tidak pernah sampai ke browser.
 
 - **Editor** → menu avatar → **Asisten AI website**: aktifkan, pilih model (ditampilkan "≈ Rp per jawaban"),
@@ -279,7 +279,7 @@ Website user memakainya lewat API otomatis di domainnya sendiri:
 
 ## Dashboard pemilik
 
-`https://rakit.icu/admin` menampilkan statistik platform: pengguna, pendapatan, request AI (termasuk
+`https://rakit.io/admin` menampilkan statistik platform: pengguna, pendapatan, request AI (termasuk
 yang gagal per status dan pemakaian token), kredit terjual, pengguna paling aktif, transaksi dan
 pendaftar terbaru, serta ukuran penyimpanan. Periode bisa dipilih 7/30/90 hari (waktu WIB).
 
@@ -330,15 +330,15 @@ ukuran panel berubah.
 ## Deploy ke VPS
 
 1. **DNS** — arahkan dua record ke IP VPS:
-   - `A  rakit.icu    -> <IP>`
-   - `A  *.rakit.icu  -> <IP>`
+   - `A  rakit.io    -> <IP>`
+   - `A  *.rakit.io  -> <IP>`
 2. **Aplikasi** (di server ini: `/srv/rakit`)
    ```bash
    git clone ... /srv/rakit && cd /srv/rakit
    npm ci --omit=dev
    cat > .env <<'ENV'
    PORT=3010
-   BASE_DOMAIN=rakit.icu
+   BASE_DOMAIN=rakit.io
    PROTOCOL=https
    PUBLIC_PORT=
    NODE_ENV=production
@@ -353,20 +353,20 @@ ukuran panel berubah.
    sudo ln -sf /etc/nginx/sites-available/rakit /etc/nginx/sites-enabled/rakit
    sudo nginx -t && sudo systemctl reload nginx
    ```
-   Sertifikat `*.rakit.icu` lewat Let's Encrypt (wildcard butuh DNS challenge, mis. certbot + plugin DNS).
+   Sertifikat `*.rakit.io` lewat Let's Encrypt (wildcard butuh DNS challenge, mis. certbot + plugin DNS).
    App hanya `listen` di `127.0.0.1` — tutup port-nya dari publik lewat firewall (lihat `/root/app-guard.nft`).
 4. **Backup** folder `data/` secara berkala.
 
 ## Catatan keamanan
 
-Website user berjalan di subdomain `rakit.icu` dan bisa menjalankan JavaScript bebas, jadi:
+Website user berjalan di subdomain `rakit.io` dan bisa menjalankan JavaScript bebas, jadi:
 
 - Cookie sesi **host-only** (tanpa atribut `Domain`) dan memakai prefix `__Host-` di HTTPS,
-  sehingga tidak terkirim ke / tidak bisa ditimpa oleh `*.rakit.icu`.
-- Semua request API yang mengubah data wajib punya `Origin` = `https://rakit.icu`
+  sehingga tidak terkirim ke / tidak bisa ditimpa oleh `*.rakit.io`.
+- Semua request API yang mengubah data wajib punya `Origin` = `https://rakit.io`
   (subdomain dianggap "same-site" oleh browser, jadi SameSite=Lax saja tidak cukup).
 - Halaman aplikasi mengirim `X-Frame-Options: DENY`.
-- **Disarankan:** daftarkan `rakit.icu` ke [Public Suffix List](https://publicsuffix.org/)
+- **Disarankan:** daftarkan `rakit.io` ke [Public Suffix List](https://publicsuffix.org/)
   supaya browser memperlakukan tiap subdomain sebagai situs terpisah (seperti github.io).
   Kalau belum, pertimbangkan menaruh website user di domain terpisah (mis. `*.rakit.site`).
 - Website user bisa dipakai untuk phishing — siapkan cara melaporkan & menonaktifkan akun.

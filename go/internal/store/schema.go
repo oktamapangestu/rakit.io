@@ -18,7 +18,7 @@ const schema = `
 	);
 	CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires_at);
 
-	-- Project = workspace dengan subdomain sendiri: <slug>.rakit.icu. File di sites/<slug>, database di db/<slug>.db.
+	-- Project = workspace dengan subdomain sendiri: <slug>.rakit.io. File di sites/<slug>, database di db/<slug>.db.
 	CREATE TABLE IF NOT EXISTS projects (
 	  id         INTEGER PRIMARY KEY AUTOINCREMENT,
 	  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -196,7 +196,7 @@ func (s *Store) Migrate() error {
 			return err
 		}
 	}
-	// Dulu 1 akun = 1 website di <username>.rakit.icu: jadikan itu project pertamanya (URL tetap sama).
+	// Dulu 1 akun = 1 website di <username>.rakit.io: jadikan itu project pertamanya (URL tetap sama).
 	if _, err := tx.Exec(`
 		CREATE UNIQUE INDEX IF NOT EXISTS users_google ON users(google_id) WHERE google_id IS NOT NULL;
 		INSERT INTO projects (user_id, slug, name, created_at)

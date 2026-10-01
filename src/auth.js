@@ -6,7 +6,7 @@ import { q } from './db.js';
 const scrypt = promisify(crypto.scrypt);
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 hari
 
-// __Host- mencegah subdomain user (mis. budi.rakit.icu) menimpa cookie sesi rakit.icu.
+// __Host- mencegah subdomain user (mis. budi.rakit.io) menimpa cookie sesi rakit.io.
 export const COOKIE_NAME = config.secureCookies ? '__Host-rakit_sid' : 'rakit_sid';
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -42,7 +42,7 @@ const cookieOptions = () => ({
   httpOnly: true,
   sameSite: 'lax',
   secure: config.secureCookies,
-  path: '/', // tanpa Domain => cookie tidak dikirim ke *.rakit.icu
+  path: '/', // tanpa Domain => cookie tidak dikirim ke *.rakit.io
 });
 
 export function setSessionCookie(res, token) {
@@ -72,7 +72,7 @@ export function requireAuth(req, res, next) {
   next();
 }
 
-// Semua *.rakit.icu dianggap "same-site" oleh browser, jadi SameSite=Lax saja tidak cukup
+// Semua *.rakit.io dianggap "same-site" oleh browser, jadi SameSite=Lax saja tidak cukup
 // untuk mencegah website user mengirim request ke API. Wajibkan Origin = origin aplikasi.
 export function requireSameOrigin(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();

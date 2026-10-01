@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"rakit.icu/server/internal/config"
+	"rakit.io/server/internal/config"
 )
 
 // raiseAfter: batas dinaikkan lagi setelah sekian panggilan lancar berturut-turut.

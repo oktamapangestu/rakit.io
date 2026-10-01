@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/jsconv"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/jsconv"
 )
 
 // Row: objek JSON dengan urutan kunci terjaga (id, created_at, lalu kolom sesuai urutan tabel).

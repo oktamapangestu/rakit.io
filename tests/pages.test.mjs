@@ -123,7 +123,7 @@ test('yang bukan aset dijawab 404 dan tidak membocorkan file di luar folder publ
   for (const url of ['/js/tidak-ada.js', '/tidak-ada', '/js/', '/.env', '/js/..%2f..%2fpackage.json', '/%2e%2e/package.json', '/js/%2e%2e/%2e%2e/src/server.js']) {
     const res = await page(stack.client(), url);
     assert.equal(res.status, 404, url);
-    assert.ok(!res.body.includes('rakit-icu') && !res.body.includes('express'), url);
+    assert.ok(!res.body.includes('rakit-io') && !res.body.includes('express'), url);
   }
 });
 

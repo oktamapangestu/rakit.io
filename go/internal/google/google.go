@@ -19,11 +19,11 @@ import (
 	"strings"
 	"time"
 
-	"rakit.icu/server/internal/accounts"
-	"rakit.icu/server/internal/auth"
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/store"
+	"rakit.io/server/internal/accounts"
+	"rakit.io/server/internal/auth"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/store"
 )
 
 const (

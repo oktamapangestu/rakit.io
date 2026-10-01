@@ -1,4 +1,4 @@
-// Server rakit.icu versi Go: aplikasi di rakit.icu dan website project di <slug>.rakit.icu.
+// Server rakit.io versi Go: aplikasi di rakit.io dan website project di <slug>.rakit.io.
 // Padanan src/server.js. Lihat go/README.md.
 package main
 
@@ -16,25 +16,25 @@ import (
 	"syscall"
 	"time"
 
-	"rakit.icu/server/internal/admin"
-	"rakit.icu/server/internal/ai"
-	"rakit.icu/server/internal/aimodels"
-	"rakit.icu/server/internal/aiqueue"
-	"rakit.icu/server/internal/api"
-	"rakit.icu/server/internal/app"
-	"rakit.icu/server/internal/assistant"
-	"rakit.icu/server/internal/auth"
-	"rakit.icu/server/internal/billing"
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/credits"
-	"rakit.icu/server/internal/google"
-	"rakit.icu/server/internal/httpx"
-	"rakit.icu/server/internal/plans"
-	"rakit.icu/server/internal/siteapi"
-	"rakit.icu/server/internal/sites"
-	"rakit.icu/server/internal/store"
-	"rakit.icu/server/internal/userdb"
-	"rakit.icu/server/internal/versions"
+	"rakit.io/server/internal/admin"
+	"rakit.io/server/internal/ai"
+	"rakit.io/server/internal/aimodels"
+	"rakit.io/server/internal/aiqueue"
+	"rakit.io/server/internal/api"
+	"rakit.io/server/internal/app"
+	"rakit.io/server/internal/assistant"
+	"rakit.io/server/internal/auth"
+	"rakit.io/server/internal/billing"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/credits"
+	"rakit.io/server/internal/google"
+	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/plans"
+	"rakit.io/server/internal/siteapi"
+	"rakit.io/server/internal/sites"
+	"rakit.io/server/internal/store"
+	"rakit.io/server/internal/userdb"
+	"rakit.io/server/internal/versions"
 )
 
 // Username = subdomain, jadi harus valid sebagai label DNS (sama dengan src/username.js).
@@ -101,10 +101,10 @@ func main() {
 	googleLogin := google.New(cfg, db, sessions)
 
 	// Routing berdasarkan host:
-	// - rakit.icu          -> halaman, aset, login Google, dan /api
-	// - <slug>.rakit.icu   -> website project, /api/db, dan asisten AI
-	// - www.rakit.icu      -> dialihkan permanen ke rakit.icu
-	// - host lain (IP, …)  -> dialihkan ke rakit.icu
+	// - rakit.io          -> halaman, aset, login Google, dan /api
+	// - <slug>.rakit.io   -> website project, /api/db, dan asisten AI
+	// - www.rakit.io      -> dialihkan permanen ke rakit.io
+	// - host lain (IP, …)  -> dialihkan ke rakit.io
 	under := func(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
 	suffix := "." + cfg.BaseDomain
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -153,7 +153,7 @@ func main() {
 		srv.Shutdown(ctx)
 	}()
 
-	log.Printf("rakit.icu berjalan di %s", cfg.AppOrigin)
+	log.Printf("rakit.io berjalan di %s", cfg.AppOrigin)
 	log.Printf("Website user: %s", cfg.SiteURL("<username>"))
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)

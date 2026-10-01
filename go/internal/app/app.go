@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"rakit.icu/server/internal/auth"
-	"rakit.icu/server/internal/config"
+	"rakit.io/server/internal/auth"
+	"rakit.io/server/internal/config"
 )
 
 type Handler struct {

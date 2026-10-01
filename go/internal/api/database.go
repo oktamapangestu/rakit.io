@@ -1,7 +1,7 @@
 package api
 
 import (
-	"rakit.icu/server/internal/userdb"
+	"rakit.io/server/internal/userdb"
 )
 
 const uploadLimit = 11 * 1024 * 1024
@@ -17,7 +17,7 @@ func (q *request) rowBody() ([]userdb.Field, bool, error) {
 	return userdb.DecodeObject(q.raw)
 }
 
-// database: API editor database — hanya untuk pemilik project (sesi login di rakit.icu).
+// database: API editor database — hanya untuk pemilik project (sesi login di rakit.io).
 func (h *Handler) database(q *request) error {
 	if err := h.requireAuth(q); err != nil {
 		return err

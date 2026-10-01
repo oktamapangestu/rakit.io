@@ -1,4 +1,4 @@
-// Package sites menyajikan website project di <slug>.rakit.icu: file .html/.css/.js dan gambar dari
+// Package sites menyajikan website project di <slug>.rakit.io: file .html/.css/.js dan gambar dari
 // data/sites/<slug>. Padanan src/sites.js.
 package sites
 
@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
-	"rakit.icu/server/internal/config"
-	"rakit.icu/server/internal/files"
+	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/files"
 )
 
 // Projects: yang dibutuhkan dari database.
