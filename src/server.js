@@ -16,8 +16,8 @@ import { USERNAME_RE } from './username.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
 
-// Cache-busting aset: sisipkan ?v=<hash> pada <script src> dan <link href> yang menunjuk
-// ke berkas di /js atau /css. Hash dihitung dari isi berkas, di-cache di memori, dan
+// Cache-busting aset: sisipkan ?v=<hash> pada referensi aset (src/href) yang menunjuk
+// ke berkas di /js, /css, atau /logo.svg. Hash dihitung dari isi berkas, di-cache di memori, dan
 // dihitung ulang otomatis saat berkas berubah (mtime). Tujuannya agar aset bisa dipasang
 // Cache-Control immutable (1 tahun) tanpa risiko pengunjung memakai versi lama.
 const assetVersionCache = new Map();
@@ -37,9 +37,9 @@ function assetVersion(relPath) {
 
 // Ubah referensi aset lokal menjadi ber-versi. Contoh:
 //   /js/editor.js  ->  /js/editor.js?v=ab12cd34ef
-// Hanya menyentuh /js/... dan /css/... (dan tanpa protokol/host).
+// Hanya menyentuh /js/..., /css/..., dan /logo.svg (tanpa protokol/host).
 function withAssetVersions(html) {
-  return html.replace(/(["'])\/((?:js|css)\/[^"'?#]+)(?:[?#][^"']*)?\1/g, (m, q, rel) => {
+  return html.replace(/(["'])\/((?:js|css)\/[^"'?#]+|logo\.svg)(?:[?#][^"']*)?\1/g, (m, q, rel) => {
     const v = assetVersion(rel);
     return v ? `${q}/${rel}?v=${v}${q}` : m;
   });

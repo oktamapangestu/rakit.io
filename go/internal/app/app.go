@@ -61,8 +61,8 @@ func (h *Handler) assetVersion(rel string) string {
 	return hash
 }
 
-// Referensi aset lokal di /js/... dan /css/... (tanpa protokol/host), di dalam tanda kutip.
-var assetRefRE = regexp.MustCompile(`(["'])/((?:js|css)/[^"'?#]+)(?:[?#][^"']*)?(["'])`)
+// Referensi aset lokal di /js/..., /css/..., dan /logo.svg (tanpa protokol/host), di dalam tanda kutip.
+var assetRefRE = regexp.MustCompile(`(["'])/((?:js|css)/[^"'?#]+|logo\.svg)(?:[?#][^"']*)?(["'])`)
 
 // withAssetVersions mengubah /js/editor.js menjadi /js/editor.js?v=ab12cd34ef.
 func (h *Handler) withAssetVersions(html []byte) []byte {

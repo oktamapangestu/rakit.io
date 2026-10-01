@@ -38,7 +38,9 @@ test('beranda: pengunjung melihat landing page dengan aset ber-versi; yang sudah
   assertSecurityHeaders(res);
   assert.ok(res.body.includes(`href="/css/landing.css?v=${versionOf('css/landing.css')}"`));
   assert.ok(res.body.includes(`src="/js/auth.js?v=${versionOf('js/auth.js')}"`));
-  assert.ok(res.body.includes('href="/logo.svg"'), 'hanya /js dan /css yang diberi versi');
+  // Logo juga ber-versi: dulu tanpa versi, sehingga logo lama tertahan di cache browser (immutable 1 tahun).
+  assert.ok(res.body.includes(`href="/logo.svg?v=${versionOf('logo.svg')}"`));
+  assert.ok(res.body.includes(`src="/logo.svg?v=${versionOf('logo.svg')}"`));
 
   const loggedIn = await page(user, '/');
   assert.equal(loggedIn.status, 302);
