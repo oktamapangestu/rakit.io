@@ -1,0 +1,204 @@
+// Package app menyajikan halaman aplikasi (/, /editor, /admin, /panduan) dan aset statis di domain
+// utama. Padanan bagian halaman di src/server.js.
+package app
+
+import (
+	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
+	"fmt"
+	"mime"
+	"net/http"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	"rakit.icu/server/internal/auth"
+	"rakit.icu/server/internal/config"
+)
+
+type Handler struct {
+	cfg  *config.Config
+	auth *auth.Auth
+
+	mu       sync.Mutex
+	versions map[string]assetVersion // path relatif aset -> hash isi
+}
+
+type assetVersion struct {
+	modTime time.Time
+	hash    string
+}
+
+func New(cfg *config.Config, a *auth.Auth) *Handler {
+	return &Handler{cfg: cfg, auth: a, versions: map[string]assetVersion{}}
+}
+
+// Cache-busting aset: hash dihitung dari isi berkas, di-cache di memori, dan dihitung ulang saat
+// berkas berubah (mtime). Dengan begitu aset boleh di-cache immutable 1 tahun.
+func (h *Handler) assetVersion(rel string) string {
+	abs := filepath.Join(h.cfg.PublicDir, filepath.FromSlash(rel))
+	info, err := os.Stat(abs)
+	if err != nil {
+		return ""
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if cached, ok := h.versions[rel]; ok && cached.modTime.Equal(info.ModTime()) {
+		return cached.hash
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return ""
+	}
+	sum := sha1.Sum(data)
+	hash := hex.EncodeToString(sum[:])[:10]
+	h.versions[rel] = assetVersion{modTime: info.ModTime(), hash: hash}
+	return hash
+}
+
+// Referensi aset lokal di /js/... dan /css/... (tanpa protokol/host), di dalam tanda kutip.
+var assetRefRE = regexp.MustCompile(`(["'])/((?:js|css)/[^"'?#]+)(?:[?#][^"']*)?(["'])`)
+
+// withAssetVersions mengubah /js/editor.js menjadi /js/editor.js?v=ab12cd34ef.
+func (h *Handler) withAssetVersions(html []byte) []byte {
+	return assetRefRE.ReplaceAllFunc(html, func(m []byte) []byte {
+		g := assetRefRE.FindSubmatch(m)
+		if !bytes.Equal(g[1], g[3]) {
+			return m
+		}
+		v := h.assetVersion(string(g[2]))
+		if v == "" {
+			return m
+		}
+		return []byte(fmt.Sprintf("%s/%s?v=%s%s", g[1], g[2], v, g[1]))
+	})
+}
+
+func securityHeaders(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+}
+
+func (h *Handler) sendHTML(w http.ResponseWriter, r *http.Request, file, cacheControl string) {
+	raw, err := os.ReadFile(filepath.Join(h.cfg.PublicDir, file))
+	if err != nil {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	html := h.withAssetVersions(raw)
+	sum := sha1.Sum(html)
+	etag := `W/"` + hex.EncodeToString(sum[:])[:27] + `"`
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", cacheControl)
+	w.Header().Set("ETag", etag)
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(html))
+}
+
+func redirect(w http.ResponseWriter, r *http.Request, to string) {
+	http.Redirect(w, r, to, http.StatusFound)
+}
+
+var contentTypes = map[string]string{
+	".html": "text/html; charset=utf-8",
+	".css":  "text/css; charset=utf-8",
+	".js":   "text/javascript; charset=utf-8",
+	".json": "application/json; charset=utf-8",
+	".svg":  "image/svg+xml",
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".ico":  "image/x-icon",
+	".webp": "image/webp",
+	".txt":  "text/plain; charset=utf-8",
+}
+
+// serveStatic menyajikan berkas dari public/ bila ada. false = bukan aset; biarkan penanganan berikutnya.
+func (h *Handler) serveStatic(w http.ResponseWriter, r *http.Request) bool {
+	p := r.URL.Path
+	// Path yang tidak rapi (.., //, dotfile, \) tidak pernah disajikan dari sini.
+	if !strings.HasPrefix(p, "/") || path.Clean(p) != p || strings.Contains(p, "/.") || strings.ContainsAny(p, "\\\x00") {
+		return false
+	}
+	abs := filepath.Join(h.cfg.PublicDir, filepath.FromSlash(p))
+	info, err := os.Stat(abs)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	ext := strings.ToLower(path.Ext(p))
+	ctype := contentTypes[ext]
+	if ctype == "" {
+		if ctype = mime.TypeByExtension(ext); ctype == "" {
+			ctype = "application/octet-stream"
+		}
+	}
+	securityHeaders(w)
+	w.Header().Set("Content-Type", ctype)
+	// Nama berkas ber-versi (?v=hash) dari sendHTML, jadi aman di-cache panjang + immutable.
+	// HTML tetap no-cache agar selalu segar.
+	if ext == ".html" {
+		w.Header().Set("Cache-Control", "no-cache")
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	}
+	w.Header().Set("ETag", fmt.Sprintf(`W/"%x-%x"`, info.Size(), info.ModTime().UnixMilli()))
+	http.ServeContent(w, r, "", info.ModTime(), f)
+	return true
+}
+
+// Serve menangani halaman & aset di domain utama. false = bukan bagian Go (teruskan ke Node).
+func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	// Seperti router Express: tidak peka huruf besar/kecil dan garis miring di akhir.
+	route := strings.ToLower(r.URL.Path)
+	if len(route) > 1 {
+		route = strings.TrimSuffix(route, "/")
+	}
+	switch route {
+	case "/":
+		securityHeaders(w)
+		if h.auth.User(r) != nil {
+			redirect(w, r, "/editor")
+		} else {
+			h.sendHTML(w, r, "index.html", "no-cache")
+		}
+	case "/editor":
+		securityHeaders(w)
+		if h.auth.User(r) == nil {
+			redirect(w, r, "/")
+		} else {
+			h.sendHTML(w, r, "editor.html", "no-store")
+		}
+	case "/admin":
+		securityHeaders(w)
+		user := h.auth.User(r)
+		switch {
+		case user == nil:
+			redirect(w, r, "/")
+		case !h.cfg.IsAdmin(user.Email):
+			redirect(w, r, "/editor")
+		default:
+			h.sendHTML(w, r, "admin.html", "no-store")
+		}
+	case "/panduan":
+		// Panduan publik: cheat sheet prompt untuk AI Builder (tanpa perlu login).
+		securityHeaders(w)
+		h.sendHTML(w, r, "panduan.html", "public, max-age=3600")
+	default:
+		return h.serveStatic(w, r)
+	}
+	return true
+}

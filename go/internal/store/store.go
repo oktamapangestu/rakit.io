@@ -41,3 +41,26 @@ func (s *Store) ProjectExists(slug string) (bool, error) {
 	}
 	return err == nil, err
 }
+
+// User: akun yang sedang login.
+type User struct {
+	ID       int64
+	Username string
+	Email    string
+}
+
+// SessionUser mengembalikan pemilik sesi yang masih berlaku, atau nil.
+func (s *Store) SessionUser(tokenHash string, nowMs int64) (*User, error) {
+	var u User
+	err := s.db.QueryRow(`
+		SELECT u.id, u.username, u.email
+		FROM sessions s JOIN users u ON u.id = s.user_id
+		WHERE s.token_hash = ? AND s.expires_at > ?`, tokenHash, nowMs).Scan(&u.ID, &u.Username, &u.Email)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}

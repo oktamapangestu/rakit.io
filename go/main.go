@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"rakit.icu/server/internal/app"
+	"rakit.icu/server/internal/auth"
 	"rakit.icu/server/internal/config"
 	"rakit.icu/server/internal/proxy"
 	"rakit.icu/server/internal/sites"
@@ -55,14 +57,25 @@ func main() {
 		log.Fatalf("NODE_UPSTREAM tidak valid: %v", err)
 	}
 	site := sites.New(cfg, db)
+	pages := app.New(cfg, auth.New(cfg, db))
 
-	// Routing berdasarkan host: <slug>.rakit.icu -> website project (Go), kecuali /api di domain itu.
-	// Semua yang lain (aplikasi utama, API, www, host tak dikenal) masih ditangani Node.
+	// Routing berdasarkan host:
+	// - rakit.icu          -> halaman & aset aplikasi (Go); /api dan /auth masih di Node
+	// - <slug>.rakit.icu   -> website project (Go), kecuali /api di domain itu
+	// - lainnya (www, host tak dikenal) -> Node
+	under := func(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
 	suffix := "." + cfg.BaseDomain
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := hostname(r)
+		if host == cfg.BaseDomain {
+			if !under(r.URL.Path, "/api") && !under(r.URL.Path, "/auth/google") && pages.Serve(w, r) {
+				return
+			}
+			node.ServeHTTP(w, r)
+			return
+		}
 		if sub, ok := strings.CutSuffix(host, suffix); ok && sub != "www" && usernameRE.MatchString(sub) {
-			if p := r.URL.Path; p != "/api" && !strings.HasPrefix(p, "/api/") {
+			if !under(r.URL.Path, "/api") {
 				site.Serve(w, r, sub)
 				return
 			}

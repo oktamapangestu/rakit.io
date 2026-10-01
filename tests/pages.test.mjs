@@ -1,0 +1,128 @@
+// Halaman aplikasi (/, /editor, /admin, /panduan) dan aset statis di domain utama.
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import { after, before, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { startStack } from './helpers/harness.mjs';
+
+const PUBLIC = fileURLToPath(new URL('../public/', import.meta.url));
+const versionOf = (rel) => crypto.createHash('sha1').update(fs.readFileSync(PUBLIC + rel)).digest('hex').slice(0, 10);
+
+let stack;
+let user;
+let admin;
+before(async () => {
+  stack = await startStack();
+  user = await stack.register();
+  admin = await stack.admin();
+});
+after(() => stack?.stop());
+
+async function page(client, url, opts) {
+  const res = await client.raw(opts?.method ?? 'GET', url, { headers: opts?.headers });
+  return { status: res.status, headers: res.headers, body: await res.text() };
+}
+
+function assertSecurityHeaders(res) {
+  assert.equal(res.headers.get('x-frame-options'), 'DENY');
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(res.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+}
+
+test('beranda: pengunjung melihat landing page dengan aset ber-versi; yang sudah login diarahkan ke editor', async () => {
+  const res = await page(stack.client(), '/');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'text/html; charset=utf-8');
+  assert.equal(res.headers.get('cache-control'), 'no-cache');
+  assertSecurityHeaders(res);
+  assert.ok(res.body.includes(`href="/css/landing.css?v=${versionOf('css/landing.css')}"`));
+  assert.ok(res.body.includes(`src="/js/auth.js?v=${versionOf('js/auth.js')}"`));
+  assert.ok(res.body.includes('href="/logo.svg"'), 'hanya /js dan /css yang diberi versi');
+
+  const loggedIn = await page(user, '/');
+  assert.equal(loggedIn.status, 302);
+  assert.equal(loggedIn.headers.get('location'), '/editor');
+});
+
+test('editor hanya untuk yang sudah login', async () => {
+  const anon = await page(stack.client(), '/editor');
+  assert.equal(anon.status, 302);
+  assert.equal(anon.headers.get('location'), '/');
+
+  const res = await page(user, '/editor');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('cache-control'), 'no-store');
+  assert.equal(res.headers.get('content-type'), 'text/html; charset=utf-8');
+  assertSecurityHeaders(res);
+  assert.ok(res.body.includes(`src="/js/editor.js?v=${versionOf('js/editor.js')}"`));
+  assert.ok(res.body.includes('https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"'), 'aset luar tidak diubah');
+
+  const head = await page(user, '/editor', { method: 'HEAD' });
+  assert.equal(head.status, 200);
+  assert.equal(head.body, '');
+});
+
+test('dashboard owner hanya untuk email di ADMIN_EMAILS', async () => {
+  const anon = await page(stack.client(), '/admin');
+  assert.deepEqual([anon.status, anon.headers.get('location')], [302, '/']);
+  const biasa = await page(user, '/admin');
+  assert.deepEqual([biasa.status, biasa.headers.get('location')], [302, '/editor']);
+
+  const res = await page(admin, '/admin');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('cache-control'), 'no-store');
+  assert.ok(res.body.includes(`src="/js/admin.js?v=${versionOf('js/admin.js')}"`));
+});
+
+test('sesi kedaluwarsa atau cookie palsu dianggap belum login', async () => {
+  const temp = await stack.register();
+  assert.equal((await page(temp, '/editor')).status, 200);
+  stack.db().prepare('UPDATE sessions SET expires_at = ? WHERE user_id = ?').run(Date.now() - 1000, temp.userId);
+  assert.equal((await page(temp, '/editor')).status, 302);
+
+  const palsu = stack.client();
+  palsu.cookies.set('rakit_sid', 'bukan-token-asli');
+  assert.equal((await page(palsu, '/editor')).status, 302);
+  assert.equal((await page(palsu, '/')).status, 200);
+});
+
+test('panduan publik boleh di-cache 1 jam', async () => {
+  const res = await page(stack.client(), '/panduan');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('cache-control'), 'public, max-age=3600');
+  assert.match(res.body, /<title>/);
+});
+
+test('aset statis: cache panjang immutable, tipe benar, dan revalidasi 304', async () => {
+  const js = await page(stack.client(), `/js/auth.js?v=${versionOf('js/auth.js')}`);
+  assert.equal(js.status, 200);
+  assert.equal(js.body, fs.readFileSync(`${PUBLIC}js/auth.js`, 'utf8'));
+  assert.equal(js.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  assert.equal(js.headers.get('content-type'), 'text/javascript; charset=utf-8');
+  assertSecurityHeaders(js);
+  assert.ok(js.headers.get('etag'));
+  assert.ok(js.headers.get('last-modified'));
+
+  assert.equal((await page(stack.client(), '/css/landing.css')).headers.get('content-type'), 'text/css; charset=utf-8');
+  assert.equal((await page(stack.client(), '/logo.svg')).headers.get('content-type'), 'image/svg+xml');
+
+  const cached = await stack.app('/js/auth.js', { headers: { 'If-None-Match': js.headers.get('etag') } });
+  assert.equal(cached.status, 304);
+  assert.equal(cached.body, '');
+  const since = await stack.app('/js/auth.js', { headers: { 'If-Modified-Since': js.headers.get('last-modified') } });
+  assert.equal(since.status, 304);
+
+  // File .html mentah tetap harus selalu direvalidasi.
+  const html = await page(stack.client(), '/panduan.html');
+  assert.equal(html.status, 200);
+  assert.equal(html.headers.get('cache-control'), 'no-cache');
+});
+
+test('yang bukan aset dijawab 404 dan tidak membocorkan file di luar folder public', async () => {
+  for (const url of ['/js/tidak-ada.js', '/tidak-ada', '/js/', '/.env', '/js/..%2f..%2fpackage.json', '/%2e%2e/package.json', '/js/%2e%2e/%2e%2e/src/server.js']) {
+    const res = await page(stack.client(), url);
+    assert.equal(res.status, 404, url);
+    assert.ok(!res.body.includes('rakit-icu') && !res.body.includes('express'), url);
+  }
+});

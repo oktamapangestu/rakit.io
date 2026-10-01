@@ -15,7 +15,12 @@ type Config struct {
 	BaseDomain string
 	DataDir    string
 	AppOrigin  string // alamat aplikasi utama, mis. https://rakit.icu
-	portSuffix string
+	PublicDir  string // folder halaman & aset aplikasi (public/)
+
+	SecureCookies bool
+	// Email pemilik platform yang boleh membuka dashboard /admin.
+	AdminEmails []string
+	portSuffix  string
 
 	// Selama migrasi bertahap: semua request yang belum ditangani Go diteruskan ke server Node ini.
 	NodeUpstream string
@@ -76,6 +81,15 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	c.DataDir = dataDir
+	if c.PublicDir, err = filepath.Abs(envOr("PUBLIC_DIR", "public")); err != nil {
+		return nil, err
+	}
+	c.SecureCookies = c.Protocol == "https"
+	for _, e := range strings.Split(os.Getenv("ADMIN_EMAILS"), ",") {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+			c.AdminEmails = append(c.AdminEmails, e)
+		}
+	}
 
 	// Port yang terlihat di URL publik. Di belakang reverse proxy (443) kosongkan saja.
 	publicPort, set := os.LookupEnv("PUBLIC_PORT")
@@ -87,6 +101,17 @@ func Load() (*Config, error) {
 	}
 	c.AppOrigin = c.Protocol + "://" + c.BaseDomain + c.portSuffix
 	return c, nil
+}
+
+// IsAdmin: apakah email ini pemilik platform.
+func (c *Config) IsAdmin(email string) bool {
+	email = strings.ToLower(email)
+	for _, e := range c.AdminEmails {
+		if e == email {
+			return true
+		}
+	}
+	return false
 }
 
 // SiteHost: host website project, mis. budi.rakit.icu.

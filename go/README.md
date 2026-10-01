@@ -20,7 +20,8 @@ PORT=3000 UPSTREAM_PORT=3001 bash scripts/go-with-node.sh  # Go di :3000, Node d
 |---|---|---|
 | `NODE_UPSTREAM` | `http://127.0.0.1:3010` | Alamat server Node tempat sisa request diteruskan. |
 | `PORT`, `HOST` | `3000`, semua | Alamat server Go. |
-| `BASE_DOMAIN`, `PROTOCOL`, `PUBLIC_PORT`, `DATA_DIR` | sama dengan Node | Dibaca dari `.env` yang sama (`--env-file`). |
+| `BASE_DOMAIN`, `PROTOCOL`, `PUBLIC_PORT`, `DATA_DIR`, `ADMIN_EMAILS` | sama dengan Node | Dibaca dari `.env` yang sama (`--env-file`). |
+| `PUBLIC_DIR` | `public` | Folder halaman & aset aplikasi, relatif ke folder kerja. |
 
 ## Test
 
@@ -39,8 +40,8 @@ Aturan migrasi: sebuah rute baru dipindah ke Go setelah ada test-nya dan test it
 |---|---|---|---|
 | 0 | Test alur uang (kredit, QRIS, langganan) | — | selesai |
 | 1 | Website project `<slug>.rakit.icu` (file statis) | `sites.js` | selesai |
-| 2 | Halaman & aset aplikasi (`/`, `/editor`, `/admin`, `/js`, `/css`) + baca sesi | `server.js`, `auth.js` | berikutnya |
-| 3 | API situs: `/api/db/*` di domain project | `siteapi.js`, `userdb.js` | |
+| 2 | Halaman & aset aplikasi (`/`, `/editor`, `/admin`, `/panduan`, `/js`, `/css`) + baca sesi | `server.js`, `auth.js` | selesai |
+| 3 | API situs: `/api/db/*` di domain project | `siteapi.js`, `userdb.js` | berikutnya |
 | 4 | Akun, project, file, riwayat versi | `api.js`, `projects.js`, `files.js`, `versions.js`, `google.js` | |
 | 5 | Editor database & diagram | `database.js`, `diagrams.js` | |
 | 6 | Kredit, langganan, pembayaran, webhook | `credits.js`, `plans.js`, `billing.js` | |

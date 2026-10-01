@@ -255,6 +255,16 @@ export async function startStack(env = {}) {
     await new Promise((r) => setTimeout(r, 100));
   }
 
+  const plainRequest = (host, urlPath, { method = 'GET', headers = {} } = {}) => new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, method, path: urlPath, headers: { Host: host, ...headers } }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+
   let counter = 0;
   const stack = {
     origin,
@@ -264,17 +274,9 @@ export async function startStack(env = {}) {
     log: () => log,
 
     /** Request ke website project (<slug>.localhost) lewat header Host. Mengembalikan { status, headers, body }. */
-    site(slug, urlPath = '/', { method = 'GET', headers = {} } = {}) {
-      return new Promise((resolve, reject) => {
-        const req = http.request({ host: '127.0.0.1', port, method, path: urlPath, headers: { Host: `${slug}.localhost:${port}`, ...headers } }, (res) => {
-          const chunks = [];
-          res.on('data', (c) => chunks.push(c));
-          res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }));
-        });
-        req.on('error', reject);
-        req.end();
-      });
-    },
+    site: (slug, urlPath = '/', opts) => plainRequest(`${slug}.localhost:${port}`, urlPath, opts),
+    /** Request polos ke domain utama, tanpa header tambahan dari fetch (untuk menguji 304). */
+    app: (urlPath = '/', opts) => plainRequest(`localhost:${port}`, urlPath, opts),
     stop,
     client: () => new Client(origin),
     /** Koneksi langsung ke database server (WAL: aman dibuka bersamaan), untuk menyiapkan/memeriksa keadaan. */
