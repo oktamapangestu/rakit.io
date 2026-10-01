@@ -1,8 +1,7 @@
 // Package api: API aplikasi di domain utama (/api/...) yang sudah dipindah ke Go — akun, project,
 // file, riwayat versi, editor database, dan diagram. Padanan src/api.js, src/projects.js,
 // src/database.js, src/diagrams.js, dan rute di src/versions.js.
-// plus AI, kredit, pembayaran, dan asisten website. Hanya dashboard owner (/api/admin) yang masih
-// diteruskan ke Node.
+// plus AI, kredit, pembayaran, asisten website, dan dashboard owner (/api/admin, src/admin.js).
 package api
 
 import (
@@ -16,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"rakit.icu/server/internal/admin"
 	"rakit.icu/server/internal/ai"
 	"rakit.icu/server/internal/aimodels"
 	"rakit.icu/server/internal/assistant"
@@ -43,6 +43,7 @@ type Services struct {
 	AI        *ai.Service
 	AIModels  *aimodels.Service
 	Assistant *assistant.Service
+	Admin     *admin.Service
 }
 
 type Handler struct {
@@ -111,32 +112,16 @@ func segments(r *http.Request) ([]string, bool) {
 	return parts, true
 }
 
-var groups = map[string]bool{
-	"config": true, "register": true, "login": true, "logout": true, "me": true, "projects": true, "files": true,
-	"versions": true, "database": true, "diagrams": true, "ai": true, "billing": true, "assistant": true,
-}
-
-// Matches: apakah path /api ini sudah ditangani Go. Dari dashboard owner baru pengaturan model AI
-// (keadaannya ada di memori server ini); sisanya masih di Node.
-func Matches(r *http.Request) bool {
-	parts, ok := segments(r)
-	if !ok || len(parts) == 0 {
-		return false
-	}
-	group := strings.ToLower(parts[0])
-	if group == "admin" {
-		return len(parts) > 1 && strings.EqualFold(parts[1], "ai-models")
-	}
-	return groups[group]
-}
-
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hd := w.Header()
 	hd.Set("X-Frame-Options", "DENY")
 	hd.Set("X-Content-Type-Options", "nosniff")
 	hd.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 
-	parts, _ := segments(r)
+	parts, ok := segments(r)
+	if !ok || len(parts) == 0 {
+		parts = []string{""} // tidak ada grup yang cocok: 404 setelah cek Origin & batas laju
+	}
 	// Webhook Kasera: body mentah (untuk verifikasi tanda tangan), tanpa sesi & tanpa cek Origin.
 	if r.Method == http.MethodPost && len(parts) == 2 && strings.EqualFold(parts[0], "billing") && strings.EqualFold(parts[1], "webhook") {
 		h.svc.Billing.Webhook(w, r)
@@ -199,7 +184,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "assistant":
 		err = h.assistant(req)
 	case "admin":
-		err = h.adminModels(req)
+		err = h.admin(req)
+	default:
+		err = errNotFound
 	}
 	if err != nil {
 		httpx.Fail(w, err)

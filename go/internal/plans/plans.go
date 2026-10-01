@@ -12,12 +12,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"rakit.icu/server/internal/config"
 	"rakit.icu/server/internal/httpx"
+	"rakit.icu/server/internal/jsconv"
 	"rakit.icu/server/internal/store"
 )
 
@@ -340,4 +342,107 @@ func (p *Plans) Public() []PublicPlan {
 		out = append(out, view)
 	}
 	return out
+}
+
+// ---------- Dashboard owner: harga, kuota, kredit gratis ----------
+
+// Batas nilai yang boleh disimpan owner.
+const (
+	MinPrice     = 1000
+	MaxPrice     = 10_000_000
+	MaxQuota     = 100_000
+	FreeDailyMax = 1000
+	FreeBonusMax = 10_000
+)
+
+// AdminPlan: satu paket di dashboard owner.
+type AdminPlan struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Price     float64 `json:"price"`
+	Quota     float64 `json:"quota"`
+	Enabled   bool    `json:"enabled"`
+	QuotaUnit string  `json:"quotaUnit"` // credits (per 30 hari) | daily (prompt per hari)
+	Storage   Storage `json:"storage"`
+}
+
+// AdminPlans: semua paket (termasuk yang tidak dijual) dengan pengaturan owner.
+func (p *Plans) AdminPlans() []AdminPlan {
+	settings := p.settings()
+	out := make([]AdminPlan, 0, len(IDs))
+	for _, id := range IDs {
+		s, b := settings[id], bases[id]
+		unit := "credits"
+		if b.daily {
+			unit = "daily"
+		}
+		out = append(out, AdminPlan{ID: id, Name: b.name, Price: s.Price, Quota: s.Quota, Enabled: s.Enabled, QuotaUnit: unit, Storage: b.storage})
+	}
+	return out
+}
+
+// SavePlans memvalidasi dan menyimpan harga, kuota, dan status dijual (q: di dalam transaksi).
+// input: id paket -> {price, quota, enabled}; yang tidak disebut mempertahankan nilainya.
+func (p *Plans) SavePlans(q store.Q, input map[string]map[string]any) error {
+	current := p.settings()
+	next := map[string]setting{}
+	for _, id := range IDs {
+		given, s := input[id], current[id]
+		if v := given["price"]; v != nil {
+			s.Price = jsconv.ToNumber(v)
+		}
+		if v := given["quota"]; v != nil {
+			s.Quota = jsconv.ToNumber(v)
+		}
+		if v, ok := given["enabled"]; ok {
+			s.Enabled = jsconv.Truthy(v)
+		}
+		name := bases[id].name
+		if !jsconv.IsInteger(s.Price) || s.Price < MinPrice || s.Price > MaxPrice {
+			return httpx.Errorf(400, "Harga %s harus bilangan bulat Rp1.000–Rp10.000.000", name)
+		}
+		if !jsconv.IsInteger(s.Quota) || s.Quota < 1 || s.Quota > MaxQuota {
+			return httpx.Errorf(400, "Kuota %s harus bilangan bulat 1–100.000", name)
+		}
+		next[id] = s
+	}
+	raw, err := json.Marshal(next)
+	if err != nil {
+		return err
+	}
+	return store.SetSettingIn(q, "plans", string(raw))
+}
+
+// ModelCost: biaya model AI (Rupiah per 1 juta token), hanya untuk perkiraan margin di dashboard.
+func (p *Plans) ModelCost() float64 {
+	raw, _ := p.db.Setting("model_cost")
+	n := jsconv.Number(raw)
+	if math.IsNaN(n) {
+		return 0
+	}
+	return n
+}
+
+func (p *Plans) SaveModelCost(q store.Q, value any) error {
+	cost := jsconv.ToNumber(value)
+	if math.IsNaN(cost) || math.IsInf(cost, 0) || cost < 0 || cost > 10_000_000 {
+		return httpx.Errorf(400, "Biaya model tidak valid")
+	}
+	return store.SetSettingIn(q, "model_cost", jsconv.String(math.Floor(cost*100+0.5)/100))
+}
+
+func saveCount(q store.Q, key string, value any, maxValue int, message string) error {
+	n := jsconv.ToNumber(value)
+	if !jsconv.IsInteger(n) || n < 0 || n > float64(maxValue) {
+		return httpx.Errorf(400, "%s harus bilangan bulat 0–%d", message, maxValue)
+	}
+	return store.SetSettingIn(q, key, jsconv.String(n))
+}
+
+func (p *Plans) SaveFreeDailyCredits(q store.Q, value any) error {
+	return saveCount(q, "free_daily_credits", value, FreeDailyMax, "Kredit gratis harian")
+}
+
+func (p *Plans) SaveFreeBonusCredits(q store.Q, value any) error {
+	return saveCount(q, "free_bonus_credits", value, FreeBonusMax, "Bonus kredit awal")
 }

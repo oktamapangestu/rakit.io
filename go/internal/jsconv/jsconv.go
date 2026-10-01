@@ -44,6 +44,51 @@ func Number(s string) float64 {
 	return n
 }
 
+// ToNumber meniru Number(value) untuk nilai hasil decode JSON. nil (null) → 0; pemanggil yang perlu
+// membedakan undefined (NaN) memeriksa keberadaan kuncinya sendiri.
+func ToNumber(v any) float64 {
+	switch t := v.(type) {
+	case nil:
+		return 0
+	case float64:
+		return t
+	case bool:
+		if t {
+			return 1
+		}
+		return 0
+	case string:
+		return Number(t)
+	case []any:
+		// Number([]) = 0, Number([x]) = Number(String(x)), lebih dari satu elemen = NaN.
+		switch len(t) {
+		case 0:
+			return 0
+		case 1:
+			if _, nested := t[0].([]any); !nested {
+				return Number(String(t[0]))
+			}
+			return ToNumber(t[0])
+		}
+	}
+	return math.NaN()
+}
+
+// Truthy meniru Boolean(value) untuk nilai hasil decode JSON.
+func Truthy(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return t
+	case float64:
+		return t != 0 && !math.IsNaN(t)
+	case string:
+		return t != ""
+	}
+	return true
+}
+
 // String meniru String(value) untuk nilai hasil decode JSON. nil (null/undefined) → "".
 func String(v any) string {
 	switch t := v.(type) {

@@ -194,7 +194,7 @@ admin.get('/stats', async (req, res) => {
            COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens
     FROM ai_requests WHERE created_at >= ? GROUP BY date
   `, since - DAY_MS), ['requests', 'failed', 'tokens']);
-  const aiModels = all(`
+  const requestsByModel = all(`
     SELECT model, COUNT(*) AS requests FROM ai_requests WHERE created_at >= ? GROUP BY model ORDER BY requests DESC
   `, since);
 
@@ -299,7 +299,7 @@ admin.get('/stats', async (req, res) => {
     days,
     users,
     signupsByDay,
-    ai: { ...aiTotals, byStatus: aiByStatus, byDay: aiByDay, models: aiModels, currentModel: aiModels().model },
+    ai: { ...aiTotals, byStatus: aiByStatus, byDay: aiByDay, models: requestsByModel, currentModel: aiModels().model },
     credits,
     subscribers,
     creditUsers,

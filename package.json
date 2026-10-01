@@ -13,7 +13,7 @@
     "build": "bash build-assets.sh",
     "test": "node --test \"tests/*.test.mjs\"",
     "build:go": "cd go && go build -o bin/rakit .",
-    "test:go": "npm run build:go && RAKIT_SERVER_CMD=\"bash scripts/go-with-node.sh\" node --test \"tests/*.test.mjs\""
+    "test:go": "npm run build:go && RAKIT_SERVER_CMD=go/bin/rakit node --test \"tests/*.test.mjs\""
   },
   "dependencies": {
     "express": "^5.1.0",

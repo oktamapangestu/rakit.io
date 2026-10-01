@@ -1,5 +1,5 @@
-// Server rakit.icu versi Go. Selama migrasi bertahap, Go berdiri di depan: rute yang sudah dipindah
-// ditangani di sini, sisanya diteruskan ke server Node (NODE_UPSTREAM). Lihat go/README.md.
+// Server rakit.icu versi Go: aplikasi di rakit.icu dan website project di <slug>.rakit.icu.
+// Padanan src/server.js. Lihat go/README.md.
 package main
 
 import (
@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"rakit.icu/server/internal/admin"
 	"rakit.icu/server/internal/ai"
 	"rakit.icu/server/internal/aimodels"
 	"rakit.icu/server/internal/aiqueue"
@@ -29,7 +30,6 @@ import (
 	"rakit.icu/server/internal/google"
 	"rakit.icu/server/internal/httpx"
 	"rakit.icu/server/internal/plans"
-	"rakit.icu/server/internal/proxy"
 	"rakit.icu/server/internal/siteapi"
 	"rakit.icu/server/internal/sites"
 	"rakit.icu/server/internal/store"
@@ -65,10 +65,16 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	node, err := proxy.ToNode(cfg.NodeUpstream)
-	if err != nil {
-		log.Fatalf("NODE_UPSTREAM tidak valid: %v", err)
+	if err := db.Migrate(); err != nil {
+		log.Fatalf("menyiapkan database: %v", err)
 	}
+	go func() {
+		for range time.Tick(time.Hour) {
+			if err := db.DeleteExpiredSessions(); err != nil {
+				log.Printf("membersihkan sesi: %v", err)
+			}
+		}
+	}()
 	site := sites.New(cfg, db)
 	sessions := auth.New(cfg, db)
 	limits := plans.New(cfg, db)
@@ -81,11 +87,13 @@ func main() {
 	wallet := credits.New(cfg, db, limits)
 	wallet.AddAssistantBalance = helper.AddBalance
 	wallet.VisionEnabled = func() bool { return models.Get().Vision != "" }
-	editorAI := ai.New(cfg, db, wallet, limits, projectDB, history, models, aiqueue.New(cfg))
+	queue := aiqueue.New(cfg)
+	editorAI := ai.New(cfg, db, wallet, limits, projectDB, history, models, queue)
 	editorAI.Start()
 	appAPI, err := api.New(cfg, db, sessions, api.Services{
 		Plans: limits, UserDB: projectDB, Versions: history, Credits: wallet,
 		Billing: billing.New(cfg, db, limits, wallet), AI: editorAI, AIModels: models, Assistant: helper,
+		Admin: admin.New(cfg, db, limits, models, queue),
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -93,9 +101,10 @@ func main() {
 	googleLogin := google.New(cfg, db, sessions)
 
 	// Routing berdasarkan host:
-	// - rakit.icu          -> halaman, aset, login Google, dan /api (Go); hanya /api/admin masih di Node
-	// - <slug>.rakit.icu   -> website project, /api/db, dan asisten AI (Go)
-	// - lainnya (www, host tak dikenal) -> Node
+	// - rakit.icu          -> halaman, aset, login Google, dan /api
+	// - <slug>.rakit.icu   -> website project, /api/db, dan asisten AI
+	// - www.rakit.icu      -> dialihkan permanen ke rakit.icu
+	// - host lain (IP, …)  -> dialihkan ke rakit.icu
 	under := func(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
 	suffix := "." + cfg.BaseDomain
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,35 +112,33 @@ func main() {
 		if host == cfg.BaseDomain {
 			switch {
 			case under(strings.ToLower(r.URL.Path), "/api"):
-				// Akun, project, file, riwayat versi di Go; rute /api lain masih di Node.
-				if api.Matches(r) {
-					appAPI.ServeHTTP(w, r)
-					return
-				}
+				appAPI.ServeHTTP(w, r)
 			case google.Matches(r.URL.Path):
 				googleLogin.ServeHTTP(w, r)
-				return
-			case pages.Serve(w, r):
-				return
-			}
-			node.ServeHTTP(w, r)
-			return
-		}
-		if sub, ok := strings.CutSuffix(host, suffix); ok && sub != "www" && usernameRE.MatchString(sub) {
-			switch {
-			case siteapi.Matches(r.URL.Path):
-				siteDB.Serve(w, r, sub)
-			case assistant.MatchesSite(r.URL.Path):
-				helper.ServeSite(w, r, sub)
-			case under(strings.ToLower(r.URL.Path), "/api"):
-				// Seluruh /api/ di domain user dicadangkan untuk sistem.
-				httpx.Fail(w, httpx.Errorf(404, "Endpoint tidak ditemukan"))
-			default:
-				site.Serve(w, r, sub)
+			case !pages.Serve(w, r):
+				pages.NotFound(w)
 			}
 			return
 		}
-		node.ServeHTTP(w, r)
+		sub, ok := strings.CutSuffix(host, suffix)
+		switch {
+		case !ok:
+			// Akses lewat IP / host lain -> arahkan ke domain utama.
+			http.Redirect(w, r, cfg.AppOrigin+r.URL.RequestURI(), http.StatusFound)
+		case sub == "www":
+			http.Redirect(w, r, cfg.AppOrigin+r.URL.RequestURI(), http.StatusMovedPermanently)
+		case !usernameRE.MatchString(sub):
+			http.Error(w, "Not found", http.StatusNotFound)
+		case siteapi.Matches(r.URL.Path):
+			siteDB.Serve(w, r, sub)
+		case assistant.MatchesSite(r.URL.Path):
+			helper.ServeSite(w, r, sub)
+		case under(strings.ToLower(r.URL.Path), "/api"):
+			// Seluruh /api/ di domain user dicadangkan untuk sistem.
+			httpx.Fail(w, httpx.Errorf(404, "Endpoint tidak ditemukan"))
+		default:
+			site.Serve(w, r, sub)
+		}
 	})
 
 	addr := net.JoinHostPort(os.Getenv("HOST"), cfg.Port)
@@ -146,7 +153,8 @@ func main() {
 		srv.Shutdown(ctx)
 	}()
 
-	log.Printf("rakit.icu (Go) berjalan di %s — sisanya diteruskan ke Node %s", cfg.AppOrigin, cfg.NodeUpstream)
+	log.Printf("rakit.icu berjalan di %s", cfg.AppOrigin)
+	log.Printf("Website user: %s", cfg.SiteURL("<username>"))
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}

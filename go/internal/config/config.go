@@ -1,5 +1,5 @@
 // Package config membaca pengaturan dari environment, dengan nama variabel dan nilai default yang
-// sama dengan src/config.js supaya satu file .env dipakai bersama oleh server Node dan Go.
+// sama dengan src/config.js, supaya file .env yang sudah ada tetap dipakai apa adanya.
 package config
 
 import (
@@ -41,9 +41,6 @@ type Config struct {
 	}
 	// Default langganan dari .env sebelum owner menyimpan di dashboard.
 	PlanPro, PlanUnlimited PlanEnv
-
-	// Selama migrasi bertahap: semua request yang belum ditangani Go diteruskan ke server Node ini.
-	NodeUpstream string
 }
 
 // AI: provider apa pun yang kompatibel dengan API chat completions OpenAI.
@@ -221,10 +218,9 @@ func envOr(key, fallback string) string {
 
 func Load() (*Config, error) {
 	c := &Config{
-		Port:         envOr("PORT", "3000"),
-		Protocol:     envOr("PROTOCOL", "http"),
-		BaseDomain:   strings.ToLower(envOr("BASE_DOMAIN", "localhost")),
-		NodeUpstream: strings.TrimRight(envOr("NODE_UPSTREAM", "http://127.0.0.1:3010"), "/"),
+		Port:       envOr("PORT", "3000"),
+		Protocol:   envOr("PROTOCOL", "http"),
+		BaseDomain: strings.ToLower(envOr("BASE_DOMAIN", "localhost")),
 	}
 	dataDir, err := filepath.Abs(envOr("DATA_DIR", "data"))
 	if err != nil {

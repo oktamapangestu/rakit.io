@@ -1,5 +1,5 @@
-// Package store membuka database utama (data/rakit.db) yang dipakai bersama dengan server Node.
-// Selama migrasi, skema dibuat dan dimigrasikan oleh Node (src/db.js); Go hanya memakainya.
+// Package store membuka database utama (data/rakit.db). Skema dibuat dan diperbarui oleh Migrate
+// (schema.go) setiap server menyala.
 package store
 
 import (
@@ -45,8 +45,11 @@ func (s *Store) Setting(key string) (value string, ok bool) {
 	return value, err == nil
 }
 
-func (s *Store) SetSetting(key, value string) error {
-	_, err := s.db.Exec(`
+func (s *Store) SetSetting(key, value string) error { return SetSettingIn(s.db, key, value) }
+
+// SetSettingIn: SetSetting di dalam transaksi.
+func SetSettingIn(q Q, key, value string) error {
+	_, err := q.Exec(`
 		INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
 		ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, key, value, now())
 	return err

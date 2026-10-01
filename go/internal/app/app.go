@@ -157,7 +157,13 @@ func (h *Handler) serveStatic(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// Serve menangani halaman & aset di domain utama. false = bukan bagian Go (teruskan ke Node).
+// NotFound: jawaban untuk path di domain utama yang bukan halaman, aset, maupun API.
+func (h *Handler) NotFound(w http.ResponseWriter) {
+	securityHeaders(w)
+	http.Error(w, "Not found", http.StatusNotFound)
+}
+
+// Serve menangani halaman & aset di domain utama. false = tidak ada halaman/aset untuk request ini.
 func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false

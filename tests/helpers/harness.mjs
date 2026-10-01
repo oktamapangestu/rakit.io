@@ -2,7 +2,7 @@
 // plus provider AI & Kasera Pay tiruan. Test hanya berbicara lewat HTTP dan database SQLite, jadi
 // test yang sama dipakai untuk membuktikan backend lain (mis. versi Go) berperilaku sama:
 //
-//   RAKIT_SERVER_CMD="bash scripts/go-with-node.sh" npm test      (atau: npm run test:go)
+//   RAKIT_SERVER_CMD=go/bin/rakit npm test      (atau: npm run test:go)
 //
 // Tanpa RAKIT_SERVER_CMD, yang diuji adalah server Node (src/server.js).
 
@@ -233,7 +233,7 @@ class Client {
  * Mengembalikan { origin, ai, kasera, db, client(), register(), webhook(), stop() }.
  */
 export async function startStack(env = {}) {
-  const [ai, kasera, google, port, upstreamPort] = await Promise.all([startMockAI(), startMockKasera(), startMockGoogle(), freePort(), freePort()]);
+  const [ai, kasera, google, port] = await Promise.all([startMockAI(), startMockKasera(), startMockGoogle(), freePort()]);
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rakit-test-'));
   const origin = `http://localhost:${port}`;
 
@@ -241,8 +241,6 @@ export async function startStack(env = {}) {
     PATH: process.env.PATH,
     HOME: process.env.HOME,
     PORT: String(port),
-    // Port kedua untuk server yang berdiri di belakang server utama (dipakai scripts/go-with-node.sh).
-    UPSTREAM_PORT: String(upstreamPort),
     BASE_DOMAIN: 'localhost',
     PROTOCOL: 'http',
     DATA_DIR: dataDir,
@@ -343,6 +341,8 @@ export async function startStack(env = {}) {
     site: (slug, urlPath = '/', opts) => plainRequest(`${slug}.localhost:${port}`, urlPath, opts),
     /** Request polos ke domain utama, tanpa header tambahan dari fetch (untuk menguji 304). */
     app: (urlPath = '/', opts) => plainRequest(`localhost:${port}`, urlPath, opts),
+    /** Request dengan header Host bebas (mis. akses lewat IP). */
+    host: (host, urlPath = '/', opts) => plainRequest(host.replace('{port}', port), urlPath, opts),
     stop,
     client: (opts) => new Client(origin, opts),
     /** Koneksi langsung ke database server (WAL: aman dibuka bersamaan), untuk menyiapkan/memeriksa keadaan. */

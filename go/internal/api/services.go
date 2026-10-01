@@ -2,6 +2,7 @@ package api
 
 import (
 	"rakit.icu/server/internal/httpx"
+	"rakit.icu/server/internal/jsconv"
 )
 
 // ---------- /api/ai ----------
@@ -138,28 +139,69 @@ func (h *Handler) assistant(q *request) error {
 	return q.json(200, out)
 }
 
-// ---------- /api/admin/ai-models (owner platform) ----------
+// ---------- /api/admin (owner platform) ----------
 
-// adminModels: model AI editor — utama & cadangan (dipakai saat model utama gangguan), juga untuk
-// pembaca gambar.
-func (h *Handler) adminModels(q *request) error {
+// admin: dashboard pemilik platform — statistik, harga langganan & kredit gratis, model AI editor,
+// model asisten website, dan blokir website. Akses dibatasi ke email di ADMIN_EMAILS.
+func (h *Handler) admin(q *request) error {
 	if err := h.requireAuth(q); err != nil {
 		return err
 	}
 	if !h.cfg.IsAdmin(q.user.Email) {
 		return httpx.Errorf(403, "Halaman ini khusus pemilik platform")
 	}
+	dash, helper := h.svc.Admin, h.svc.Assistant
+	var out any
+	var err error
 	switch {
-	case q.is("GET", "ai-models"):
-	case q.is("PUT", "ai-models"):
-		if err := q.load(); err != nil {
-			return err
+	case q.is("GET", "stats"):
+		days := 30
+		if values := q.r.URL.Query()["days"]; len(values) == 1 {
+			if n := jsconv.Number(values[0]); n == 7 || n == 30 || n == 90 {
+				days = int(n)
+			}
 		}
-		if _, err := h.svc.AIModels.Save(q.body); err != nil {
-			return err
+		out, err = dash.Stats(days)
+
+	case q.is("GET", "plans"):
+		out, err = dash.PlansView()
+	case q.is("PUT", "plans"):
+		if err = q.load(); err == nil {
+			if err = dash.SavePlans(q.body); err == nil {
+				out, err = dash.PlansView()
+			}
+		}
+
+	// Model AI editor: model utama & cadangan (dipakai saat model utama gangguan), juga untuk pembaca gambar.
+	case q.is("GET", "ai-models"):
+		out = h.svc.AIModels.View()
+	case q.is("PUT", "ai-models"):
+		if err = q.load(); err == nil {
+			if _, err = h.svc.AIModels.Save(q.body); err == nil {
+				out = h.svc.AIModels.View()
+			}
+		}
+
+	// Asisten AI website: model (aktif/nonaktif, harga), saldo percobaan, website pemakai & blokir.
+	case q.is("GET", "assistant"):
+		out, err = helper.AdminView()
+	case q.is("PUT", "assistant"):
+		if err = q.load(); err == nil {
+			if err = helper.SaveAdminSettings(q.body); err == nil {
+				out, err = helper.AdminView()
+			}
+		}
+	case q.is("POST", "assistant", "block"):
+		if err = q.load(); err == nil {
+			if err = helper.SetBlocked(jsconv.String(q.body["slug"]), jsconv.Truthy(q.body["blocked"])); err == nil {
+				out, err = helper.AdminView()
+			}
 		}
 	default:
 		return errNotFound
 	}
-	return q.json(200, h.svc.AIModels.View())
+	if err != nil {
+		return err
+	}
+	return q.json(200, out)
 }

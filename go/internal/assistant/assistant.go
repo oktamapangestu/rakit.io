@@ -452,7 +452,7 @@ func (s *Service) Save(user *store.User, project *store.Project, body map[string
 	}
 	enabled := current.Enabled
 	if v, ok := body["enabled"]; ok {
-		enabled = truthy(v)
+		enabled = jsconv.Truthy(v)
 	}
 	_, err = s.db.Exec(`
 		INSERT INTO assistant_sites (project_id, enabled, model_key, name, greeting, instructions, daily_cap, updated_at)
@@ -464,18 +464,4 @@ func (s *Service) Save(user *store.User, project *store.Project, body map[string
 		return nil, err
 	}
 	return s.OwnerView(user, project)
-}
-
-func truthy(v any) bool {
-	switch t := v.(type) {
-	case nil:
-		return false
-	case bool:
-		return t
-	case float64:
-		return t != 0
-	case string:
-		return t != ""
-	}
-	return true
 }

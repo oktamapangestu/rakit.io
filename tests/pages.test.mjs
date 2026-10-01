@@ -126,3 +126,33 @@ test('yang bukan aset dijawab 404 dan tidak membocorkan file di luar folder publ
     assert.ok(!res.body.includes('rakit-icu') && !res.body.includes('express'), url);
   }
 });
+
+test('host lain dialihkan ke domain utama; path yang tidak dikenal dijawab 404', async () => {
+  const ip = await stack.host('127.0.0.1:{port}', '/panduan?x=1');
+  assert.deepEqual([ip.status, ip.headers.location], [302, `${stack.origin}/panduan?x=1`]);
+  const other = await stack.host('contoh.com', '/');
+  assert.deepEqual([other.status, other.headers.location], [302, `${stack.origin}/`]);
+
+  for (const [method, url] of [['GET', '/api/tidak-ada'], ['POST', '/api/tidak-ada'], ['GET', '/api'], ['DELETE', '/api/me']]) {
+    const res = await user.req(method, url, method === 'GET' ? undefined : {});
+    assert.deepEqual([res.status, res.body], [404, { error: 'Endpoint tidak ditemukan' }], `${method} ${url}`);
+  }
+  // Request tulis ke /api tetap dicek Origin-nya lebih dulu.
+  assert.equal((await stack.app('/api/tidak-ada', { method: 'POST', headers: { Origin: 'http://jahat.localhost' } })).status, 403);
+
+  const post = await page(user, '/editor', { method: 'POST' });
+  assert.equal(post.status, 404);
+  assertSecurityHeaders(post);
+});
+
+test('database lama: akun tanpa project mendapat project bernama username saat server menyala', async () => {
+  const db = stack.db();
+  const { lastInsertRowid: id } = db.prepare("INSERT INTO users (username, email, password_hash, created_at) VALUES ('akun-lama', 'lama@test.local', 'x', ?)").run(Date.now());
+  db.prepare("INSERT INTO ai_threads (user_id, title, created_at, updated_at) VALUES (?, 'lama', ?, ?)").run(id, Date.now(), Date.now());
+  await stack.restart();
+  assert.deepEqual(db.prepare('SELECT slug, name FROM projects WHERE user_id = ?').all(id).map((p) => ({ ...p })), [{ slug: 'akun-lama', name: 'akun-lama' }]);
+  const thread = db.prepare('SELECT t.project_id = p.id AS ok FROM ai_threads t JOIN projects p ON p.user_id = t.user_id WHERE t.user_id = ?').get(id);
+  assert.equal(thread.ok, 1);
+  // Sesi yang sudah ada tetap berlaku setelah restart.
+  assert.equal((await user.get('/api/me')).status, 200);
+});
