@@ -76,6 +76,8 @@ export const config = {
     enabled: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
     clientId: env.GOOGLE_CLIENT_ID || '',
     clientSecret: env.GOOGLE_CLIENT_SECRET || '',
+    // Alamat penukaran token; hanya diganti saat test (server tiruan).
+    tokenUrl: env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
   },
   maxProjects: Math.max(1, Number(env.MAX_PROJECTS || 5)),
   // Email pemilik platform yang boleh membuka dashboard /admin (dipisah koma).

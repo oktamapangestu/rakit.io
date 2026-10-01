@@ -26,6 +26,7 @@ import (
 	"rakit.icu/server/internal/config"
 	"rakit.icu/server/internal/files"
 	"rakit.icu/server/internal/httpx"
+	"rakit.icu/server/internal/jsconv"
 	"rakit.icu/server/internal/plans"
 )
 
@@ -327,6 +328,18 @@ func (c *conn) referencesTo(name string) ([]reference, error) {
 	return out, rows.Err()
 }
 
+// Remove menutup koneksi & menghapus file database project (dipakai saat project dihapus).
+func (d *DB) Remove(slug string) {
+	d.mu.Lock()
+	if h := d.pool[slug]; h != nil {
+		d.evict(slug, h)
+	}
+	d.mu.Unlock()
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		os.Remove(d.path(slug) + suffix)
+	}
+}
+
 // with membuka database project, mengambil tabel `name`, lalu menjalankan fn.
 func (d *DB) with(ctx context.Context, slug, name string, fn func(c *conn, t *Table) error) error {
 	c, release, ok, err := d.acquire(ctx, slug)
@@ -572,12 +585,12 @@ func (d *DB) ListRows(ctx context.Context, slug, name string, opts ListOptions) 
 		if len(where) > 0 {
 			whereSQL = "WHERE " + strings.Join(where, " AND ")
 		}
-		limit, _ := jsParseInt(opts.Limit)
+		limit, _ := jsconv.ParseInt(opts.Limit)
 		if limit == 0 {
 			limit = 50
 		}
 		limit = min(max(limit, 1), limitPageSize)
-		offset, _ := jsParseInt(opts.Offset)
+		offset, _ := jsconv.ParseInt(opts.Offset)
 		offset = max(offset, 0)
 		order, err := parseSort(opts.Sort, visible)
 		if err != nil {
@@ -876,7 +889,7 @@ func (d *DB) UploadImage(ctx context.Context, slug, name, columnName string, buf
 	}
 	rel := fmt.Sprintf("uploads/%s/%s-%s.%s", t.Name, strconv.FormatInt(time.Now().UnixMilli(), 36), hex.EncodeToString(random), ext)
 	// Cek ukuran per gambar & kuota storage paket.
-	if _, err := files.WriteImage(d.cfg.SiteRoot(slug), rel, buf, d.plans.StorageFor(slug)); err != nil {
+	if _, err := files.WriteImage(d.cfg.SiteRoot(slug), rel, buf, false, d.plans.StorageFor(slug)); err != nil {
 		return "", err
 	}
 	return "/" + rel, nil

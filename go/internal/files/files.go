@@ -232,15 +232,238 @@ func looksLikeImage(ext string, buf []byte) bool {
 	return false
 }
 
-// WriteImage menyimpan gambar baru di `input` (relatif ke root). File yang sudah ada ditolak (409).
-func WriteImage(root, input string, buf []byte, limits plans.Storage) (string, error) {
+// MaxImageBytes: batas upload satu gambar (bawaan server; per project mengikuti paket).
+const MaxImageBytes = 10 * 1024 * 1024
+
+// MaxFileSize: batas satu file teks.
+const MaxFileSize = 512 * 1024
+
+// Limits: batas untuk satu project, dalam bentuk yang dikirim ke editor.
+type Limits struct {
+	FileSize  int64 `json:"fileSize"`
+	TotalSize int64 `json:"totalSize"`
+	Entries   int64 `json:"entries"`
+	ImageSize int64 `json:"imageSize"`
+	Depth     int   `json:"depth"`
+}
+
+func LimitsOf(s plans.Storage) Limits {
+	return Limits{FileSize: MaxFileSize, TotalSize: s.TotalSize, Entries: s.Entries, ImageSize: s.ImageSize, Depth: maxDepth}
+}
+
+// IsTextFile / IsImageFile: jenis file dari ekstensinya.
+func IsTextFile(rel string) bool  { _, ok := TextTypes[Ext(rel)]; return ok }
+func IsImageFile(rel string) bool { _, ok := ImageTypes[Ext(rel)]; return ok }
+
+const imageExtList = ".png, .jpg, .jpeg, .gif, .webp, .svg, .ico, .avif"
+
+var errNotText = httpx.Errorf(400, "Hanya file .html, .css, dan .js yang diizinkan")
+
+// LstatOrNil: info file/folder, atau nil bila tidak ada.
+func LstatOrNil(abs string) (os.FileInfo, error) { return lstatOrNil(abs) }
+
+// ReadText membaca isi file teks project.
+func ReadText(root, input string) (string, error) {
+	rel, err := CleanPath(input)
+	if err != nil {
+		return "", err
+	}
+	if !IsTextFile(rel) {
+		return "", errNotText
+	}
+	abs, err := ResolveIn(root, rel)
+	if err != nil {
+		return "", err
+	}
+	info, err := lstatOrNil(abs)
+	if err != nil {
+		return "", err
+	}
+	if info == nil || !info.Mode().IsRegular() {
+		return "", httpx.Errorf(404, "File tidak ditemukan")
+	}
+	data, err := os.ReadFile(abs)
+	return strings.ToValidUTF8(string(data), "\uFFFD"), err
+}
+
+// WriteText menyimpan file teks. content nil = bukan teks. create: buat file baru (gagal bila sudah ada);
+// tanpa create: file harus sudah ada.
+func WriteText(root, input string, content *string, create bool, limits plans.Storage) (string, error) {
+	rel, err := CleanPath(input)
+	if err != nil {
+		return "", err
+	}
+	if !IsTextFile(rel) {
+		return "", errNotText
+	}
+	if content == nil {
+		return "", httpx.Errorf(400, "Konten harus berupa teks")
+	}
+	size := int64(len(*content))
+	if size > MaxFileSize {
+		return "", httpx.Errorf(413, "Ukuran file maksimal %d KB", MaxFileSize/1024)
+	}
+	abs, err := ResolveIn(root, rel)
+	if err != nil {
+		return "", err
+	}
+	info, err := lstatOrNil(abs)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case info != nil && !info.Mode().IsRegular():
+		return "", httpx.Errorf(409, "Sudah ada folder dengan nama itu")
+	case info != nil && create:
+		return "", httpx.Errorf(409, "File sudah ada")
+	case info == nil && !create:
+		return "", httpx.Errorf(404, "File tidak ditemukan")
+	}
+	var old int64
+	if info != nil {
+		old = info.Size()
+	}
+	if err := checkQuota(root, rel, limits, size, old); err != nil {
+		return "", err
+	}
+	if err := ensureParents(root, rel); err != nil {
+		return "", err
+	}
+	return rel, os.WriteFile(abs, []byte(*content), 0o644)
+}
+
+func CreateDir(root, input string, limits plans.Storage) (string, error) {
+	rel, err := CleanPath(input)
+	if err != nil {
+		return "", err
+	}
+	abs, err := ResolveIn(root, rel)
+	if err != nil {
+		return "", err
+	}
+	if info, err := lstatOrNil(abs); err != nil {
+		return "", err
+	} else if info != nil {
+		return "", httpx.Errorf(409, "Sudah ada file/folder dengan nama itu")
+	}
+	if err := checkQuota(root, rel, limits, 0, 0); err != nil {
+		return "", err
+	}
+	if err := ensureParents(root, rel); err != nil {
+		return "", err
+	}
+	return rel, os.Mkdir(abs, 0o755)
+}
+
+func RenameEntry(root, fromInput, toInput string) (string, error) {
+	from, err := CleanPath(fromInput)
+	if err != nil {
+		return "", err
+	}
+	to, err := CleanPath(toInput)
+	if err != nil {
+		return "", err
+	}
+	if from == to {
+		return to, nil
+	}
+	fromAbs, err := ResolveIn(root, from)
+	if err != nil {
+		return "", err
+	}
+	toAbs, err := ResolveIn(root, to)
+	if err != nil {
+		return "", err
+	}
+	info, err := lstatOrNil(fromAbs)
+	if err != nil {
+		return "", err
+	}
+	if info == nil {
+		return "", httpx.Errorf(404, "File/folder tidak ditemukan")
+	}
+	// Jenis file tidak boleh berubah lewat rename (gambar tetap gambar, teks tetap teks).
+	if info.Mode().IsRegular() && IsImageFile(from) {
+		if !IsImageFile(to) {
+			return "", httpx.Errorf(400, "Gambar harus berakhiran %s", imageExtList)
+		}
+	} else if info.Mode().IsRegular() && !IsTextFile(to) {
+		return "", errNotText
+	}
+	if strings.HasPrefix(to, from+"/") {
+		return "", httpx.Errorf(400, "Tidak bisa memindahkan folder ke dalam dirinya sendiri")
+	}
+	if existing, err := lstatOrNil(toAbs); err != nil {
+		return "", err
+	} else if existing != nil {
+		return "", httpx.Errorf(409, "Sudah ada file/folder dengan nama itu")
+	}
+	if err := ensureParents(root, to); err != nil {
+		return "", err
+	}
+	return to, os.Rename(fromAbs, toAbs)
+}
+
+func RemoveEntry(root, input string) error {
+	rel, err := CleanPath(input)
+	if err != nil {
+		return err
+	}
+	abs, err := ResolveIn(root, rel)
+	if err != nil {
+		return err
+	}
+	if info, err := lstatOrNil(abs); err != nil {
+		return err
+	} else if info == nil {
+		return httpx.Errorf(404, "File/folder tidak ditemukan")
+	}
+	return os.RemoveAll(abs)
+}
+
+// SeedTemplate mengisi project baru dengan file awal. File yang sudah ada tidak pernah ditimpa.
+func SeedTemplate(root, templateDir, slug, host string) error {
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	items, err := os.ReadDir(templateDir)
+	if err != nil {
+		return err
+	}
+	fill := strings.NewReplacer("{{username}}", slug, "{{host}}", host)
+	for _, item := range items {
+		text, err := os.ReadFile(filepath.Join(templateDir, item.Name()))
+		if err != nil {
+			return err
+		}
+		f, err := os.OpenFile(filepath.Join(root, item.Name()), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			if os.IsExist(err) {
+				continue
+			}
+			return err
+		}
+		_, err = f.WriteString(fill.Replace(string(text)))
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WriteImage menyimpan gambar yang diunggah di `input` (relatif ke root). Tanpa overwrite, file yang
+// sudah ada ditolak (409).
+func WriteImage(root, input string, buf []byte, overwrite bool, limits plans.Storage) (string, error) {
 	rel, err := CleanPath(input)
 	if err != nil {
 		return "", err
 	}
 	ext := Ext(rel)
 	if _, ok := ImageTypes[ext]; !ok {
-		return "", httpx.Errorf(400, "Format gambar tidak didukung. Pakai .png, .jpg, .jpeg, .gif, .webp, .svg, .ico, .avif")
+		return "", httpx.Errorf(400, "Format gambar tidak didukung. Pakai %s", imageExtList)
 	}
 	if len(buf) == 0 {
 		return "", httpx.Errorf(400, "File gambar kosong")
@@ -262,10 +485,14 @@ func WriteImage(root, input string, buf []byte, limits plans.Storage) (string, e
 	if info != nil && !info.Mode().IsRegular() {
 		return "", httpx.Errorf(409, "Sudah ada folder dengan nama itu")
 	}
-	if info != nil {
+	if info != nil && !overwrite {
 		return "", httpx.Errorf(409, "File sudah ada")
 	}
-	if err := checkQuota(root, rel, limits, int64(len(buf)), 0); err != nil {
+	var old int64
+	if info != nil {
+		old = info.Size()
+	}
+	if err := checkQuota(root, rel, limits, int64(len(buf)), old); err != nil {
 		return "", err
 	}
 	if err := ensureParents(root, rel); err != nil {

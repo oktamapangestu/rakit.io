@@ -10,6 +10,8 @@ export const db = new DatabaseSync(path.join(config.dataDir, 'rakit.db'));
 db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
+  -- Selama migrasi, server Go ikut menulis ke file ini: tunggu sebentar bila sedang terkunci.
+  PRAGMA busy_timeout = 5000;
 
   CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

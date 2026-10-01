@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -21,6 +22,15 @@ type Config struct {
 	// Email pemilik platform yang boleh membuka dashboard /admin.
 	AdminEmails []string
 	portSuffix  string
+
+	TemplateDir string // file awal project baru (templates/default)
+	MaxProjects int    // jumlah project (subdomain) maksimal per akun
+
+	// Login dengan Google (OAuth client tipe "Web application").
+	GoogleEnabled      bool
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleTokenURL     string
 
 	// Selama migrasi bertahap: semua request yang belum ditangani Go diteruskan ke server Node ini.
 	NodeUpstream string
@@ -84,6 +94,17 @@ func Load() (*Config, error) {
 	if c.PublicDir, err = filepath.Abs(envOr("PUBLIC_DIR", "public")); err != nil {
 		return nil, err
 	}
+	if c.TemplateDir, err = filepath.Abs(envOr("TEMPLATE_DIR", "templates/default")); err != nil {
+		return nil, err
+	}
+	c.MaxProjects = 5
+	if n, convErr := strconv.Atoi(os.Getenv("MAX_PROJECTS")); convErr == nil && n != 0 {
+		c.MaxProjects = max(1, n)
+	}
+	c.GoogleClientID = os.Getenv("GOOGLE_CLIENT_ID")
+	c.GoogleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
+	c.GoogleEnabled = c.GoogleClientID != "" && c.GoogleClientSecret != ""
+	c.GoogleTokenURL = envOr("GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token")
 	c.SecureCookies = c.Protocol == "https"
 	for _, e := range strings.Split(os.Getenv("ADMIN_EMAILS"), ",") {
 		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
@@ -116,6 +137,11 @@ func (c *Config) IsAdmin(email string) bool {
 
 // SiteHost: host website project, mis. budi.rakit.icu.
 func (c *Config) SiteHost(slug string) string { return slug + "." + c.BaseDomain }
+
+// SiteURL: alamat website project, mis. https://budi.rakit.icu.
+func (c *Config) SiteURL(slug string) string {
+	return c.Protocol + "://" + slug + "." + c.BaseDomain + c.portSuffix
+}
 
 // SiteRoot: folder file website project (data/sites/<slug>).
 func (c *Config) SiteRoot(slug string) string { return filepath.Join(c.DataDir, "sites", slug) }

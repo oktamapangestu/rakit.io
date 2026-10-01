@@ -12,7 +12,6 @@ import { usernameError } from './username.js';
 export const google = express.Router();
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const FLOW_COOKIE = config.secureCookies ? '__Host-rakit_oauth' : 'rakit_oauth';
 const FLOW_TTL_MS = 10 * 60 * 1000;
 
@@ -82,7 +81,7 @@ google.get('/callback', async (req, res) => {
   // tanpa verifikasi tanda tangan terpisah; klaim tetap dicek.
   let claims;
   try {
-    const tokenRes = await fetch(TOKEN_URL, {
+    const tokenRes = await fetch(config.google.tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({

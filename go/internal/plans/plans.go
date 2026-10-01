@@ -21,8 +21,21 @@ var (
 	}
 )
 
+// History: riwayat versi yang disimpan per project — umur maksimal (hari) & jumlah maksimal.
+type History struct {
+	Days int `json:"days"`
+	Max  int `json:"max"`
+}
+
+var (
+	FreeHistory = History{Days: 7, Max: 20}
+	planHistory = map[string]History{"pro": {Days: 30, Max: 200}, "unlimited": {Days: 90, Max: 2000}}
+)
+
 // Subscriptions: yang dibutuhkan dari database utama.
 type Subscriptions interface {
+	// ActivePlanOfUser: id paket langganan akun yang masih berlaku, atau "".
+	ActivePlanOfUser(userID int64) (string, error)
 	// ActivePlanOfProject: id paket langganan pemilik project yang masih berlaku, atau "".
 	ActivePlanOfProject(slug string) (string, error)
 }
@@ -45,4 +58,17 @@ func (p *Plans) StorageFor(slug string) Storage {
 		return s
 	}
 	return FreeStorage
+}
+
+// HistoryFor: batas riwayat versi untuk project milik akun ini.
+func (p *Plans) HistoryFor(userID int64) History {
+	plan, err := p.subs.ActivePlanOfUser(userID)
+	if err != nil {
+		log.Printf("plans: membaca langganan akun %d: %v", userID, err)
+		return FreeHistory
+	}
+	if h, ok := planHistory[plan]; ok {
+		return h
+	}
+	return FreeHistory
 }

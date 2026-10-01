@@ -43,7 +43,7 @@ const readBody = (req) => new Promise((resolve) => {
 });
 
 // ---------- Provider AI tiruan (format OpenAI chat completions, streaming) ----------
-// ai.script: antrean perilaku untuk request berikutnya — { text } | { status } | { hang: true }.
+// ai.script: antrean perilaku untuk request berikutnya — { text } | { toolCalls } | { status } | { hang: true }.
 // Kosong = menjawab "Halo dari AI tiruan".
 async function startMockAI() {
   const ai = { script: [], requests: [], waiters: [], open: new Set() };
@@ -62,7 +62,11 @@ async function startMockAI() {
       res.on('close', () => ai.open.delete(res));
       return res.write(': menunggu\n\n');
     }
-    const event = {
+    // step.toolCalls: jawaban berupa panggilan tool (mode Builder).
+    const event = step.toolCalls ? {
+      choices: [{ delta: { tool_calls: step.toolCalls }, finish_reason: 'tool_calls' }],
+      usage: { prompt_tokens: 100, completion_tokens: 20 },
+    } : {
       choices: [{ delta: { content: step.text ?? 'Halo dari AI tiruan' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 100, completion_tokens: 20 },
     };
@@ -118,11 +122,34 @@ async function startMockKasera() {
   return kasera;
 }
 
+// ---------- Endpoint token Google tiruan ----------
+// google.claims: isi id_token yang dikembalikan untuk penukaran kode berikutnya. google.fail = true: 400.
+async function startMockGoogle() {
+  const google = { claims: null, fail: false, requests: [] };
+  const server = http.createServer(async (req, res) => {
+    const form = Object.fromEntries(new URLSearchParams(await readBody(req)));
+    google.requests.push(form);
+    res.setHeader('Content-Type', 'application/json');
+    if (google.fail) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ error: 'invalid_grant' }));
+    }
+    const part = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+    res.end(JSON.stringify({ id_token: `${part({ alg: 'none' })}.${part(google.claims)}.sig` }));
+  });
+  const port = await listen(server);
+  google.url = `http://127.0.0.1:${port}/token`;
+  google.close = () => { server.closeAllConnections(); server.close(); };
+  return google;
+}
+
 // ---------- Klien HTTP dengan cookie (satu "browser" per pengguna) ----------
 class Client {
-  constructor(origin) {
+  constructor(origin, { ip } = {}) {
     this.origin = origin;
     this.cookies = new Map();
+    // Server mempercayai proxy di loopback, jadi X-Forwarded-For menentukan IP "pengunjung" (untuk batas laju).
+    this.baseHeaders = ip ? { 'X-Forwarded-For': ip } : {};
   }
 
   async raw(method, url, { body, headers = {}, rawBody } = {}) {
@@ -131,6 +158,7 @@ class Client {
       redirect: 'manual',
       headers: {
         Origin: this.origin,
+        ...this.baseHeaders,
         ...(this.cookies.size ? { Cookie: [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ') } : {}),
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...headers,
@@ -159,6 +187,8 @@ class Client {
   get(url) { return this.req('GET', url); }
   post(url, body = {}) { return this.req('POST', url, body); }
   put(url, body = {}) { return this.req('PUT', url, body); }
+  patch(url, body = {}) { return this.req('PATCH', url, body); }
+  del(url) { return this.req('DELETE', url); }
 
   async credits() {
     return (await this.get('/api/ai/credits')).body;
@@ -191,7 +221,7 @@ class Client {
  * Mengembalikan { origin, ai, kasera, db, client(), register(), webhook(), stop() }.
  */
 export async function startStack(env = {}) {
-  const [ai, kasera, port, upstreamPort] = await Promise.all([startMockAI(), startMockKasera(), freePort(), freePort()]);
+  const [ai, kasera, google, port, upstreamPort] = await Promise.all([startMockAI(), startMockKasera(), startMockGoogle(), freePort(), freePort()]);
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rakit-test-'));
   const origin = `http://localhost:${port}`;
 
@@ -219,6 +249,9 @@ export async function startStack(env = {}) {
       KASERA_API_KEY: 'kp_test_mock',
       KASERA_WEBHOOK_SECRET: WEBHOOK_SECRET,
       KASERA_BASE_URL: kasera.url,
+      GOOGLE_CLIENT_ID: 'google-client-test',
+      GOOGLE_CLIENT_SECRET: 'google-secret-test',
+      GOOGLE_TOKEN_URL: google.url,
       CREDIT_PACKAGES: '20:10000,50:20000',
       ASSISTANT_PACKAGES: '10000,25000',
       PLAN_PRO: '49000:3',
@@ -240,6 +273,7 @@ export async function startStack(env = {}) {
     }
     ai.close();
     kasera.close();
+    google.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
   };
 
@@ -274,6 +308,7 @@ export async function startStack(env = {}) {
     dataDir,
     ai,
     kasera,
+    google,
     log: () => log,
 
     /** Request ke website project (<slug>.localhost) lewat header Host. Mengembalikan { status, headers, body }. */
@@ -281,7 +316,7 @@ export async function startStack(env = {}) {
     /** Request polos ke domain utama, tanpa header tambahan dari fetch (untuk menguji 304). */
     app: (urlPath = '/', opts) => plainRequest(`localhost:${port}`, urlPath, opts),
     stop,
-    client: () => new Client(origin),
+    client: (opts) => new Client(origin, opts),
     /** Koneksi langsung ke database server (WAL: aman dibuka bersamaan), untuk menyiapkan/memeriksa keadaan. */
     db: () => new DatabaseSync(path.join(dataDir, 'rakit.db')),
 

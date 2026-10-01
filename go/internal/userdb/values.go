@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode/utf16"
 
 	"rakit.icu/server/internal/httpx"
+	"rakit.icu/server/internal/jsconv"
 )
 
 // Row: objek JSON dengan urutan kunci terjaga (id, created_at, lalu kolom sesuai urutan tabel).
@@ -98,86 +98,13 @@ func DecodeObject(raw []byte) (fields []Field, ok bool, err error) {
 	return fields, true, nil
 }
 
-// ---------- Konversi nilai ala JavaScript ----------
-
-var decimalRE = regexp.MustCompile(`^[+-]?(\d+\.?\d*([eE][+-]?\d+)?|\.\d+([eE][+-]?\d+)?)$`)
-
-// jsNumber meniru Number(string) di JavaScript.
-func jsNumber(s string) float64 {
-	s = strings.TrimSpace(s)
-	switch s {
-	case "":
-		return 0
-	case "Infinity", "+Infinity":
-		return math.Inf(1)
-	case "-Infinity":
-		return math.Inf(-1)
-	}
-	if len(s) > 2 && s[0] == '0' {
-		base := map[byte]int{'x': 16, 'X': 16, 'o': 8, 'O': 8, 'b': 2, 'B': 2}[s[1]]
-		if base != 0 {
-			n, err := strconv.ParseUint(s[2:], base, 64)
-			if err != nil {
-				return math.NaN()
-			}
-			return float64(n)
-		}
-	}
-	if !decimalRE.MatchString(s) {
-		return math.NaN()
-	}
-	n, err := strconv.ParseFloat(s, 64)
-	if err != nil && math.IsInf(n, 0) {
-		return n
-	}
-	if err != nil {
-		return math.NaN()
-	}
-	return n
-}
-
-// jsString meniru String(value) untuk nilai JSON non-objek.
-func jsString(v any) string {
-	switch t := v.(type) {
-	case string:
-		return t
-	case bool:
-		return strconv.FormatBool(t)
-	case float64:
-		out, _ := json.Marshal(t)
-		return string(out)
-	}
-	return ""
-}
-
-var leadingIntRE = regexp.MustCompile(`^\s*([+-]?\d+)`)
-
-// jsParseInt meniru Number.parseInt(s, 10); ok = false bila hasilnya NaN.
-func jsParseInt(s string) (n int, ok bool) {
-	m := leadingIntRE.FindStringSubmatch(s)
-	if m == nil {
-		return 0, false
-	}
-	f, err := strconv.ParseFloat(m[1], 64)
-	if err != nil {
-		return 0, false
-	}
-	return int(math.Max(math.Min(f, 1e15), -1e15)), true
-}
-
-func isInteger(n float64) bool { return !math.IsInf(n, 0) && n == math.Trunc(n) }
-
-const maxSafeInteger = 1<<53 - 1
-
 func rowID(id string) (int64, error) {
-	n := jsNumber(id)
-	if !isInteger(n) || n < 1 || n > maxSafeInteger {
+	n := jsconv.Number(id)
+	if !jsconv.IsInteger(n) || n < 1 || n > jsconv.MaxSafeInteger {
 		return 0, httpx.Errorf(400, "id tidak valid")
 	}
 	return int64(n), nil
 }
-
-func utf16Len(s string) int { return len(utf16.Encode([]rune(s))) }
 
 // ---------- Validasi nilai kolom ----------
 
@@ -241,8 +168,8 @@ func coerce(c Column, value any) (any, error) {
 		if isObject {
 			return fail("berupa teks")
 		}
-		text := jsString(value)
-		if utf16Len(text) > limitTextLength {
+		text := jsconv.String(value)
+		if jsconv.Len(text) > limitTextLength {
 			if hasPrefixFold(text, "data:image/") {
 				return nil, httpx.Errorf(413, `Kolom "%s": %s`, c.Name, base64Hint(c.Name))
 			}
@@ -266,7 +193,7 @@ func coerce(c Column, value any) (any, error) {
 			if _, isBool := value.(bool); isBool || isObject {
 				return fail("berupa angka")
 			}
-			n = jsNumber(jsString(value))
+			n = jsconv.Number(jsconv.String(value))
 		}
 		if math.IsNaN(n) || math.IsInf(n, 0) {
 			return fail("berupa angka")
@@ -281,7 +208,7 @@ func coerce(c Column, value any) (any, error) {
 		}
 		return fail("true atau false")
 	case "date":
-		text := strings.TrimSpace(jsString(value))
+		text := strings.TrimSpace(jsconv.String(value))
 		if isObject || !validDate(text) {
 			return fail("tanggal, contoh 2026-12-31 atau 2026-12-31T19:00")
 		}
@@ -291,10 +218,10 @@ func coerce(c Column, value any) (any, error) {
 		if !ok {
 			n = math.NaN()
 			if _, isBool := value.(bool); !isBool && !isObject {
-				n = jsNumber(jsString(value))
+				n = jsconv.Number(jsconv.String(value))
 			}
 		}
-		if math.IsNaN(n) || !isInteger(n) || n <= 0 || n > maxSafeInteger {
+		if math.IsNaN(n) || !jsconv.IsInteger(n) || n <= 0 || n > jsconv.MaxSafeInteger {
 			return fail("id baris " + c.RefTable + " (bilangan bulat positif)")
 		}
 		return int64(n), nil

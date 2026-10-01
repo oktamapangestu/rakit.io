@@ -13,6 +13,12 @@ cd "$(dirname "$0")/.."
 FRONT_PORT="$PORT"
 PORT="$UPSTREAM_PORT" PUBLIC_PORT="${PUBLIC_PORT-$FRONT_PORT}" node src/server.js &
 NODE_PID=$!
+# Node yang membuat skema database: tunggu sampai siap sebelum Go menerima request.
+for _ in $(seq 1 100); do
+  (exec 3<>"/dev/tcp/127.0.0.1/$UPSTREAM_PORT") 2>/dev/null && break
+  kill -0 "$NODE_PID" 2>/dev/null || exit 1
+  sleep 0.1
+done
 NODE_UPSTREAM="http://127.0.0.1:$UPSTREAM_PORT" go/bin/rakit &
 GO_PID=$!
 

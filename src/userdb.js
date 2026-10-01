@@ -55,8 +55,18 @@ function applySizeLimit(db, slug) {
   db.exec(`PRAGMA max_page_count = ${Math.floor(maxBytes(slug) / pageSize)}`);
 }
 
+// Nomor inode file saat koneksi dibuka. Bila file dihapus/diganti proses lain (project dihapus lalu
+// dibuat lagi lewat server Go), koneksi lama dibuang supaya tidak membaca database yang sudah terhapus.
+const inodes = new Map();
+const inodeOf = (username) => fs.statSync(dbPath(username), { throwIfNoEntry: false })?.ino ?? null;
+
 function open(username) {
   let db = pool.get(username);
+  if (db && inodes.get(username) !== inodeOf(username)) {
+    pool.delete(username);
+    db.close();
+    db = null;
+  }
   if (db) {
     pool.delete(username);
     pool.set(username, db);
@@ -77,9 +87,11 @@ function open(username) {
   applySizeLimit(db, username);
 
   pool.set(username, db);
+  inodes.set(username, inodeOf(username));
   if (pool.size > POOL_MAX) {
     const [oldest, oldDb] = pool.entries().next().value;
     pool.delete(oldest);
+    inodes.delete(oldest);
     oldDb.close();
   }
   return db;
@@ -90,6 +102,7 @@ export function removeDatabase(slug) {
   const db = pool.get(slug);
   if (db) {
     pool.delete(slug);
+    inodes.delete(slug);
     db.close();
   }
   for (const suffix of ['', '-wal', '-shm']) fs.rmSync(`${dbPath(slug)}${suffix}`, { force: true });

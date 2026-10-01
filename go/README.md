@@ -22,6 +22,8 @@ PORT=3000 UPSTREAM_PORT=3001 bash scripts/go-with-node.sh  # Go di :3000, Node d
 | `PORT`, `HOST` | `3000`, semua | Alamat server Go. |
 | `BASE_DOMAIN`, `PROTOCOL`, `PUBLIC_PORT`, `DATA_DIR`, `ADMIN_EMAILS` | sama dengan Node | Dibaca dari `.env` yang sama (`--env-file`). |
 | `PUBLIC_DIR` | `public` | Folder halaman & aset aplikasi, relatif ke folder kerja. |
+| `TEMPLATE_DIR` | `templates/default` | File awal project baru, relatif ke folder kerja. |
+| `MAX_PROJECTS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | sama dengan Node | Dibaca dari `.env` yang sama. |
 
 ## Test
 
@@ -42,8 +44,8 @@ Aturan migrasi: sebuah rute baru dipindah ke Go setelah ada test-nya dan test it
 | 1 | Website project `<slug>.rakit.icu` (file statis) | `sites.js` | selesai |
 | 2 | Halaman & aset aplikasi (`/`, `/editor`, `/admin`, `/panduan`, `/js`, `/css`) + baca sesi | `server.js`, `auth.js` | selesai |
 | 3 | API situs: `/api/db/*` di domain project (baris, relasi, upload gambar, batas request) | `siteapi.js`, `userdb.js` | selesai |
-| 4 | Akun, project, file, riwayat versi | `api.js`, `projects.js`, `files.js`, `versions.js`, `google.js` | berikutnya |
-| 5 | Editor database & diagram | `database.js`, `diagrams.js` | |
+| 4 | Akun (daftar, masuk, keluar, Google), project, file, riwayat versi | `api.js`, `projects.js`, `files.js`, `versions.js`, `google.js` | selesai |
+| 5 | Editor database & diagram | `database.js`, `diagrams.js` | berikutnya |
 | 6 | Kredit, langganan, pembayaran, webhook | `credits.js`, `plans.js`, `billing.js` | |
 | 7 | AI editor (job, antrean, model cadangan) & asisten website | `ai.js`, `aiqueue.js`, `aimodels.js`, `assistant.js` | |
 | 8 | Dashboard owner, lalu Node dimatikan | `admin.js` | |
@@ -56,9 +58,15 @@ Yang perlu dijaga selama dua server berjalan bersama:
 - **Database project** (`data/db/<slug>.db`) sudah dibuka kedua server sekaligus: Go untuk API publik, Node
   untuk editor database dan AI Builder. Keduanya memakai WAL + `busy_timeout`, dan Go membuang koneksinya bila
   file dihapus/diganti Node (project dihapus lalu dibuat lagi).
-- **Database utama** (`data/rakit.db`): skemanya masih dibuat dan dimigrasikan Node (`src/db.js`), dan Go baru
-  membacanya. Sebelum Go mulai menulis ke sana (tahap 4 ke atas), Node perlu `PRAGMA busy_timeout` supaya tidak
-  langsung gagal saat Go sedang menulis.
+- **Database utama** (`data/rakit.db`): skemanya masih dibuat dan dimigrasikan Node (`src/db.js`), jadi Node
+  harus pernah menyala lebih dulu. Sejak tahap 4 Go ikut menulis ke sana (akun, sesi, project, versi); kedua
+  server memakai WAL + `busy_timeout`.
+- **Batas request per akun** (300 tulis / 1.200 baca per menit) dihitung terpisah di Go dan di Node selama
+  rute `/api` terbagi dua, jadi untuk sementara batas efektifnya bisa sampai dua kali lipat.
+- **Kunci riwayat versi** per project ada di memori tiap server. Versi 'ai' masih dibuat Node (sebelum perubahan
+  AI diterapkan), jadi bila user menyimpan file tepat saat AI selesai, dua snapshot bisa berjalan bersamaan.
+  Akibat terburuknya versi ganda; hilang sendiri di tahap 7.
+- **Pembersihan sesi kedaluwarsa** (tiap jam) masih dijalankan Node.
 - **Konversi nilai** di `internal/userdb` meniru JavaScript (`Number()`, `parseInt`, `Date.parse`);
   `go test ./...` membandingkannya dengan jawaban Node yang direkam di `testdata/js.json`.
 

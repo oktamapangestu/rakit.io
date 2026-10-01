@@ -16,15 +16,18 @@ import (
 	"syscall"
 	"time"
 
+	"rakit.icu/server/internal/api"
 	"rakit.icu/server/internal/app"
 	"rakit.icu/server/internal/auth"
 	"rakit.icu/server/internal/config"
+	"rakit.icu/server/internal/google"
 	"rakit.icu/server/internal/plans"
 	"rakit.icu/server/internal/proxy"
 	"rakit.icu/server/internal/siteapi"
 	"rakit.icu/server/internal/sites"
 	"rakit.icu/server/internal/store"
 	"rakit.icu/server/internal/userdb"
+	"rakit.icu/server/internal/versions"
 )
 
 // Username = subdomain, jadi harus valid sebagai label DNS (sama dengan src/username.js).
@@ -60,11 +63,19 @@ func main() {
 		log.Fatalf("NODE_UPSTREAM tidak valid: %v", err)
 	}
 	site := sites.New(cfg, db)
-	pages := app.New(cfg, auth.New(cfg, db))
-	siteDB := siteapi.New(userdb.New(cfg, plans.New(db)))
+	sessions := auth.New(cfg, db)
+	limits := plans.New(db)
+	projectDB := userdb.New(cfg, limits)
+	pages := app.New(cfg, sessions)
+	siteDB := siteapi.New(projectDB)
+	appAPI, err := api.New(cfg, db, sessions, limits, projectDB, versions.New(cfg, db, limits))
+	if err != nil {
+		log.Fatal(err)
+	}
+	googleLogin := google.New(cfg, db, sessions)
 
 	// Routing berdasarkan host:
-	// - rakit.icu          -> halaman & aset aplikasi (Go); /api dan /auth masih di Node
+	// - rakit.icu          -> halaman, aset, login Google, dan sebagian /api (Go); /api lainnya masih di Node
 	// - <slug>.rakit.icu   -> website project & /api/db (Go); /api lainnya (asisten AI) masih di Node
 	// - lainnya (www, host tak dikenal) -> Node
 	under := func(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
@@ -72,7 +83,17 @@ func main() {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := hostname(r)
 		if host == cfg.BaseDomain {
-			if !under(r.URL.Path, "/api") && !under(r.URL.Path, "/auth/google") && pages.Serve(w, r) {
+			switch {
+			case under(strings.ToLower(r.URL.Path), "/api"):
+				// Akun, project, file, riwayat versi di Go; rute /api lain masih di Node.
+				if api.Matches(r) {
+					appAPI.ServeHTTP(w, r)
+					return
+				}
+			case google.Matches(r.URL.Path):
+				googleLogin.ServeHTTP(w, r)
+				return
+			case pages.Serve(w, r):
 				return
 			}
 			node.ServeHTTP(w, r)

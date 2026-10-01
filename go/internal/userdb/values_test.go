@@ -5,6 +5,8 @@ import (
 	"math"
 	"os"
 	"testing"
+
+	"rakit.icu/server/internal/jsconv"
 )
 
 // testdata/js.json berisi jawaban Node (V8) untuk masukan yang sama, supaya konversi di Go
@@ -28,7 +30,7 @@ func TestMatchesJavaScript(t *testing.T) {
 		}
 	}
 	for _, c := range data.Nums {
-		got := jsNumber(c[0].(string))
+		got := jsconv.Number(c[0].(string))
 		switch want := c[1].(type) {
 		case float64:
 			if got != want {
@@ -41,7 +43,7 @@ func TestMatchesJavaScript(t *testing.T) {
 		}
 	}
 	for _, c := range data.Ints {
-		got, ok := jsParseInt(c[0].(string))
+		got, ok := jsconv.ParseInt(c[0].(string))
 		want, isNumber := c[1].(float64)
 		if ok != isNumber || (ok && float64(got) != want) {
 			t.Errorf("jsParseInt(%q) = %v (%v), JavaScript: %v", c[0], got, ok, c[1])
