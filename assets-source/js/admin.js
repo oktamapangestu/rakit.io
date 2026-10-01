@@ -455,6 +455,84 @@
     $('#plans').replaceChildren(form);
   }
 
+  // ---------- Model AI editor: utama & cadangan ----------
+  async function aiModelsApi(method, body) {
+    const res = await fetch('/api/admin/ai-models', {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
+    return data;
+  }
+
+  async function loadAiModels() {
+    try {
+      renderAiModels(await aiModelsApi('GET'));
+    } catch (err) {
+      $('#aiModels').replaceChildren(h('p', { class: 'error' }, `Gagal memuat pengaturan model AI: ${err.message}`));
+    }
+  }
+
+  function renderAiModels(data) {
+    const status = h('span', { class: 'save-status', role: 'status' });
+    const saveBtn = h('button', { type: 'submit', class: 'save-btn', disabled: true }, 'Simpan model');
+    const modelInput = (value, placeholder, required) => h('input', { value: String(value ?? ''), placeholder, required, class: 'mono', maxlength: '100', spellcheck: 'false', autocomplete: 'off' });
+    const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, h('small', {}, hint));
+    const inputs = {
+      model: modelInput(data.models.model, 'id model di gateway', true),
+      fallback: modelInput(data.models.fallback, 'kosong = tanpa cadangan'),
+      vision: modelInput(data.models.vision, 'kosong = lampiran gambar dimatikan'),
+      visionFallback: modelInput(data.models.visionFallback, 'kosong = tanpa cadangan'),
+    };
+
+    const form = h('form', { class: 'card plans-card', novalidate: true },
+      h('div', { class: 'plans-title' },
+        h('div', {},
+          h('h2', {}, 'Model AI editor'),
+          h('p', { class: 'sub' }, `Bila model utama gangguan (error, sibuk terus, atau tidak merespons), permintaan otomatis diulang dengan model cadangan. Model yang gangguan dilewati ${num(data.cooldownMinutes)} menit, lalu dicoba lagi.`)),
+        h('div', { class: 'plans-actions' }, status, saveBtn)),
+      h('div', { class: 'ai-model-grid' },
+        field('Model utama', inputs.model, 'Dipakai untuk Builder & Plan.'),
+        field('Model cadangan', inputs.fallback, 'Dipakai saat model utama gangguan.'),
+        field('Model gambar (vision)', inputs.vision, 'Membaca gambar yang dilampirkan di prompt.'),
+        field('Model gambar cadangan', inputs.visionFallback, 'Dipakai saat model gambar gangguan.')),
+      h('h3', { class: 'sub-title' }, 'Keadaan model'),
+      h('div', { class: 'table-wrap' }, h('table', {},
+        h('thead', {}, h('tr', {}, ['Model', 'Status', 'Gangguan', 'Error terakhir'].map((t) => h('th', {}, t)))),
+        h('tbody', {}, data.health.map((m) => h('tr', {},
+          h('td', { class: 'mono' }, m.model),
+          h('td', {}, h('span', { class: `pill ${m.down ? 'failed' : 'succeeded'}` }, m.down ? `Gangguan · dicoba lagi ${Math.ceil(m.retryInSeconds / 60)} mnt` : 'Normal')),
+          h('td', { class: 'num' }, num(m.failures)),
+          h('td', {}, m.lastError
+            ? h('span', { class: 'muted', title: m.lastError }, `${new Date(m.lastFailureAt).toLocaleString('id-ID')} · ${m.lastError.slice(0, 80)}`)
+            : h('span', { class: 'muted' }, '—'))))))),
+      h('p', { class: 'usage-note' }, `Dialihkan ke model cadangan ${num(data.fallbackUsed)} kali sejak server dinyalakan.`));
+
+    const markDirty = () => { saveBtn.disabled = false; status.textContent = 'Belum disimpan'; status.className = 'save-status dirty'; };
+    form.addEventListener('input', markDirty);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      saveBtn.disabled = true;
+      status.textContent = 'Menyimpan…';
+      status.className = 'save-status';
+      try {
+        const saved = await aiModelsApi('PUT', Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value.trim()])));
+        renderAiModels(saved);
+        const done = $('#aiModels .save-status');
+        done.textContent = 'Tersimpan ✓';
+        done.className = 'save-status ok';
+      } catch (err) {
+        saveBtn.disabled = false;
+        status.textContent = err.message;
+        status.className = 'save-status error-text';
+      }
+    };
+    $('#aiModels').replaceChildren(form);
+  }
+
   // ---------- Asisten AI website: model & pemakaian ----------
   async function assistantApi(method, path = '', body) {
     const res = await fetch(`/api/admin/assistant${path}`, {
@@ -597,5 +675,6 @@
   setDays([7, 30, 90].includes(days) ? days : 30);
   load();
   loadPlans();
+  loadAiModels();
   loadAssistantAdmin();
 })();

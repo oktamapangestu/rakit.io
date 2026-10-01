@@ -10,6 +10,7 @@ import { versionBeforeAi } from './versions.js';
 import { cleanPath, isAllowedFile, isImageFile, LIMITS, listTree, readText, userRoot } from './files.js';
 import { COLUMN_TYPES, hasDatabase, listTables, OPERATIONS, schemaSummary } from './userdb.js';
 import { acquireSlot, countRetry, QueueError, reportBusy, reportSuccess } from './aiqueue.js';
+import { aiModels, countFallback, modelOrder, reportModelDown, reportModelUp } from './aimodels.js';
 
 export const ai = express.Router();
 
@@ -198,7 +199,7 @@ class ProviderError extends Error {
 }
 
 // Panggil endpoint chat completions (format OpenAI) dengan streaming SSE.
-async function chatCompletion({ model = config.ai.model, messages, tools, signal, onText, onThinking }) {
+async function chatCompletion({ model, messages, tools, signal, onText, onThinking }) {
   const res = await fetch(`${config.ai.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${config.ai.apiKey}`, 'Content-Type': 'application/json' },
@@ -275,12 +276,47 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
   signal?.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
 });
 
+// Gangguan di sisi model/provider (bukan pembatalan user, antrean penuh, atau API key yang salah):
+// alasan untuk pindah ke model cadangan.
+function isOutage(err, signal) {
+  if (signal?.aborted || err instanceof HttpError) return false;
+  if (err instanceof ProviderError) return ![401, 403].includes(err.status);
+  return true; // jaringan putus, timeout, stream terputus di tengah jawaban
+}
+
 /**
- * Panggil provider lewat antrean: tunggu slot, jalankan, lepas slot. Bila provider menolak karena
- * sibuk (429/503), coba lagi dengan jeda (atau sesuai Retry-After) sampai 3 kali.
- * hooks: { signal, onText, onThinking, onQueued(pos, total), onRunning(), onRetry(attempt, seconds) }
+ * Panggil AI dengan strategi cadangan: coba model utama; bila gangguan, ulangi permintaan yang sama
+ * dengan model cadangan. Model yang gangguan dilewati beberapa menit (lihat aimodels.js), jadi putaran
+ * berikutnya langsung memakai cadangan. `vision: true` memakai pasangan model gambar.
+ * hooks: { signal, onText, onThinking, onQueued(pos, total), onRunning(), onRetry(attempt, seconds), onModel(model) }
  */
-async function callAI(request, hooks) {
+async function callAI({ vision = false, ...request }, hooks) {
+  const models = aiModels();
+  const order = vision ? modelOrder(models.vision, models.visionFallback) : modelOrder(models.model, models.fallback);
+  for (let i = 0; ; i++) {
+    const model = order[i];
+    const hasNext = i < order.length - 1;
+    try {
+      // Ada cadangan: cukup 1 kali coba ulang saat sibuk, lalu pindah — daripada user menunggu lama.
+      const reply = await callModel({ ...request, model }, hooks, hasNext ? 1 : RETRY_DELAYS_MS.length);
+      reportModelUp(model);
+      if (i > 0) countFallback();
+      hooks.onModel?.(model);
+      return reply;
+    } catch (err) {
+      if (!isOutage(err, hooks.signal)) throw err;
+      reportModelDown(model, err.message);
+      if (!hasNext) throw err;
+      console.error(`AI: model "${model}" gangguan (${err.message}); pindah ke "${order[i + 1]}"`);
+    }
+  }
+}
+
+/**
+ * Panggil satu model lewat antrean: tunggu slot, jalankan, lepas slot. Bila provider menolak karena
+ * sibuk (429/503), coba lagi dengan jeda (atau sesuai Retry-After) sampai `maxRetries` kali.
+ */
+async function callModel(request, hooks, maxRetries) {
   for (let attempt = 0; ; attempt++) {
     let release;
     try {
@@ -299,7 +335,7 @@ async function callAI(request, hooks) {
     } catch (err) {
       const busy = err instanceof ProviderError && [429, 503].includes(err.status);
       if (busy) reportBusy();
-      if (!busy || attempt >= RETRY_DELAYS_MS.length || hooks.signal?.aborted) throw err;
+      if (!busy || attempt >= maxRetries || hooks.signal?.aborted) throw err;
       const delay = err.retryAfter ? Math.min(err.retryAfter * 1000, 30_000) : RETRY_DELAYS_MS[attempt] + Math.random() * 1000;
       countRetry();
       hooks.onRetry?.(attempt + 1, Math.ceil(delay / 1000));
@@ -643,13 +679,14 @@ async function runJob(job, { user, slug, messageId, userMessageId, threadId, pro
   const send = (event) => emit(job, event);
   let status = 'error';
   let usage = { input_tokens: 0, output_tokens: 0 };
+  let usedModel = aiModels().model; // model yang benar-benar menjawab (bisa cadangan), untuk statistik
   try {
     let request = prompt;
     if (images.length) {
       // Langkah 1: model vision mendeskripsikan gambar.
       send({ type: 'vision' });
       const seen = await callAI({
-        model: config.ai.visionModel,
+        vision: true,
         messages: [
           { role: 'system', content: VISION_PROMPT },
           { role: 'user', content: [{ type: 'text', text: `The user's request: ${prompt}` }, ...images.map((url) => ({ type: 'image_url', image_url: { url } }))] },
@@ -698,6 +735,7 @@ async function runJob(job, { user, slug, messageId, userMessageId, threadId, pro
         send({ type: 'running' });
       },
       onRetry: (attempt, seconds) => send({ type: 'retry', attempt, max: 3, seconds }),
+      onModel: (model) => { usedModel = model; },
     };
     const convo = [{ role: 'system', content: PROMPTS[mode] }, ...merged];
 
@@ -762,7 +800,7 @@ async function runJob(job, { user, slug, messageId, userMessageId, threadId, pro
     send({ type: 'error', error: msg, message: publicMessage(sql.message.get(messageId, user.id)), credits: creditInfo(user.id) });
   } finally {
     running.delete(user.id);
-    q.logAiRequest.run(user.id, Date.now(), config.ai.model, status, usage.input_tokens ?? 0, usage.output_tokens ?? 0);
+    q.logAiRequest.run(user.id, Date.now(), usedModel, status, usage.input_tokens ?? 0, usage.output_tokens ?? 0);
     job.finished = true;
     for (const listener of job.listeners) listener(null); // tanda selesai untuk stream yang tersambung
     setTimeout(() => jobs.delete(messageId), 5 * 60 * 1000).unref(); // beri waktu editor menyambung ulang
@@ -820,7 +858,7 @@ ai.post('/prompt', loadProject, async (req, res) => {
 
   // Lampiran gambar (maks. 3): gambar ukuran kerja untuk AI + thumbnail kecil untuk riwayat chat.
   const images = parseImages(req.body?.images, IMAGE_MAX_BYTES);
-  if (images.length && !config.ai.visionModel) throw new HttpError(400, 'Lampiran gambar belum tersedia di server ini');
+  if (images.length && !aiModels().vision) throw new HttpError(400, 'Lampiran gambar belum tersedia di server ini');
   const thumbs = images.length ? parseImages(req.body?.thumbs, THUMB_MAX_BYTES).slice(0, images.length) : [];
 
   const reservation = reserveCredits(req.user.id, images.length ? config.ai.imagePromptCredits : config.ai.creditsPerPrompt);

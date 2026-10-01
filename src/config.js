@@ -27,7 +27,9 @@ export const config = {
     enabled: Boolean(env.AI_API_KEY && env.AI_BASE_URL),
     baseUrl: (env.AI_BASE_URL || '').replace(/\/+$/, ''),
     apiKey: env.AI_API_KEY || '',
+    // Model editor & cadangannya: default sebelum owner menyimpan di dashboard (lihat aimodels.js).
     model: env.AI_MODEL || 'deepseek-v4-pro',
+    fallbackModel: env.AI_FALLBACK_MODEL || '',
     maxTokens: Number(env.AI_MAX_TOKENS || 64000),
     // Antrean: jumlah panggilan ke provider yang boleh berjalan bersamaan, panjang antrean, dan batas tunggu.
     maxConcurrent: Math.max(1, Number(env.AI_MAX_CONCURRENT || 4)),
@@ -41,6 +43,7 @@ export const config = {
     // Prompt dengan gambar: model yang bisa "melihat" (vision) mendeskripsikan gambar, lalu AI_MODEL membangun.
     // Kosongkan AI_VISION_MODEL untuk mematikan lampiran gambar.
     visionModel: env.AI_VISION_MODEL ?? 'deepseek-v4.1-flash',
+    visionFallbackModel: env.AI_VISION_FALLBACK_MODEL || '',
     imagePromptCredits: Math.max(1, Number(env.AI_IMAGE_PROMPT_CREDITS || 2)),
     maxImages: 3,
   },

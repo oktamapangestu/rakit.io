@@ -7,6 +7,7 @@ import { HttpError } from './http-error.js';
 import { requireAuth } from './auth.js';
 import { adminAssistantView, saveAssistantSettings, setSiteBlocked } from './assistant.js';
 import { queueStats } from './aiqueue.js';
+import { aiModels, aiModelsView, saveAiModels } from './aimodels.js';
 import {
   FREE_DAILY_MAX, FREE_BONUS_MAX, freeBonusCredits, freeDailyCredits, getPlan, modelCost, PLAN_IDS, PLAN_LIMITS, planSettings,
   saveFreeBonusCredits, saveFreeDailyCredits, saveModelCost, savePlanSettings,
@@ -117,6 +118,13 @@ function plansView() {
 }
 
 admin.get('/plans', (req, res) => res.json(plansView()));
+
+// Model AI editor: model utama & cadangan (dipakai saat model utama gangguan), juga untuk pembaca gambar.
+admin.get('/ai-models', (req, res) => res.json(aiModelsView()));
+admin.put('/ai-models', express.json(), (req, res) => {
+  saveAiModels(req.body);
+  res.json(aiModelsView());
+});
 
 // Asisten AI website: model (aktif/nonaktif, harga), saldo percobaan, website pemakai & blokir.
 admin.get('/assistant', (req, res) => res.json(adminAssistantView()));
@@ -291,7 +299,7 @@ admin.get('/stats', async (req, res) => {
     days,
     users,
     signupsByDay,
-    ai: { ...aiTotals, byStatus: aiByStatus, byDay: aiByDay, models: aiModels, currentModel: config.ai.model },
+    ai: { ...aiTotals, byStatus: aiByStatus, byDay: aiByDay, models: aiModels, currentModel: aiModels().model },
     credits,
     subscribers,
     creditUsers,

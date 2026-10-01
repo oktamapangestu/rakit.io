@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { db, q } from './db.js';
+import { aiModels } from './aimodels.js';
 import { addAssistantBalance, isAssistantPackage } from './assistant.js';
 import { HttpError } from './http-error.js';
 import { activatePlan, activePlan, cycleOf, dayOf, freeBonusCredits, freeDailyCredits, planFromPackageId, wibDay } from './plans.js';
@@ -57,7 +58,7 @@ export function creditInfo(userId) {
     remaining: planRemaining + bonusLeft + freeRemaining + purchased,
     costPerPrompt: config.ai.creditsPerPrompt,
     // Lampiran gambar di prompt (null = tidak tersedia)
-    images: config.ai.visionModel ? { cost: config.ai.imagePromptCredits, max: config.ai.maxImages } : null,
+    images: aiModels().vision ? { cost: config.ai.imagePromptCredits, max: config.ai.maxImages } : null,
     resetsAt: new Date(wibDay().resetsAt).toISOString(), // jatah gratis terisi lagi 00.00 WIB
     plan: plan && {
       id: plan.id,
