@@ -50,6 +50,8 @@ export const config = {
   billing: {
     enabled: Boolean(env.KASERA_API_KEY),
     apiKey: env.KASERA_API_KEY || '',
+    // Alamat API Kasera; hanya diganti saat test (server tiruan).
+    baseUrl: (env.KASERA_BASE_URL || 'https://pay.kasera.id/v1').replace(/\/+$/, ''),
     webhookSecret: env.KASERA_WEBHOOK_SECRET || '',
     livemode: (env.KASERA_API_KEY || '').startsWith('kp_live_'),
     // Format: "kredit:harga,kredit:harga" (harga dalam rupiah).

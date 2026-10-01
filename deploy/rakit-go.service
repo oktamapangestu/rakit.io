@@ -1,0 +1,26 @@
+# Unit systemd untuk server Go rakit.icu (migrasi bertahap) — salin ke /etc/systemd/system/rakit-go.service
+#
+#   sudo cp deploy/rakit-go.service /etc/systemd/system/rakit-go.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now rakit-go.service
+#
+# Go berdiri di depan server Node (rakit.service, port 3010) dan meneruskan rute yang belum dipindah.
+# Arahkan Nginx ke port 3011 (lihat go/README.md). PORT di bawah menimpa PORT di .env.
+[Unit]
+Description=rakit.icu - server Go (di depan Node)
+After=network.target rakit.service
+Wants=rakit.service
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/rakit
+ExecStart=/srv/rakit/go/bin/rakit --env-file /srv/rakit/.env
+Restart=always
+RestartSec=5
+User=root
+Environment=HOST=127.0.0.1
+Environment=PORT=3011
+Environment=NODE_UPSTREAM=http://127.0.0.1:3010
+
+[Install]
+WantedBy=multi-user.target

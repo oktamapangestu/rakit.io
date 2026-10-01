@@ -4,3 +4,4 @@ data/
 .env.*
 .env.bak*
 .DS_Store
+go/bin/

@@ -8,7 +8,6 @@ import { requireAuth } from './auth.js';
 import { creditInfo, creditPayment } from './credits.js';
 import { assertCanBuy, freeHistory, freeStorage, planForSale, planFromPackageId, planPackageId, publicPlans } from './plans.js';
 
-const KASERA_BASE = 'https://pay.kasera.id/v1';
 const PAYMENT_TTL_MINUTES = 30;
 const SIGNATURE_TOLERANCE_S = 5 * 60;
 
@@ -17,7 +16,7 @@ export const billing = express.Router();
 // ---------- Kasera Pay API ----------
 
 async function kasera(method, path, { body, idempotencyKey } = {}) {
-  const res = await fetch(`${KASERA_BASE}${path}`, {
+  const res = await fetch(`${config.billing.baseUrl}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${config.billing.apiKey}`,
