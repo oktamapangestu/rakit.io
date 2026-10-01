@@ -126,7 +126,7 @@
         root.replaceChildren();
         document.removeEventListener('keydown', onKey, true);
         resolve(value);
-        editor?.focus();
+        autoFocus(editor);
       };
       const onKey = (e) => {
         if (e.key === 'Escape') { e.preventDefault(); close(null); }
@@ -272,7 +272,7 @@
       editor.setModel(state.models.get(path));
       const vs = state.viewStates.get(path);
       if (vs) editor.restoreViewState(vs);
-      editor.focus();
+      autoFocus(editor);
       expandTo(path);
       if (extOf(path) === 'html' && state.previewPath !== path) {
         state.previewPath = path;
@@ -809,6 +809,10 @@
 
   // ---------- Tampilan HP ----------
   const mobileQuery = window.matchMedia('(max-width: 760px)');
+  // Layar sentuh: jangan fokuskan kotak teks/editor secara otomatis, karena keyboard langsung muncul
+  // dan menutupi separuh layar. Fokus hanya saat pengguna sendiri mengetuk kotaknya.
+  const touchQuery = window.matchMedia('(pointer: coarse)');
+  const autoFocus = (target) => { if (!touchQuery.matches) target?.focus(); };
 
   function setMobileView(view) {
     document.body.dataset.mobileView = view;
@@ -1247,6 +1251,7 @@
     $('#dataView').hidden = mode !== 'data';
     $('#diagramView').hidden = mode !== 'diagram';
     $('#historyView').hidden = mode !== 'history';
+    $('#historyBack').onclick = () => setHistoryDetail(false);
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.setAttribute('aria-selected', String(btn.dataset.mode === mode));
     });
@@ -1255,13 +1260,14 @@
     } else if (mode === 'diagram') {
       diagramLoad();
     } else if (mode === 'history') {
+      setHistoryDetail(false);
       historyLoad();
     } else if (mode === 'ai') {
       renderAiEmpty();
       updateAiComposer();
-      $('#aiInput').focus();
+      autoFocus($('#aiInput'));
     } else if (state.active) {
-      editor?.focus();
+      autoFocus(editor);
     }
   }
 
@@ -1318,7 +1324,7 @@
     storage.set(`rakit.aiThread.${state.projectSlug}`, 'new');
     $('#aiMessages').replaceChildren();
     renderAiEmpty();
-    $('#aiInput').focus();
+    autoFocus($('#aiInput'));
   }
 
   function renderMessage(m) {
@@ -1449,7 +1455,7 @@
       }
     }
     renderAttachments();
-    $('#aiInput').focus();
+    autoFocus($('#aiInput'));
   }
 
   function renderAttachments() {
@@ -1840,7 +1846,7 @@
 
   function bindAiEvents() {
     document.querySelectorAll('[data-ai-mode]').forEach((btn) => {
-      btn.onclick = () => { setAiMode(btn.dataset.aiMode); $('#aiInput').focus(); };
+      btn.onclick = () => { setAiMode(btn.dataset.aiMode); autoFocus($('#aiInput')); };
     });
     setAiMode(ai.mode);
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
@@ -2506,7 +2512,7 @@
     $('#aiInput').value = text;
     autoGrow();
     updateAiComposer();
-    $('#aiInput').focus();
+    autoFocus($('#aiInput'));
   };
   const openTableAccess = (name) => { dbState.active = name; setMode('data'); setTimeout(() => openTableSettings(name), 300); };
 
@@ -3172,6 +3178,15 @@
   // Bahasa dibuat sederhana untuk pemula: "versi" = potret semua file project pada satu waktu.
   const hist = { list: [], history: null, selected: null, detail: null, seq: 0 };
 
+  // Panel sempit (HP): daftar versi dan detailnya ditampilkan bergantian, masing-masing layar penuh.
+  // Di panel lebar keduanya selalu tampil berdampingan, jadi kelas ini tidak berpengaruh.
+  function setHistoryDetail(show) {
+    const layout = $('#historyLayout');
+    layout.classList.toggle('showing-detail', show);
+    layout.scrollTop = 0;
+    if (!show) layout.querySelector('.history-item.selected')?.scrollIntoView({ block: 'nearest' });
+  }
+
   const HIST_ICON = {
     manual: 'M4 1.5h8l.5.5v12.3l-.8.4L8 12.1l-3.7 2.6-.8-.4V2zM5 2.5v10.8l2.7-1.9h.6l2.7 1.9V2.5z',
     ai: SPARK,
@@ -3225,6 +3240,7 @@
         ? [' ', h('button', { type: 'button', class: 'link-btn', onclick: () => openTopup('plans') }, 'Ingin riwayat lebih lama?')]
         : null);
     const saveBtn = h('button', { type: 'button', class: 'history-save', onclick: saveVersion }, svg(HIST_ICON.manual), 'Simpan versi sekarang');
+    $('#historyLayout').classList.toggle('has-versions', hist.list.length > 0);
     if (!hist.list.length) return $('#historyList').replaceChildren(saveBtn, note);
 
     const items = [];
@@ -3239,7 +3255,7 @@
       items.push(h('button', {
         type: 'button',
         class: `history-item ${v.kind}${v.id === hist.selected ? ' selected' : ''}`,
-        onclick: () => { hist.selected = v.id; renderHistoryList(); showVersion(v.id); },
+        onclick: () => { hist.selected = v.id; renderHistoryList(); setHistoryDetail(true); showVersion(v.id); },
       },
       h('span', { class: 'history-icon' }, svg(HIST_ICON[v.kind] ?? HIST_ICON.edit)),
       h('span', { class: 'history-text' },

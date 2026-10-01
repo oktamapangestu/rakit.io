@@ -1640,7 +1640,7 @@ button.credit-badge:disabled { cursor: default; }
   .tree { padding: 4px 6px 12px; }
 
   /* Area editor */
-  .editor-top { gap: 6px; min-height: 44px; padding: 6px 6px 0; }
+  .editor-top { gap: 6px; min-height: 44px; padding: 6px 10px 0 6px; }
   .ai-head { padding-left: 4px; }
   .ai-head .ai-title { display: none; }
   .mode-switch button { padding: 0 10px; }
@@ -1992,11 +1992,33 @@ button.credit-badge:disabled { cursor: default; }
 .history-image-compare figcaption { color: var(--muted); font-size: 12px; text-align: center; }
 .history-none { color: var(--muted); }
 
-/* Panel editor sempit (3 kolom di layar laptop, atau HP): daftar di atas, detail di bawah. */
+.history-back { display: none; }
+
+/* Panel editor sempit (3 kolom di layar laptop, atau HP): satu area gulir. Daftar versi dan detailnya
+   tampil bergantian (lihat setHistoryDetail); belum ada versi = tombol simpan lalu penjelasannya. */
 @container (max-width: 700px) {
-  .history-layout { grid-template-columns: 1fr; grid-template-rows: minmax(150px, 36%) 1fr; }
-  .history-list { border-right: 0; border-bottom: 1px solid var(--line); }
-  .history-detail { padding: 16px 14px 24px; }
+  .history-layout { display: block; overflow-y: auto; overscroll-behavior: contain; }
+  .history-list, .history-detail { overflow: visible; }
+  .history-list { border-right: 0; padding: 10px 6px 12px; }
+  .history-detail { padding: 8px 14px 24px; }
+  .history-layout.has-versions:not(.showing-detail) .history-detail,
+  .history-layout.showing-detail .history-list { display: none; }
+  .history-layout.showing-detail .history-back {
+    display: inline-flex;
+    align-items: center;
+    height: 34px;
+    margin: 10px 8px 0;
+    padding: 0 12px;
+    border: 1px solid var(--line-2);
+    border-radius: 9px;
+    background: var(--panel-2);
+    color: var(--text);
+    font: 600 12.5px var(--ui);
+    cursor: pointer;
+  }
+  /* Tanpa versi: tombol simpan sudah ada di atas, jangan diulang di penjelasan. */
+  .history-layout:not(.has-versions) .history-welcome { margin: 16px auto 8px; }
+  .history-layout:not(.has-versions) .history-primary { display: none; }
   .history-restore-box { flex-direction: column; align-items: stretch; }
   .history-file { grid-template-columns: minmax(0, 1fr) auto; }
   .history-file-actions { grid-column: 1 / -1; }
