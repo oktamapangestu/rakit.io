@@ -24,6 +24,8 @@ func Open(dataDir string) (*Store, error) {
 	q.Add("_pragma", "busy_timeout(5000)")
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "foreign_keys(1)")
+	// Transaksi selalu BEGIN IMMEDIATE: langsung mengambil kunci tulis, tidak gagal di tengah jalan.
+	q.Set("_txlock", "immediate")
 	dsn := "file:" + filepath.ToSlash(filepath.Join(dataDir, "rakit.db")) + "?" + q.Encode()
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -33,6 +35,41 @@ func Open(dataDir string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// DB: koneksi mentah, untuk paket yang punya banyak query sendiri (kredit, pembayaran, AI, asisten).
+func (s *Store) DB() *sql.DB { return s.db }
+
+// Setting: pengaturan platform yang disimpan owner lewat dashboard (tabel settings); ok = false bila belum ada.
+func (s *Store) Setting(key string) (value string, ok bool) {
+	err := s.db.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
+	return value, err == nil
+}
+
+func (s *Store) SetSetting(key, value string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+		ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, key, value, now())
+	return err
+}
+
+// Subscription: langganan akun (masih berlaku atau tidak), atau nil.
+type Subscription struct {
+	Plan      string
+	StartedAt int64
+	ExpiresAt int64
+}
+
+// Q: yang bisa menjalankan query — *sql.DB atau *sql.Tx.
+type Q interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func SubscriptionOf(q Q, userID int64) (*Subscription, error) {
+	var sub Subscription
+	err := q.QueryRow("SELECT plan, started_at, expires_at FROM subscriptions WHERE user_id = ?", userID).Scan(&sub.Plan, &sub.StartedAt, &sub.ExpiresAt)
+	return oneOrNil(&sub, err)
+}
 
 func now() int64 { return time.Now().UnixMilli() }
 

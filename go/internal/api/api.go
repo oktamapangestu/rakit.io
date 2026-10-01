@@ -1,7 +1,8 @@
 // Package api: API aplikasi di domain utama (/api/...) yang sudah dipindah ke Go — akun, project,
 // file, riwayat versi, editor database, dan diagram. Padanan src/api.js, src/projects.js,
 // src/database.js, src/diagrams.js, dan rute di src/versions.js.
-// Rute /api lain (AI, pembayaran, asisten, admin) masih diteruskan ke Node.
+// plus AI, kredit, pembayaran, dan asisten website. Hanya dashboard owner (/api/admin) yang masih
+// diteruskan ke Node.
 package api
 
 import (
@@ -15,8 +16,13 @@ import (
 	"strings"
 	"time"
 
+	"rakit.icu/server/internal/ai"
+	"rakit.icu/server/internal/aimodels"
+	"rakit.icu/server/internal/assistant"
 	"rakit.icu/server/internal/auth"
+	"rakit.icu/server/internal/billing"
 	"rakit.icu/server/internal/config"
+	"rakit.icu/server/internal/credits"
 	"rakit.icu/server/internal/httpx"
 	"rakit.icu/server/internal/jsconv"
 	"rakit.icu/server/internal/plans"
@@ -27,6 +33,18 @@ import (
 
 const jsonLimit = 1024 * 1024
 
+// Services: layanan yang dipakai rute API.
+type Services struct {
+	Plans     *plans.Plans
+	UserDB    *userdb.DB
+	Versions  *versions.Service
+	Credits   *credits.Service
+	Billing   *billing.Service
+	AI        *ai.Service
+	AIModels  *aimodels.Service
+	Assistant *assistant.Service
+}
+
 type Handler struct {
 	cfg      *config.Config
 	db       *store.Store
@@ -34,6 +52,7 @@ type Handler struct {
 	plans    *plans.Plans
 	userdb   *userdb.DB
 	versions *versions.Service
+	svc      Services
 
 	// Batas per akun (atau per IP bila belum login) supaya satu pengguna tidak bisa membanjiri server.
 	// Auto-save normal hanya ±60 penulisan/menit.
@@ -42,14 +61,14 @@ type Handler struct {
 	dummyHash     string // supaya waktu respons login sama walau user tidak ada
 }
 
-func New(cfg *config.Config, db *store.Store, a *auth.Auth, p *plans.Plans, udb *userdb.DB, v *versions.Service) (*Handler, error) {
+func New(cfg *config.Config, db *store.Store, a *auth.Auth, svc Services) (*Handler, error) {
 	dummy, err := auth.HashPassword("dummy-password")
 	if err != nil {
 		return nil, err
 	}
 	const busy = "Terlalu banyak permintaan dalam waktu singkat. Tunggu sebentar lalu coba lagi."
 	return &Handler{
-		cfg: cfg, db: db, auth: a, plans: p, userdb: udb, versions: v,
+		cfg: cfg, db: db, auth: a, plans: svc.Plans, userdb: svc.UserDB, versions: svc.Versions, svc: svc,
 		reads:       httpx.NewRateLimiter(time.Minute, 1200, busy),
 		writes:      httpx.NewRateLimiter(time.Minute, 300, busy),
 		authLimiter: httpx.NewRateLimiter(15*time.Minute, 30, ""),
@@ -66,6 +85,7 @@ type request struct {
 
 	body       map[string]any
 	raw        []byte // body JSON mentah (untuk yang butuh urutan kunci)
+	bodyLimit  int64  // 0 = batas bawaan
 	bodyLoaded bool
 }
 
@@ -91,12 +111,23 @@ func segments(r *http.Request) ([]string, bool) {
 	return parts, true
 }
 
-var groups = map[string]bool{"config": true, "register": true, "login": true, "logout": true, "me": true, "projects": true, "files": true, "versions": true, "database": true, "diagrams": true}
+var groups = map[string]bool{
+	"config": true, "register": true, "login": true, "logout": true, "me": true, "projects": true, "files": true,
+	"versions": true, "database": true, "diagrams": true, "ai": true, "billing": true, "assistant": true,
+}
 
-// Matches: apakah path /api ini sudah ditangani Go.
+// Matches: apakah path /api ini sudah ditangani Go. Dari dashboard owner baru pengaturan model AI
+// (keadaannya ada di memori server ini); sisanya masih di Node.
 func Matches(r *http.Request) bool {
 	parts, ok := segments(r)
-	return ok && len(parts) > 0 && groups[strings.ToLower(parts[0])]
+	if !ok || len(parts) == 0 {
+		return false
+	}
+	group := strings.ToLower(parts[0])
+	if group == "admin" {
+		return len(parts) > 1 && strings.EqualFold(parts[1], "ai-models")
+	}
+	return groups[group]
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +135,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hd.Set("X-Frame-Options", "DENY")
 	hd.Set("X-Content-Type-Options", "nosniff")
 	hd.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+
+	parts, _ := segments(r)
+	// Webhook Kasera: body mentah (untuk verifikasi tanda tangan), tanpa sesi & tanpa cek Origin.
+	if r.Method == http.MethodPost && len(parts) == 2 && strings.EqualFold(parts[0], "billing") && strings.EqualFold(parts[1], "webhook") {
+		h.svc.Billing.Webhook(w, r)
+		return
+	}
 
 	// Semua *.rakit.icu dianggap "same-site" oleh browser, jadi SameSite=Lax saja tidak cukup untuk
 	// mencegah website user mengirim request ke API. Wajibkan Origin = origin aplikasi.
@@ -131,7 +169,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parts, _ := segments(r)
 	req.rest = parts[1:]
 	var err error
 	switch strings.ToLower(parts[0]) {
@@ -155,6 +192,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = h.database(req)
 	case "diagrams":
 		err = h.diagrams(req)
+	case "ai":
+		err = h.ai(req)
+	case "billing":
+		err = h.billing(req)
+	case "assistant":
+		err = h.assistant(req)
+	case "admin":
+		err = h.adminModels(req)
 	}
 	if err != nil {
 		httpx.Fail(w, err)
@@ -216,7 +261,11 @@ func (q *request) load() error {
 	if !isJSON(q.r) {
 		return nil
 	}
-	raw, err := readLimited(q.w, q.r, jsonLimit)
+	limit := int64(jsonLimit)
+	if q.bodyLimit > 0 {
+		limit = q.bodyLimit
+	}
+	raw, err := readLimited(q.w, q.r, limit)
 	if err != nil {
 		return err
 	}

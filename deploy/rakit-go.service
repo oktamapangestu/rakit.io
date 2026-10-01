@@ -6,6 +6,7 @@
 #
 # Go berdiri di depan server Node (rakit.service, port 3010) dan meneruskan rute yang belum dipindah.
 # Arahkan Nginx ke port 3011 (lihat go/README.md). PORT di bawah menimpa PORT di .env.
+# Job AI berjalan di sini, jadi rakit.service (Node) wajib diberi Environment=AI_JOBS_ELSEWHERE=1.
 [Unit]
 Description=rakit.icu - server Go (di depan Node)
 After=network.target rakit.service

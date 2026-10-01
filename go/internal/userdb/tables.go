@@ -3,6 +3,7 @@ package userdb
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -505,4 +506,45 @@ func (d *DB) DeleteTable(ctx context.Context, slug, name string) error {
 		return err
 	}
 	return os.RemoveAll(filepath.Join(d.cfg.SiteRoot(slug), "uploads", name))
+}
+
+// SchemaSummary: ringkasan tabel project untuk AI. Kosong bila project belum punya database.
+func (d *DB) SchemaSummary(ctx context.Context, slug string) (string, error) {
+	if !d.HasDatabase(slug) {
+		return "", nil
+	}
+	tables, err := d.ListTables(ctx, slug)
+	if err != nil {
+		return "", err
+	}
+	parts := make([]string, 0, len(tables))
+	for _, t := range tables {
+		var open []string
+		for _, op := range Operations {
+			if t.Rules[op] == "public" {
+				open = append(open, op)
+			}
+		}
+		public := "none"
+		if len(open) > 0 {
+			public = strings.Join(open, ", ")
+		}
+		lines := []string{"id: number (auto)", "created_at: date (auto)"}
+		for _, c := range t.Columns {
+			kind := c.Type
+			if c.Type == "reference" {
+				kind = "reference(" + c.RefTable + ")"
+			}
+			line := c.Name + ": " + kind
+			if c.Required {
+				line += " required"
+			}
+			if c.Private {
+				line += " private"
+			}
+			lines = append(lines, line)
+		}
+		parts = append(parts, fmt.Sprintf("- %s (%d rows; public: %s)\n    %s", t.Name, t.RowCount, public, strings.Join(lines, "\n    ")))
+	}
+	return strings.Join(parts, "\n"), nil
 }

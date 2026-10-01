@@ -20,6 +20,7 @@ import (
 type Error struct {
 	Status  int
 	Message string
+	Code    string // kode singkat untuk klien (opsional), mis. "no_credits"
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -46,7 +47,11 @@ func JSON(w http.ResponseWriter, status int, v any) {
 func Fail(w http.ResponseWriter, err error) {
 	var he *Error
 	if errors.As(err, &he) {
-		JSON(w, he.Status, map[string]string{"error": he.Message})
+		body := map[string]string{"error": he.Message}
+		if he.Code != "" {
+			body["code"] = he.Code
+		}
+		JSON(w, he.Status, body)
 		return
 	}
 	log.Printf("error: %v", err)

@@ -265,6 +265,8 @@ export async function startStack(env = {}) {
     PLAN_PRO: '49000:3',
     PLAN_UNLIMITED: '98000:2',
     ADMIN_EMAILS: ADMIN_EMAIL,
+    // Untuk menjalankan server Go dengan pendeteksi data race (go build -race).
+    ...(process.env.GORACE ? { GORACE: process.env.GORACE } : {}),
     ...env,
   };
   let log = '';

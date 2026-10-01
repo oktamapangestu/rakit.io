@@ -252,6 +252,16 @@ func (s *Service) AutoBeforeEdit(project *store.Project, userID int64) {
 	}
 }
 
+// BeforeAI menyimpan versi sebelum perubahan AI diterapkan. Tidak pernah menggagalkan perubahan.
+func (s *Service) BeforeAI(project *store.Project, userID int64, label string) {
+	unlock := s.lock(project.Slug)
+	_, err := s.create(project, userID, "ai", label, false)
+	unlock()
+	if err != nil {
+		log.Printf("Versi sebelum AI %s gagal: %v", project.Slug, err)
+	}
+}
+
 // CreateManual: tombol "Simpan versi" — selalu dibuat.
 func (s *Service) CreateManual(project *store.Project, userID int64, label string) (int64, error) {
 	defer s.lock(project.Slug)()

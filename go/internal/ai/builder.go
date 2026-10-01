@@ -1,0 +1,740 @@
+package ai
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"regexp"
+	"sort"
+	"strings"
+
+	"rakit.icu/server/internal/files"
+	"rakit.icu/server/internal/httpx"
+	"rakit.icu/server/internal/jsconv"
+	"rakit.icu/server/internal/userdb"
+)
+
+const (
+	maxBuildRounds     = 8
+	maxTruncatedRounds = 3
+	truncatedNote      = "\n\n_(Jawaban terpotong karena terlalu panjang.)_"
+)
+
+// change: satu perubahan dari mode Builder — tulis/hapus file, atau buat/perluas tabel.
+type change struct {
+	Action  string // write | delete | table
+	Path    string
+	Content string
+	Name    string
+	Columns []userdb.Column
+	Public  []string
+}
+
+// Bentuk JSON-nya sama dengan yang disimpan server Node di ai_messages.changes.
+func (c change) MarshalJSON() ([]byte, error) {
+	switch c.Action {
+	case "table":
+		columns, public := c.Columns, c.Public
+		if columns == nil {
+			columns = []userdb.Column{}
+		}
+		if public == nil {
+			public = []string{}
+		}
+		return marshal(struct {
+			Action  string          `json:"action"`
+			Name    string          `json:"name"`
+			Columns []userdb.Column `json:"columns"`
+			Public  []string        `json:"public"`
+		}{c.Action, c.Name, columns, public})
+	case "delete":
+		return marshal(struct {
+			Path   string `json:"path"`
+			Action string `json:"action"`
+		}{c.Path, c.Action})
+	}
+	return marshal(struct {
+		Path    string `json:"path"`
+		Action  string `json:"action"`
+		Content string `json:"content"`
+	}{c.Path, c.Action, c.Content})
+}
+
+func (c *change) UnmarshalJSON(raw []byte) error {
+	var v struct {
+		Action  string          `json:"action"`
+		Path    string          `json:"path"`
+		Content string          `json:"content"`
+		Name    string          `json:"name"`
+		Columns []userdb.Column `json:"columns"`
+		Public  []string        `json:"public"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return err
+	}
+	*c = change{v.Action, v.Path, v.Content, v.Name, v.Columns, v.Public}
+	return nil
+}
+
+// marshal: JSON tanpa meng-escape <, >, & (isi file HTML harus utuh).
+func marshal(v any) ([]byte, error) {
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return []byte(strings.TrimSuffix(buf.String(), "\n")), nil
+}
+
+func (c change) key() string {
+	if c.Action == "table" {
+		return "table:" + c.Name
+	}
+	return c.Path
+}
+
+// staged: perubahan yang sudah dicatat (belum ditulis ke disk), urut sesuai yang terakhir menulis.
+type staged struct {
+	order []string
+	items map[string]change
+}
+
+func (s *staged) set(c change) {
+	key := c.key()
+	if _, exists := s.items[key]; exists {
+		// File yang sama ditulis dua kali: pakai versi terakhir, di urutan terakhir.
+		for i, k := range s.order {
+			if k == key {
+				s.order = append(s.order[:i], s.order[i+1:]...)
+				break
+			}
+		}
+	}
+	s.order = append(s.order, key)
+	s.items[key] = c
+}
+
+func (s *staged) list() []change {
+	out := make([]change, 0, len(s.order))
+	for _, key := range s.order {
+		out = append(out, s.items[key])
+	}
+	return out
+}
+
+var tableNameRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
+
+func lowerTrim(v any) string { return strings.ToLower(strings.TrimSpace(jsconv.String(v))) }
+
+func display(obj map[string]any, key string) string {
+	v, present := obj[key]
+	switch {
+	case !present:
+		return "undefined"
+	case v == nil:
+		return "null"
+	}
+	return jsconv.String(v)
+}
+
+func validateTable(args map[string]any) (change, error) {
+	name := lowerTrim(args["name"])
+	if !tableNameRE.MatchString(name) || strings.HasPrefix(name, "sqlite_") || strings.HasPrefix(name, "_rakit") {
+		return change{}, fmt.Errorf(`Nama tabel "%s" tidak valid: pakai huruf kecil, angka, dan _, diawali huruf (awalan sqlite_ dan _rakit dicadangkan).`, display(args, "name"))
+	}
+	list, isList := args["columns"].([]any)
+	if !isList {
+		return change{}, errors.New("columns harus berupa array.")
+	}
+	columns := make([]userdb.Column, 0, len(list))
+	for _, item := range list {
+		c, _ := item.(map[string]any)
+		col := lowerTrim(c["name"])
+		if !tableNameRE.MatchString(col) {
+			return change{}, fmt.Errorf(`Nama kolom "%s" tidak valid.`, display(c, "name"))
+		}
+		if col == "id" || col == "created_at" {
+			return change{}, fmt.Errorf(`Kolom "%s" sudah otomatis, jangan ditulis.`, col)
+		}
+		kind, _ := c["type"].(string)
+		known := false
+		for _, t := range userdb.ColumnTypes {
+			known = known || t == kind
+		}
+		if !known {
+			return change{}, fmt.Errorf(`Tipe kolom "%s" tidak dikenal. Pilih: %s.`, display(c, "type"), strings.Join(userdb.ColumnTypes, ", "))
+		}
+		column := userdb.Column{Name: col, Type: kind, Required: truthy(c["required"]), Private: truthy(c["private"])}
+		if kind == "reference" {
+			ref := strings.TrimSpace(jsconv.String(c["refTable"]))
+			if ref == "" {
+				return change{}, fmt.Errorf(`Kolom relasi "%s" harus menyertakan refTable (nama tabel yang ditunjuk).`, col)
+			}
+			column.RefTable = strings.ToLower(ref)
+		}
+		columns = append(columns, column)
+	}
+	var public, unknown []string
+	seen := map[string]bool{}
+	ops, _ := args["public"].([]any)
+	for _, raw := range ops {
+		op, _ := raw.(string)
+		valid := false
+		for _, known := range userdb.Operations {
+			valid = valid || known == op
+		}
+		if !valid {
+			unknown = append(unknown, jsconv.String(raw))
+		} else if !seen[op] {
+			seen[op] = true
+			public = append(public, op)
+		}
+	}
+	if len(unknown) > 0 {
+		return change{}, fmt.Errorf("Operasi tidak dikenal: %s. Pilih dari: %s.", strings.Join(unknown, ", "), strings.Join(userdb.Operations, ", "))
+	}
+	return change{Action: "table", Name: name, Columns: columns, Public: public}, nil
+}
+
+func truthy(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return t
+	case float64:
+		return t != 0
+	case string:
+		return t != ""
+	}
+	return true
+}
+
+func validateFile(action string, args map[string]any) (change, error) {
+	raw, _ := args["path"].(string)
+	clean, err := files.CleanPath(raw)
+	if err != nil {
+		return change{}, err
+	}
+	if !files.IsTextFile(clean) {
+		return change{}, fmt.Errorf(`"%s": hanya file .html, .css, dan .js yang diizinkan.`, clean)
+	}
+	if action == "delete" {
+		return change{Action: "delete", Path: clean}, nil
+	}
+	content, isString := args["content"].(string)
+	if !isString {
+		return change{}, errors.New("content harus berupa teks.")
+	}
+	if len(content) > files.MaxFileSize {
+		return change{}, fmt.Errorf(`"%s" melebihi %d KB.`, clean, files.MaxFileSize/1024)
+	}
+	return change{Action: "write", Path: clean, Content: content}, nil
+}
+
+var (
+	apiAnyRE   = regexp.MustCompile(`/api/([a-z][a-z0-9_]*)`)
+	apiTableRE = regexp.MustCompile(`/api/db/([a-z][a-z0-9_]*)`)
+)
+
+// apiPathProblems memeriksa pemakaian API database di isi file: model sering lupa awalan /api/db/.
+func apiPathProblems(content string, tables map[string]bool) []string {
+	var problems []string
+	seen := map[string]bool{}
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			problems = append(problems, p)
+		}
+	}
+	for _, m := range apiAnyRE.FindAllStringSubmatchIndex(content, -1) {
+		// "/api/db/..." adalah bentuk yang benar; yang dicari "/api/<tabel>" tanpa db.
+		if strings.HasPrefix(content[m[0]+len("/api/"):], "db/") {
+			continue
+		}
+		if name := content[m[2]:m[3]]; tables[name] {
+			add(fmt.Sprintf(`alamat "/api/%s" salah, seharusnya "/api/db/%s"`, name, name))
+		}
+	}
+	for _, m := range apiTableRE.FindAllStringSubmatch(content, -1) {
+		if !tables[m[1]] {
+			add(fmt.Sprintf(`tabel "%s" belum ada, panggil create_table untuk membuatnya`, m[1]))
+		}
+	}
+	return problems
+}
+
+func knownTables(existing []string, st *staged) map[string]bool {
+	out := map[string]bool{}
+	for _, name := range existing {
+		out[name] = true
+	}
+	for _, c := range st.items {
+		if c.Action == "table" {
+			out[c.Name] = true
+		}
+	}
+	return out
+}
+
+// stageToolCall mencatat satu panggilan tool sebagai perubahan (belum ditulis ke disk). Hasilnya
+// dikirim balik ke model.
+func stageToolCall(call toolCall, st *staged, existing []string, truncated bool) string {
+	args := map[string]any{}
+	raw := call.Arguments
+	if raw == "" {
+		raw = "{}"
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		if truncated {
+			return "Error: panggilan ini terpotong karena jawabanmu melebihi batas panjang, jadi tidak disimpan. " +
+				"Panggil tool ini lagi dengan isi lengkap. Kalau filenya sangat besar, pecah jadi beberapa file lebih kecil " +
+				"(misalnya CSS atau JS terpisah) dan tulis satu file per panggilan."
+		}
+		return "Error: argumen bukan JSON yang valid. Panggil tool ini lagi dengan JSON yang benar."
+	}
+	if obj, isObject := parsed.(map[string]any); isObject {
+		args = obj
+	}
+
+	var valid change
+	var err error
+	switch call.Name {
+	case "write_file":
+		valid, err = validateFile("write", args)
+	case "delete_file":
+		valid, err = validateFile("delete", args)
+	case "create_table":
+		valid, err = validateTable(args)
+	default:
+		return fmt.Sprintf(`Error: tool "%s" tidak dikenal.`, call.Name)
+	}
+	if err != nil {
+		return "Error: " + err.Error()
+	}
+	st.set(valid)
+	switch valid.Action {
+	case "table":
+		return fmt.Sprintf(`OK: tabel "%s" akan dibuat/diperbarui. Pakai dari JavaScript situs dengan fetch('/api/db/%s').`, valid.Name, valid.Name)
+	case "delete":
+		return fmt.Sprintf(`OK: "%s" akan dihapus.`, valid.Path)
+	}
+	if problems := apiPathProblems(valid.Content, knownTables(existing, st)); len(problems) > 0 {
+		return fmt.Sprintf(`Ditulis, TAPI ada masalah di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(problems, "; "))
+	}
+	return fmt.Sprintf(`OK: "%s" ditulis (%d karakter).`, valid.Path, jsconv.Len(valid.Content))
+}
+
+var (
+	messageTagRE = regexp.MustCompile(`(?s)<message>(.*?)</message>`)
+	fileBlockRE  = regexp.MustCompile(`(?s)<file\s[^>]*>.*?</file>`)
+	tableBlockRE = regexp.MustCompile(`(?s)<db-table.*?</db-table>`)
+	blankLinesRE = regexp.MustCompile(`\n{3,}`)
+)
+
+// planMessage: Plan hanya menghasilkan teks; buang sisa blok <file>/<db-table> kalau model tetap menulisnya.
+func planMessage(text string) string {
+	if m := messageTagRE.FindStringSubmatch(text); m != nil {
+		text = m[1]
+	}
+	text = tableBlockRE.ReplaceAllString(fileBlockRE.ReplaceAllString(text, ""), "")
+	return strings.TrimSpace(blankLinesRE.ReplaceAllString(text, "\n\n"))
+}
+
+func checkFinish(r *reply) error {
+	if r.FinishReason == "content_filter" {
+		return &failure{"refusal", "Permintaan ini tidak bisa diproses oleh AI."}
+	}
+	return nil
+}
+
+type buildResult struct {
+	message          string
+	changes          []change
+	inTokens, outTok int
+}
+
+// runBuilder: mode Builder — ulangi permintaan sampai model selesai memanggil tool dan menulis ringkasan.
+func (s *Service) runBuilder(messages []message, existing []string, h hooks) (*buildResult, error) {
+	convo := append([]message(nil), messages...)
+	st := &staged{items: map[string]change{}}
+	out := &buildResult{}
+	text := ""
+	truncatedRounds := 0
+
+	for round := 0; round < maxBuildRounds; round++ {
+		r, err := s.callAI(request{messages: convo, tools: true}, h)
+		if err != nil {
+			return nil, err
+		}
+		out.inTokens += r.PromptTokens
+		out.outTok += r.CompletionTokens
+		if os.Getenv("AI_DEBUG") != "" {
+			log.Printf("----- AI builder round %d (%s) -----\n%s", round+1, r.FinishReason, r.Text)
+		}
+		if err := checkFinish(r); err != nil {
+			return nil, err
+		}
+		// Terpotong karena batas token: simpan yang sudah lengkap, lalu minta model melanjutkan.
+		truncated := r.FinishReason == "length"
+		if truncated {
+			truncatedRounds++
+		} else {
+			truncatedRounds = 0
+		}
+		if truncatedRounds >= maxTruncatedRounds {
+			return nil, &failure{"max_tokens", "Jawaban AI terus terpotong karena terlalu panjang. Coba pecah permintaan jadi lebih kecil."}
+		}
+		if strings.TrimSpace(r.Text) != "" {
+			text = r.Text
+			if truncated && len(r.ToolCalls) == 0 {
+				text += truncatedNote
+			}
+		}
+
+		if len(r.ToolCalls) == 0 {
+			// Pemeriksaan akhir: minta model memperbaiki pemakaian API database yang salah.
+			tables := knownTables(existing, st)
+			var problems []string
+			for _, c := range st.list() {
+				if c.Action != "write" {
+					continue
+				}
+				for _, p := range apiPathProblems(c.Content, tables) {
+					problems = append(problems, "- "+c.Path+": "+p)
+				}
+			}
+			if len(problems) == 0 || round >= maxBuildRounds-1 {
+				break
+			}
+			content := r.Text
+			if content == "" {
+				content = "(selesai)"
+			}
+			convo = append(convo,
+				message{"role": "assistant", "content": content},
+				message{"role": "user", "content": "Sebelum selesai, perbaiki masalah ini dengan tool, lalu tulis ringkasan lagi:\n" + strings.Join(problems, "\n")})
+			continue
+		}
+
+		echoed := make([]map[string]any, 0, len(r.ToolCalls))
+		for _, c := range r.ToolCalls {
+			// Argumen yang terpotong bukan JSON valid; kirim "{}" supaya provider tidak menolak riwayatnya.
+			arguments := c.Arguments
+			if arguments == "" || !json.Valid([]byte(arguments)) {
+				arguments = "{}"
+				if c.Arguments == "" {
+					arguments = c.Arguments
+				}
+			}
+			echoed = append(echoed, map[string]any{"id": c.ID, "type": "function", "function": map[string]string{"name": c.Name, "arguments": arguments}})
+		}
+		assistant := message{"role": "assistant", "content": r.Text, "tool_calls": echoed}
+		if r.Reasoning != "" {
+			assistant["reasoning_content"] = r.Reasoning
+		}
+		convo = append(convo, assistant)
+		for _, c := range r.ToolCalls {
+			convo = append(convo, message{"role": "tool", "tool_call_id": c.ID, "content": stageToolCall(c, st, existing, truncated)})
+		}
+	}
+	out.message = planMessage(text)
+	out.changes = st.list()
+	return out, nil
+}
+
+// ---------- Menerapkan perubahan ----------
+// Perubahan Builder diterapkan langsung di server, dengan snapshot untuk Batalkan. Snapshot disimpan
+// di database bersama pesan AI, jadi Batalkan tetap bisa walau browser di-refresh.
+
+type fileSnapshot struct {
+	Path   string  `json:"path"`
+	Before *string `json:"before"` // nil = file baru
+}
+
+type tableSnapshot struct {
+	Table        string            `json:"table"`
+	Existed      bool              `json:"existed"`
+	AddedColumns []string          `json:"addedColumns,omitempty"`
+	BeforeRules  map[string]string `json:"beforeRules,omitempty"`
+}
+
+type snapshot struct {
+	Files      []fileSnapshot  `json:"files"`
+	Tables     []tableSnapshot `json:"tables"`
+	DirsBefore []string        `json:"dirsBefore"`
+}
+
+func (s *Service) fileExists(root, rel string) bool {
+	abs, err := files.ResolveIn(root, rel)
+	if err != nil {
+		return false
+	}
+	info, _ := files.LstatOrNil(abs)
+	return info != nil && info.Mode().IsRegular()
+}
+
+func columnInputs(columns []userdb.Column) []any {
+	out := make([]any, 0, len(columns))
+	for _, c := range columns {
+		item := map[string]any{"name": c.Name, "type": c.Type, "required": c.Required, "private": c.Private}
+		if c.RefTable != "" {
+			item["refTable"] = c.RefTable
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func (s *Service) findTable(ctx context.Context, slug, name string) (*userdb.TableInfo, error) {
+	if !s.userdb.HasDatabase(slug) {
+		return nil, nil
+	}
+	tables, err := s.userdb.ListTables(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tables {
+		if t.Name == name {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *Service) applyTable(ctx context.Context, slug string, c change, columns []userdb.Column) (tableSnapshot, error) {
+	existing, err := s.findTable(ctx, slug, c.Name)
+	if err != nil {
+		return tableSnapshot{}, err
+	}
+	rules := map[string]any{}
+	for _, op := range c.Public {
+		rules[op] = "public"
+	}
+	if existing == nil {
+		_, err := s.userdb.CreateTable(ctx, slug, map[string]any{"name": c.Name, "columns": columnInputs(columns), "rules": rules})
+		return tableSnapshot{Table: c.Name}, err
+	}
+	var added []userdb.Column
+	for _, col := range columns {
+		found := false
+		for _, e := range existing.Columns {
+			found = found || e.Name == col.Name
+		}
+		if !found {
+			added = append(added, col)
+		}
+	}
+	widened := false
+	for _, op := range c.Public {
+		widened = widened || existing.Rules[op] != "public"
+	}
+	if len(added) > 0 || widened {
+		if _, err := s.userdb.UpdateTable(ctx, slug, c.Name, map[string]any{"addColumns": columnInputs(added), "rules": rules}); err != nil {
+			return tableSnapshot{}, err
+		}
+	}
+	names := []string{}
+	for _, col := range added {
+		names = append(names, col.Name)
+	}
+	return tableSnapshot{Table: c.Name, Existed: true, AddedColumns: names, BeforeRules: existing.Rules}, nil
+}
+
+func (s *Service) revertTable(ctx context.Context, slug string, entry tableSnapshot) error {
+	var err error
+	if !entry.Existed {
+		err = s.userdb.DeleteTable(ctx, slug, entry.Table)
+	} else {
+		drops := make([]any, 0, len(entry.AddedColumns))
+		for _, name := range entry.AddedColumns {
+			drops = append(drops, name)
+		}
+		patch := map[string]any{"dropColumns": drops}
+		if entry.BeforeRules != nil {
+			rules := map[string]any{}
+			for op, v := range entry.BeforeRules {
+				rules[op] = v
+			}
+			patch["rules"] = rules
+		}
+		_, err = s.userdb.UpdateTable(ctx, slug, entry.Table, patch)
+	}
+	// Tabel/kolom sudah dihapus pemiliknya: tidak ada yang perlu dikembalikan.
+	var he *httpx.Error
+	if errors.As(err, &he) && he.Status == 404 {
+		return nil
+	}
+	return err
+}
+
+// applyChanges menerapkan perubahan. Bila gagal di tengah jalan, semuanya dikembalikan lalu
+// kesalahannya dikembalikan ke pemanggil.
+func (s *Service) applyChanges(ctx context.Context, slug string, changes []change) (*snapshot, error) {
+	root := s.cfg.SiteRoot(slug)
+	snap := &snapshot{Files: []fileSnapshot{}, Tables: []tableSnapshot{}, DirsBefore: []string{}}
+	var fileChanges, tableChanges []change
+	for _, c := range changes {
+		if c.Action == "table" {
+			tableChanges = append(tableChanges, c)
+			continue
+		}
+		fileChanges = append(fileChanges, c)
+		entry := fileSnapshot{Path: c.Path}
+		if s.fileExists(root, c.Path) {
+			before, err := files.ReadText(root, c.Path)
+			if err != nil {
+				return nil, err
+			}
+			entry.Before = &before
+		}
+		snap.Files = append(snap.Files, entry)
+	}
+	entries, err := files.ListTree(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range entries {
+		if e.Dir {
+			snap.DirsBefore = append(snap.DirsBefore, e.Path)
+		}
+	}
+
+	apply := func() error {
+		// Tabel dulu, supaya halaman yang memakai datanya langsung berfungsi di preview.
+		// Fase 1: tabel + kolom biasa. Fase 2: kolom relasi, setelah semua tabel tujuan ada.
+		for _, c := range tableChanges {
+			var plain []userdb.Column
+			for _, col := range c.Columns {
+				if col.Type != "reference" {
+					plain = append(plain, col)
+				}
+			}
+			entry, err := s.applyTable(ctx, slug, c, plain)
+			if err != nil {
+				return err
+			}
+			snap.Tables = append(snap.Tables, entry)
+		}
+		for _, c := range tableChanges {
+			existing, err := s.findTable(ctx, slug, c.Name)
+			if err != nil {
+				return err
+			}
+			var missing []userdb.Column
+			for _, col := range c.Columns {
+				if col.Type != "reference" {
+					continue
+				}
+				found := false
+				if existing != nil {
+					for _, e := range existing.Columns {
+						found = found || e.Name == col.Name
+					}
+				}
+				if !found {
+					missing = append(missing, col)
+				}
+			}
+			if len(missing) == 0 {
+				continue
+			}
+			if _, err := s.userdb.UpdateTable(ctx, slug, c.Name, map[string]any{"addColumns": columnInputs(missing)}); err != nil {
+				return err
+			}
+			// existed: true → revert cukup menghapus kolom relasi yang barusan ditambahkan.
+			names := []string{}
+			for _, col := range missing {
+				names = append(names, col.Name)
+			}
+			snap.Tables = append(snap.Tables, tableSnapshot{Table: c.Name, Existed: true, AddedColumns: names})
+		}
+		limits := s.plans.StorageFor(slug)
+		for _, c := range fileChanges {
+			exists := s.fileExists(root, c.Path)
+			if c.Action == "delete" {
+				if exists {
+					if err := files.RemoveEntry(root, c.Path); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			content := c.Content
+			if _, err := files.WriteText(root, c.Path, &content, !exists, limits); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := apply(); err != nil {
+		s.revertChanges(ctx, slug, snap)
+		return nil, err
+	}
+	return snap, nil
+}
+
+// revertChanges mengembalikan semua file dan tabel ke isi sebelum perubahan.
+func (s *Service) revertChanges(ctx context.Context, slug string, snap *snapshot) error {
+	root := s.cfg.SiteRoot(slug)
+	for i := len(snap.Tables) - 1; i >= 0; i-- {
+		if err := s.revertTable(ctx, slug, snap.Tables[i]); err != nil {
+			return err
+		}
+	}
+	limits := s.plans.StorageFor(slug)
+	for i := len(snap.Files) - 1; i >= 0; i-- {
+		entry := snap.Files[i]
+		exists := s.fileExists(root, entry.Path)
+		if entry.Before == nil {
+			if exists {
+				if err := files.RemoveEntry(root, entry.Path); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if _, err := files.WriteText(root, entry.Path, entry.Before, !exists, limits); err != nil {
+			return err
+		}
+	}
+
+	// Folder yang dibuat oleh perubahan AI dan kini kosong ikut dihapus (terdalam dulu).
+	before := map[string]bool{}
+	for _, dir := range snap.DirsBefore {
+		before[dir] = true
+	}
+	entries, err := files.ListTree(root)
+	if err != nil {
+		return err
+	}
+	var created []string
+	for _, e := range entries {
+		if e.Dir && !before[e.Path] {
+			created = append(created, e.Path)
+		}
+	}
+	sort.Slice(created, func(i, j int) bool { return len(created[i]) > len(created[j]) })
+	for _, dir := range created {
+		if abs, err := files.ResolveIn(root, dir); err == nil {
+			os.Remove(abs) // hanya berhasil bila kosong
+		}
+	}
+	return nil
+}
+
+// touchedPaths: path file yang disentuh perubahan (untuk memberi tahu editor agar memuat ulang).
+func touchedPaths(changes []change) []string {
+	out := []string{}
+	for _, c := range changes {
+		if c.Action != "table" {
+			out = append(out, c.Path)
+		}
+	}
+	return out
+}

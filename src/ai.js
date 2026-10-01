@@ -617,7 +617,9 @@ const sql = {
 };
 
 // Job yang terputus karena server mati/restart: tandai gagal dan kembalikan kreditnya.
-for (const row of sql.stuck.all()) {
+// Selama migrasi, bila job AI dijalankan server Go (AI_JOBS_ELSEWHERE=1), pemulihan ini bagian server itu:
+// restart Node tidak boleh menggagalkan job yang masih berjalan di sana.
+for (const row of process.env.AI_JOBS_ELSEWHERE ? [] : sql.stuck.all()) {
   refundCredits(row.user_id, row.credit ? JSON.parse(row.credit) : null);
   sql.finish.run('error', '', 'Server dimulai ulang saat AI sedang bekerja. Kredit dikembalikan, silakan kirim ulang.', null, null, null, row.id);
 }

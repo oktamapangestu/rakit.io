@@ -11,7 +11,8 @@ cd "$(dirname "$0")/.."
 
 # Node tetap menulis URL publik dengan port server depan.
 FRONT_PORT="$PORT"
-PORT="$UPSTREAM_PORT" PUBLIC_PORT="${PUBLIC_PORT-$FRONT_PORT}" node src/server.js &
+# AI_JOBS_ELSEWHERE: job AI dijalankan server Go, jadi Node tidak ikut "memulihkan" job saat menyala.
+PORT="$UPSTREAM_PORT" PUBLIC_PORT="${PUBLIC_PORT-$FRONT_PORT}" AI_JOBS_ELSEWHERE=1 node src/server.js &
 NODE_PID=$!
 # Node yang membuat skema database: tunggu sampai siap sebelum Go menerima request.
 for _ in $(seq 1 100); do

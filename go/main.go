@@ -16,11 +16,18 @@ import (
 	"syscall"
 	"time"
 
+	"rakit.icu/server/internal/ai"
+	"rakit.icu/server/internal/aimodels"
+	"rakit.icu/server/internal/aiqueue"
 	"rakit.icu/server/internal/api"
 	"rakit.icu/server/internal/app"
+	"rakit.icu/server/internal/assistant"
 	"rakit.icu/server/internal/auth"
+	"rakit.icu/server/internal/billing"
 	"rakit.icu/server/internal/config"
+	"rakit.icu/server/internal/credits"
 	"rakit.icu/server/internal/google"
+	"rakit.icu/server/internal/httpx"
 	"rakit.icu/server/internal/plans"
 	"rakit.icu/server/internal/proxy"
 	"rakit.icu/server/internal/siteapi"
@@ -64,19 +71,30 @@ func main() {
 	}
 	site := sites.New(cfg, db)
 	sessions := auth.New(cfg, db)
-	limits := plans.New(db)
+	limits := plans.New(cfg, db)
 	projectDB := userdb.New(cfg, limits)
 	pages := app.New(cfg, sessions)
 	siteDB := siteapi.New(projectDB)
-	appAPI, err := api.New(cfg, db, sessions, limits, projectDB, versions.New(cfg, db, limits))
+	history := versions.New(cfg, db, limits)
+	models := aimodels.New(cfg, db)
+	helper := assistant.New(cfg, db, limits)
+	wallet := credits.New(cfg, db, limits)
+	wallet.AddAssistantBalance = helper.AddBalance
+	wallet.VisionEnabled = func() bool { return models.Get().Vision != "" }
+	editorAI := ai.New(cfg, db, wallet, limits, projectDB, history, models, aiqueue.New(cfg))
+	editorAI.Start()
+	appAPI, err := api.New(cfg, db, sessions, api.Services{
+		Plans: limits, UserDB: projectDB, Versions: history, Credits: wallet,
+		Billing: billing.New(cfg, db, limits, wallet), AI: editorAI, AIModels: models, Assistant: helper,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	googleLogin := google.New(cfg, db, sessions)
 
 	// Routing berdasarkan host:
-	// - rakit.icu          -> halaman, aset, login Google, dan sebagian /api (Go); /api lainnya masih di Node
-	// - <slug>.rakit.icu   -> website project & /api/db (Go); /api lainnya (asisten AI) masih di Node
+	// - rakit.icu          -> halaman, aset, login Google, dan /api (Go); hanya /api/admin masih di Node
+	// - <slug>.rakit.icu   -> website project, /api/db, dan asisten AI (Go)
 	// - lainnya (www, host tak dikenal) -> Node
 	under := func(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
 	suffix := "." + cfg.BaseDomain
@@ -103,11 +121,15 @@ func main() {
 			switch {
 			case siteapi.Matches(r.URL.Path):
 				siteDB.Serve(w, r, sub)
-				return
-			case !under(r.URL.Path, "/api"):
+			case assistant.MatchesSite(r.URL.Path):
+				helper.ServeSite(w, r, sub)
+			case under(strings.ToLower(r.URL.Path), "/api"):
+				// Seluruh /api/ di domain user dicadangkan untuk sistem.
+				httpx.Fail(w, httpx.Errorf(404, "Endpoint tidak ditemukan"))
+			default:
 				site.Serve(w, r, sub)
-				return
 			}
+			return
 		}
 		node.ServeHTTP(w, r)
 	})
