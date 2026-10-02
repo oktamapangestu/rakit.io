@@ -18,6 +18,7 @@ import (
 
 	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/aiqueue"
+	"rakit.io/server/internal/blocks"
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/credits"
 	"rakit.io/server/internal/files"
@@ -55,6 +56,10 @@ type Service struct {
 	http     *http.Client
 
 	buildPrompt, planPrompt string
+
+	// ResolvePage: file HTML untuk pathname halaman di website project (dari paket sites), dipakai
+	// untuk blok terpilih. Dipasang di main.go.
+	ResolvePage func(slug, pathname string) string
 
 	mu      sync.Mutex
 	jobs    map[int64]*job // id pesan AI -> job
@@ -170,8 +175,26 @@ func (s *Service) finish(id int64, status, content string, errMsg any, changes, 
 }
 
 type attachments struct {
-	Thumbs      []string `json:"thumbs"`
-	Description *string  `json:"description"`
+	Thumbs      []string   `json:"thumbs"`
+	Description *string    `json:"description"`
+	Blocks      []blockRef `json:"blocks,omitempty"` // blok halaman yang dipilih untuk diubah
+}
+
+// blockRef: blok terpilih seperti yang ditampilkan di riwayat chat.
+type blockRef struct {
+	Label string `json:"label"`
+	Page  string `json:"page"`
+}
+
+func blockRefs(list []blocks.Block) []blockRef {
+	if len(list) == 0 {
+		return nil
+	}
+	out := make([]blockRef, 0, len(list))
+	for _, b := range list {
+		out = append(out, blockRef{b.Label, b.Page})
+	}
+	return out
 }
 
 func parseAttachments(raw sql.NullString) *attachments {
@@ -209,14 +232,22 @@ func publicMessage(m *messageRow) map[string]any {
 		}
 	}
 	images := []string{}
-	if a := parseAttachments(m.Attachments); a != nil && a.Thumbs != nil {
-		images = a.Thumbs
+	var refs []blockRef
+	if a := parseAttachments(m.Attachments); a != nil {
+		if a.Thumbs != nil {
+			images = a.Thumbs
+		}
+		refs = a.Blocks
 	}
-	return map[string]any{
+	out := map[string]any{
 		"id": m.ID, "threadId": m.ThreadID, "role": m.Role, "mode": m.Mode, "content": m.Content, "status": m.Status,
 		"error": nullable(m.Error), "changes": changes, "applyState": nullable(m.ApplyState), "before": before,
 		"images": images, "createdAt": m.CreatedAt,
 	}
+	if len(refs) > 0 {
+		out["blocks"] = refs // hanya pesan yang memilih blok
+	}
+	return out
 }
 
 func imageNote(description string) string {
@@ -365,6 +396,39 @@ func (s *Service) projectContext(ctx context.Context, slug, activePath string) (
 	return strings.Join(sections, "\n\n"), nil
 }
 
+// ---------- Blok terpilih ----------
+
+// outsideBlocks: file HTML yang diubah AI di luar blok terpilih — bagian lain halaman yang memuat blok,
+// atau halaman lain. CSS/JS boleh berubah (gaya & perilaku blok ada di sana).
+func (s *Service) outsideBlocks(slug string, list []blocks.Block, changes []change) []string {
+	if len(list) == 0 {
+		return nil
+	}
+	pages := blocks.Pages(list)
+	root := s.cfg.SiteRoot(slug)
+	var out []string
+	for _, c := range changes {
+		if c.Action == "table" || !strings.HasSuffix(strings.ToLower(c.Path), ".html") {
+			continue
+		}
+		selectors, picked := pages[c.Path]
+		if !picked || c.Action == "delete" {
+			out = append(out, c.Path)
+			continue
+		}
+		before, err := files.ReadText(root, c.Path)
+		if err == nil && blocks.ChangedOutside(before, c.Content, selectors) {
+			out = append(out, c.Path)
+		}
+	}
+	return out
+}
+
+func outsideNote(paths []string) string {
+	return fmt.Sprintf("⚠️ **Perhatian:** AI juga mengubah bagian di luar blok yang kamu pilih (%s). "+
+		"Cek dulu hasilnya di preview; kalau tidak sesuai, tekan **Batalkan**.", strings.Join(paths, ", "))
+}
+
 // ---------- Lampiran gambar ----------
 
 var dataURLRE = regexp.MustCompile(`^data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$`)
@@ -477,6 +541,7 @@ type jobInput struct {
 	prompt, mode, activePath string
 	reservation              *credits.Reservation
 	images, thumbs           []string
+	blocks                   []blocks.Block
 }
 
 func (s *Service) runJob(j *job, in jobInput) {
@@ -517,11 +582,14 @@ func (s *Service) runJob(j *job, in jobInput) {
 			if description == "" {
 				return &failure{"bad_output", "AI gagal membaca gambar. Coba lagi. Kredit dikembalikan."}
 			}
-			raw, _ := marshal(attachments{Thumbs: in.thumbs, Description: &description})
+			raw, _ := marshal(attachments{Thumbs: in.thumbs, Description: &description, Blocks: blockRefs(in.blocks)})
 			s.db.Exec("UPDATE ai_messages SET attachments = ? WHERE id = ?", string(raw), in.userMessageID)
 			ask = in.prompt + "\n\n" + imageNote(description)
 		}
 
+		if len(in.blocks) > 0 {
+			ask += "\n\n" + blocks.Instructions(in.blocks)
+		}
 		projectContext, err := s.projectContext(j.ctx, slug, in.activePath)
 		if err != nil {
 			return err
@@ -616,6 +684,10 @@ func (s *Service) runJob(j *job, in jobInput) {
 		// Terapkan perubahan Builder di server (dengan snapshot), lalu minta konfirmasi user.
 		var applyState, snapJSON, applyError any
 		touched := []string{}
+		// Blok terpilih: periksa apakah AI juga mengubah bagian lain halaman (sebelum file ditimpa).
+		if outside := s.outsideBlocks(slug, in.blocks, changes); len(outside) > 0 {
+			text = strings.TrimSpace(text + "\n\n" + outsideNote(outside))
+		}
 		if len(changes) > 0 {
 			s.versions.BeforeAI(in.project, in.user.ID, "Sebelum AI: "+in.prompt)
 			// Penerapan tidak ikut dibatalkan oleh Stop: sudah bukan bagian menunggu AI.

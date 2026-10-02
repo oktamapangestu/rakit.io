@@ -89,6 +89,7 @@ func main() {
 	wallet.VisionEnabled = func() bool { return models.Get().Vision != "" }
 	queue := aiqueue.New(cfg)
 	editorAI := ai.New(cfg, db, wallet, limits, projectDB, history, models, queue)
+	editorAI.ResolvePage = site.ResolvePage
 	editorAI.Start()
 	appAPI, err := api.New(cfg, db, sessions, api.Services{
 		Plans: limits, UserDB: projectDB, Versions: history, Credits: wallet,

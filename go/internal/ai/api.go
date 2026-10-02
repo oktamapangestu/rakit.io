@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"rakit.io/server/internal/blocks"
 	"rakit.io/server/internal/files"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
@@ -183,6 +184,17 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 		}
 	}
 
+	// Blok halaman yang dipilih di preview: AI diarahkan hanya mengubah bagian itu.
+	picked, err := blocks.Parse(body["blocks"], func(pathname string) string {
+		if s.ResolvePage == nil {
+			return ""
+		}
+		return s.ResolvePage(project.Slug, pathname)
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	// Lampiran gambar (maks. 3): gambar ukuran kerja untuk AI + thumbnail kecil untuk riwayat chat.
 	rawImages, hasImages := body["images"]
 	images, err := s.parseImages(rawImages, hasImages, imageMaxBytes)
@@ -255,8 +267,8 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 	if err != nil {
 		return fail(err)
 	}
-	if len(images) > 0 {
-		raw, _ := marshal(attachments{Thumbs: thumbs})
+	if len(images) > 0 || len(picked) > 0 {
+		raw, _ := marshal(attachments{Thumbs: thumbs, Blocks: blockRefs(picked)})
 		s.db.Exec("UPDATE ai_messages SET attachments = ? WHERE id = ?", string(raw), userMessageID)
 	}
 	credit, _ := json.Marshal(reservation)
@@ -274,6 +286,7 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 	go s.runJob(j, jobInput{
 		user: user, project: project, messageID: messageID, userMessageID: userMessageID, threadID: threadID,
 		prompt: prompt, mode: mode, activePath: activePath, reservation: reservation, images: images, thumbs: thumbs,
+		blocks: picked,
 	})
 
 	userMessage, err := s.message(userMessageID, user.ID)

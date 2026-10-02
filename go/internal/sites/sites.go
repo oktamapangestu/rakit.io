@@ -3,7 +3,10 @@
 package sites
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -71,15 +74,55 @@ func isDir(root, rel string) bool {
 	return err == nil && info.IsDir()
 }
 
-func sendFile(w http.ResponseWriter, r *http.Request, file *siteFile, status int) {
+// Pemilih blok untuk preview di editor (lihat picker.js). Hanya disisipkan ke halaman HTML yang dimuat
+// di dalam iframe; skripnya diam sampai editor di origin aplikasi mengaktifkannya.
+//
+//go:embed picker.js
+var pickerJS string
+
+func inFrame(r *http.Request) bool { return r.Header.Get("Sec-Fetch-Dest") == "iframe" }
+
+// withPicker menyisipkan skrip pemilih sebelum </body> terakhir (atau di akhir dokumen).
+func (h *Handler) withPicker(page []byte) []byte {
+	tag := []byte(`<script data-app="` + html.EscapeString(h.cfg.AppOrigin) + `">` + pickerJS + `</script>`)
+	at := bytes.LastIndex(bytes.ToLower(page), []byte("</body>"))
+	if at < 0 {
+		return append(page, tag...)
+	}
+	out := make([]byte, 0, len(page)+len(tag))
+	return append(append(append(out, page[:at]...), tag...), page[at:]...)
+}
+
+func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, file *siteFile, status int) {
+	picker := strings.HasPrefix(file.ctype, "text/html") && inFrame(r)
 	etag := fmt.Sprintf(`W/"%x-%x"`, file.info.Size(), file.info.ModTime().UnixNano())
-	h := w.Header()
-	h.Set("Content-Type", file.ctype)
-	h.Set("Cache-Control", "no-cache") // selalu revalidasi, supaya preview langsung ter-update
-	h.Set("ETag", etag)
-	h.Set("X-Content-Type-Options", "nosniff")
+	if picker {
+		etag = fmt.Sprintf(`W/"%x-%x-p"`, file.info.Size(), file.info.ModTime().UnixNano())
+	}
+	hd := w.Header()
+	hd.Set("Content-Type", file.ctype)
+	hd.Set("Cache-Control", "no-cache") // selalu revalidasi, supaya preview langsung ter-update
+	hd.Set("ETag", etag)
+	hd.Set("X-Content-Type-Options", "nosniff")
+	if strings.HasPrefix(file.ctype, "text/html") {
+		hd.Set("Vary", "Sec-Fetch-Dest") // versi iframe (dengan pemilih blok) beda dari versi biasa
+	}
 	if status == http.StatusOK && r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	if picker {
+		page, err := os.ReadFile(file.abs)
+		if err != nil {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+		page = h.withPicker(page)
+		hd.Set("Content-Length", strconv.Itoa(len(page)))
+		w.WriteHeader(status)
+		if r.Method != http.MethodHead {
+			w.Write(page)
+		}
 		return
 	}
 	f, err := os.Open(file.abs)
@@ -89,7 +132,7 @@ func sendFile(w http.ResponseWriter, r *http.Request, file *siteFile, status int
 		return
 	}
 	defer f.Close()
-	h.Set("Content-Length", strconv.FormatInt(file.info.Size(), 10))
+	hd.Set("Content-Length", strconv.FormatInt(file.info.Size(), 10))
 	w.WriteHeader(status)
 	if r.Method == http.MethodHead {
 		return
@@ -156,7 +199,7 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, slug string) {
 		file = findFile(root, rel+".html")
 	}
 	if file != nil {
-		sendFile(w, r, file, http.StatusOK)
+		h.sendFile(w, r, file, http.StatusOK)
 		return
 	}
 
@@ -166,8 +209,34 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, slug string) {
 		return
 	}
 	if custom := findFile(root, "404.html"); custom != nil {
-		sendFile(w, r, custom, http.StatusNotFound)
+		h.sendFile(w, r, custom, http.StatusNotFound)
 		return
 	}
 	h.notFoundPage(w, r, "Halaman tidak ditemukan", "File <code>"+stripUnsafe.Replace(pathname)+"</code> tidak ada.")
+}
+
+// ResolvePage: file HTML yang disajikan untuk pathname halaman di website project (mis. "/" ->
+// index.html, "/about" -> about.html), sama seperti Serve; "" bila bukan halaman HTML yang ada.
+func (h *Handler) ResolvePage(slug, pathname string) string {
+	root := h.cfg.SiteRoot(slug)
+	pathname, err := decodedPathname((&url.URL{Path: pathname}).EscapedPath())
+	if err != nil {
+		return ""
+	}
+	rel := strings.TrimLeft(pathname, "/")
+	if rel == "" || strings.HasSuffix(rel, "/") {
+		rel += "index.html"
+	}
+	file := findFile(root, rel)
+	if file == nil && path.Ext(rel) == "" {
+		file, rel = findFile(root, rel+".html"), rel+".html"
+	}
+	if file == nil || !strings.HasPrefix(file.ctype, "text/html") {
+		return ""
+	}
+	clean, err := files.CleanPath(rel)
+	if err != nil {
+		return ""
+	}
+	return clean
 }

@@ -27,6 +27,7 @@
   }
 
   const ICON = {
+    block: 'M1 1h4v1H2v3H1zm10 0h4v4h-1V2h-3zM1 11h1v3h3v1H1zm14 0v4h-4v-1h3v-3zM5 5h6v6H5z',
     chevron: 'M5.7 13.7 5 13l5-5-5-5 .7-.7L11.4 8z',
     close: 'm8 8.7 3.6 3.6.7-.7L8.7 8l3.6-3.6-.7-.7L8 7.3 4.4 3.7l-.7.7L7.3 8l-3.6 3.6.7.7z',
     folder: 'M14.5 3H7.7l-1-1.4-.4-.1H1.5l-.5.5v11l.5.5h13l.5-.5v-9.5zM14 13H2V6h12zm0-8H7.3l-.4.1-.6.9H2V2.5h4.1l1 1.4.4.1H14z',
@@ -733,6 +734,96 @@
     $('#previewFrame').src = url;
   }
 
+  // ---------- Pilih blok di preview ----------
+  // Pengguna memilih bagian halaman (maks. 5) lalu menulis prompt; AI diarahkan hanya mengubah bagian itu.
+  // Halaman preview ada di origin lain (<slug>.rakit.io), jadi pemilihannya dilakukan skrip kecil yang
+  // disisipkan server ke halaman di dalam iframe (go/internal/sites/picker.js), lewat postMessage.
+  // Blok bisa dari beberapa halaman: tiap blok membawa halamannya (pathname di preview). Pindah halaman
+  // tidak melepas pilihan; saat kembali, sorotannya dipulihkan. Batas 5 blok dihitung dari semua halaman.
+  const MAX_BLOCKS = 5;
+  const pick = { on: false, page: null, blocks: [] };
+  const AI_PLACEHOLDER = 'Minta AI membuat atau mengubah kode… (Enter kirim, Shift+Enter baris baru)';
+  const siteOrigin = () => new URL(state.project.siteUrl).origin;
+  const toPicker = (message) => $('#previewFrame').contentWindow?.postMessage({ rakit: true, ...message }, siteOrigin());
+  const blocksOn = (page) => pick.blocks.filter((b) => b.page === page);
+  // Jatah di halaman yang sedang tampil = 5 dikurangi blok di halaman lain.
+  const pageLimit = () => MAX_BLOCKS - pick.blocks.filter((b) => b.page !== pick.page).length;
+  // "/" -> "index", "/produk/sepatu.html" -> "sepatu"
+  const pageName = (page) => decodeURIComponent(page.replace(/\/+$/, '').split('/').pop() || 'index').replace(/\.html$/i, '') || 'index';
+
+  function setPick(on) {
+    pick.on = on;
+    if (!on) pick.blocks = [];
+    $('#pickBlocks').classList.toggle('active', on);
+    $('#pickBlocks').setAttribute('aria-pressed', String(on));
+    toPicker({ type: 'pick', on, limit: pageLimit(), restore: on ? blocksOn(pick.page).map((b) => b.selector) : undefined });
+    renderBlocks();
+  }
+
+  function removeBlock(b) {
+    if (b.page === pick.page) return toPicker({ type: 'remove', selector: b.selector });
+    // Blok di halaman lain: halaman itu tidak sedang dimuat, cukup dilepas di sini.
+    pick.blocks = pick.blocks.filter((x) => x !== b);
+    toPicker({ type: 'limit', limit: pageLimit() });
+    renderBlocks();
+  }
+
+  function renderBlocks() {
+    const n = pick.blocks.length;
+    const manyPages = new Set(pick.blocks.map((b) => b.page)).size > 1;
+    $('#pickBar').hidden = !pick.on;
+    const move = mobileQuery.matches ? 'Pindah halaman lewat bar alamat.' : 'Alt+klik link untuk pindah halaman.';
+    $('#pickHint').textContent = n
+      ? `${n} blok dipilih. Klik lagi untuk melepas. ${move}`
+      : `Klik bagian halaman yang mau diubah (maks. ${MAX_BLOCKS}). ${move}`;
+    $('#pickGo').hidden = !n;
+    const box = $('#aiBlocks');
+    box.hidden = !n;
+    box.replaceChildren(...pick.blocks.map((b) => {
+      const here = b.page === pick.page;
+      return h('span', { class: `ai-block${here ? '' : ' other-page'}`, title: `${b.page} · ${b.selector}` },
+        svg(ICON.block), h('span', { class: 'ai-block-label' }, b.label),
+        manyPages ? h('span', { class: 'ai-block-page' }, pageName(b.page)) : null,
+        here ? h('button', { type: 'button', title: 'Perbesar ke bagian induknya', 'aria-label': `Perbesar ${b.label}`, onclick: () => toPicker({ type: 'parent', selector: b.selector }) }, '⬆') : null,
+        h('button', { type: 'button', title: 'Lepas blok ini', 'aria-label': `Lepas ${b.label}`, onclick: () => removeBlock(b) }, '×'));
+    }));
+    $('#aiInput').placeholder = n
+      ? 'Mau blok ini diubah jadi seperti apa? Mis. buat lebih modern dengan warna gelap'
+      : AI_PLACEHOLDER;
+  }
+
+  function bindBlockPicker() {
+    $('#pickBlocks').onclick = () => setPick(!pick.on);
+    $('#pickDone').onclick = () => setPick(false);
+    $('#pickGo').onclick = () => { setMobileView('editor'); setMode('ai'); };
+    window.addEventListener('message', (e) => {
+      const m = e.data;
+      if (e.source !== $('#previewFrame').contentWindow || e.origin !== siteOrigin() || m?.rakit !== true) return;
+      if (m.type === 'ready') {
+        // Halaman preview dimuat (ulang/pindah halaman): aktifkan lagi dengan blok milik halaman ini.
+        pick.page = m.page;
+        if (!pick.on) return;
+        toPicker({ type: 'pick', on: true, limit: pageLimit(), restore: blocksOn(m.page).map((b) => b.selector) });
+        renderBlocks();
+      } else if (m.type === 'blocks' && pick.on) {
+        const first = !pick.blocks.length && m.blocks.length;
+        pick.page = m.page;
+        // Urutan chip tetap sesuai urutan dipilih: blok halaman ini diperbarui di tempatnya, yang baru di akhir.
+        const fresh = new Map(m.blocks.map((b) => [b.selector, { ...b, page: m.page }]));
+        const kept = pick.blocks.filter((b) => b.page !== m.page || fresh.has(b.selector)).map((b) => (b.page === m.page ? fresh.get(b.selector) : b));
+        const added = [...fresh.values()].filter((b) => !kept.includes(b));
+        pick.blocks = [...kept, ...added].slice(0, MAX_BLOCKS);
+        renderBlocks();
+        // Blok pertama dipilih: tampilkan kotak prompt (di Coding bisa saja sedang di tab lain).
+        if (first && $('#editorArea').dataset.mode !== 'ai') setMode('ai');
+      } else if (m.type === 'limit') {
+        toast(`Maksimal ${MAX_BLOCKS} blok sekaligus (termasuk di halaman lain)`, 'error');
+      } else if (m.type === 'top') {
+        toast('Ini sudah bagian terbesar');
+      }
+    });
+  }
+
   // Bar alamat preview: host tetap (website project ini), path/query/hash bisa diubah.
   function bindPreviewUrl() {
     const input = $('#previewUrl');
@@ -1086,6 +1177,7 @@
     $('#collapseBtn').onclick = () => { state.expanded.clear(); renderTree(); };
     $('#reloadPreview').onclick = reloadPreview;
     bindPreviewUrl();
+    bindBlockPicker();
     $('#togglePreview').onclick = togglePreview;
     $('#toggleSidebar').onclick = toggleSidebar;
     // Tombol Simple/Coding disorot (bercahaya) sampai pengguna pertama kali memakainya.
@@ -1351,6 +1443,8 @@
   const userBubble = (m) => h('div', { class: 'msg user' },
     m.mode === 'plan' ? h('span', { class: 'msg-mode' }, 'Plan') : null,
     m.images?.length ? h('div', { class: 'msg-images' }, m.images.map((src) => h('img', { src, alt: 'Gambar terlampir' }))) : null,
+    m.blocks?.length ? h('div', { class: 'msg-blocks' }, m.blocks.map((b) => h('span', { class: 'ai-block' }, svg(ICON.block), b.label,
+      new Set(m.blocks.map((x) => pageName(x.page))).size > 1 ? h('span', { class: 'ai-block-page' }, pageName(b.page)) : null))) : null,
     m.content);
   const errorBubble = (text, code) => h('div', { class: 'msg error' },
     text,
@@ -1558,7 +1652,9 @@
     box.querySelector('.ai-empty')?.remove();
     const mode = ai.mode;
     const attached = ai.images;
-    box.append(userBubble({ mode, content: prompt, images: attached.map((i) => i.thumb) }));
+    const picked = pick.blocks.map((b) => ({ page: b.page, selector: b.selector, label: b.label, html: b.html }));
+    box.append(userBubble({ mode, content: prompt, images: attached.map((i) => i.thumb), blocks: picked }));
+    if (pick.on) setPick(false); // halaman akan berubah; pilih ulang untuk permintaan berikutnya
     ai.images = [];
     renderAttachments();
     input.value = '';
@@ -1573,6 +1669,7 @@
       started = await api('POST', '/api/ai/prompt', {
         prompt, mode, activePath: state.active, threadId: ai.threadId,
         ...(attached.length ? { images: attached.map((i) => i.full), thumbs: attached.map((i) => i.thumb) } : {}),
+        ...(picked.length ? { blocks: picked } : {}),
       });
     } catch (err) {
       ai.busy = false;
