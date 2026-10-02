@@ -23,6 +23,7 @@ import (
 	"rakit.io/server/internal/billing"
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/credits"
+	"rakit.io/server/internal/fn"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/plans"
@@ -46,6 +47,7 @@ type Services struct {
 	Assistant *assistant.Service
 	Admin     *admin.Service
 	Publish   *publish.Service
+	Fn        *fn.Service
 }
 
 type Handler struct {
@@ -189,6 +191,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = h.admin(req)
 	case "publish":
 		err = h.publish(req)
+	case "functions":
+		err = h.functions(req)
 	default:
 		err = errNotFound
 	}

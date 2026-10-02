@@ -165,6 +165,45 @@ const schema = `
 	  tokens     INTEGER NOT NULL DEFAULT 0,
 	  PRIMARY KEY (project_id, day)
 	);
+
+	-- Fungsi serverless (internal/fn): rahasia per project (dibaca fungsi lewat env, tidak pernah dikirim ke
+	-- browser) dan jumlah eksekusi per akun per hari (WIB) untuk kuota paket.
+	CREATE TABLE IF NOT EXISTS fn_secrets (
+	  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+	  name       TEXT NOT NULL,
+	  value      TEXT NOT NULL,
+	  updated_at INTEGER NOT NULL,
+	  PRIMARY KEY (project_id, name)
+	);
+	CREATE TABLE IF NOT EXISTS fn_usage (
+	  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	  day     TEXT NOT NULL,
+	  count   INTEGER NOT NULL DEFAULT 0,
+	  PRIMARY KEY (user_id, day)
+	);
+	-- Log eksekusi (100 terakhir per project) dan jadwal (cron, WIB) fungsi.
+	CREATE TABLE IF NOT EXISTS fn_logs (
+	  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+	  name       TEXT NOT NULL,
+	  trigger    TEXT NOT NULL,              -- http | cron | test
+	  dev        INTEGER NOT NULL DEFAULT 0, -- versi dev/editor
+	  status     INTEGER NOT NULL,
+	  ms         INTEGER NOT NULL,
+	  error      TEXT,
+	  logs       TEXT,
+	  created_at INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS fn_logs_project ON fn_logs(project_id, id);
+	CREATE TABLE IF NOT EXISTS fn_schedules (
+	  project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+	  name        TEXT NOT NULL,
+	  cron        TEXT NOT NULL,
+	  created_at  INTEGER NOT NULL,
+	  last_run_at INTEGER,
+	  last_status INTEGER,
+	  PRIMARY KEY (project_id, name)
+	);
 `
 
 // Migrate membuat tabel yang belum ada dan memperbarui database buatan versi sebelumnya. Dipanggil

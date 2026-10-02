@@ -27,6 +27,7 @@ import (
 	"rakit.io/server/internal/billing"
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/credits"
+	"rakit.io/server/internal/fn"
 	"rakit.io/server/internal/google"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/plans"
@@ -85,23 +86,28 @@ func main() {
 	history := versions.New(cfg, db, limits)
 	models := aimodels.New(cfg, db)
 	helper := assistant.New(cfg, db, limits)
+	functions := fn.New(cfg, db, projectDB, limits)
+	functions.StartScheduler(context.Background())
 	wallet := credits.New(cfg, db, limits)
 	wallet.AddAssistantBalance = helper.AddBalance
 	wallet.VisionEnabled = func() bool { return models.Get().Vision != "" }
 	queue := aiqueue.New(cfg)
 	editorAI := ai.New(cfg, db, wallet, limits, projectDB, history, models, queue)
 	editorAI.ResolvePage = site.ResolvePage
+	editorAI.SecretNames = functions.SecretNames
 	editorAI.Start()
 	appAPI, err := api.New(cfg, db, sessions, api.Services{
 		Plans: limits, UserDB: projectDB, Versions: history, Credits: wallet,
 		Billing: billing.New(cfg, db, limits, wallet), AI: editorAI, AIModels: models, Assistant: helper,
 		Admin:   admin.New(cfg, db, limits, models, queue),
 		Publish: publish.New(cfg, db, projectDB),
+		Fn:      functions,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	googleLogin := google.New(cfg, db, sessions)
+	go fn.Warm() // kompilasi mesin fungsi (±0,5 dtk) di latar, supaya eksekusi pertama tidak lambat
 
 	// Routing berdasarkan host:
 	// - rakit.io          -> halaman, aset, login Google, dan /api
@@ -142,6 +148,12 @@ func main() {
 			siteDB.Serve(w, r, key)
 		case assistant.MatchesSite(r.URL.Path):
 			helper.ServeSite(w, r, slug)
+		case fn.Matches(r.URL.Path):
+			var target *fn.Target
+			if t, err := site.Resolve(sub); err == nil && t != nil {
+				target = &fn.Target{Project: t.Project, Root: t.Root, DBKey: t.DBKey, Dev: t.Dev}
+			}
+			functions.Serve(w, r, target)
 		case under(strings.ToLower(r.URL.Path), "/api"):
 			// Seluruh /api/ di domain user dicadangkan untuk sistem.
 			httpx.Fail(w, httpx.Errorf(404, "Endpoint tidak ditemukan"))

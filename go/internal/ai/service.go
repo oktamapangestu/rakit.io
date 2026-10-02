@@ -60,6 +60,8 @@ type Service struct {
 	// ResolvePage: file HTML untuk pathname halaman di website project (dari paket sites), dipakai
 	// untuk blok terpilih. Dipasang di main.go.
 	ResolvePage func(slug, pathname string) string
+	// SecretNames: nama rahasia fungsi serverless project (bukan isinya), dari paket fn.
+	SecretNames func(slug string) []string
 
 	mu      sync.Mutex
 	jobs    map[int64]*job // id pesan AI -> job
@@ -394,6 +396,13 @@ func (s *Service) projectContext(ctx context.Context, slug, activePath string, p
 		sections = append(sections, "Project images (uploaded by the user):\n"+strings.Join(lines, "\n"))
 	}
 	sections = append(sections, "Database tables:\n"+schema)
+	if s.SecretNames != nil {
+		names := "(none yet)"
+		if list := s.SecretNames(slug); len(list) > 0 {
+			names = strings.Join(list, ", ")
+		}
+		sections = append(sections, "Function secrets (names only, read with env.NAME): "+names)
+	}
 	if activePath != "" {
 		sections = append(sections, fmt.Sprintf(`The user currently has "%s" open in the editor.`, activePath))
 	}

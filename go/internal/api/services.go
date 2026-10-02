@@ -1,6 +1,9 @@
 package api
 
 import (
+	"strconv"
+	"strings"
+
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
 )
@@ -242,4 +245,63 @@ func (h *Handler) publish(q *request) error {
 		return err
 	}
 	return q.json(200, map[string]any{"publish": out, "project": h.public(project)})
+}
+
+// ---------- /api/functions (fungsi serverless) ----------
+
+// functions: daftar fungsi & rahasia project aktif, kelola rahasia, dan uji coba fungsi dari editor.
+func (h *Handler) functions(q *request) error {
+	if err := h.requireAuth(q); err != nil {
+		return err
+	}
+	project, err := h.loadProject(q)
+	if err != nil {
+		return err
+	}
+	svc := h.svc.Fn
+	switch {
+	case q.is("GET"):
+	case q.is("PUT", "secrets"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		if err := svc.SetSecret(project, q.text("name"), q.text("value")); err != nil {
+			return err
+		}
+	case q.is("DELETE", "secrets", ":"):
+		if err := svc.DeleteSecret(project, q.rest[1]); err != nil {
+			return err
+		}
+	case q.is("PUT", ":", "schedule"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		if err := svc.SetSchedule(project, strings.ToLower(q.rest[0]), q.text("cron")); err != nil {
+			return err
+		}
+	case q.is("GET", "logs"):
+		name, _ := q.param("name")
+		limit, _ := strconv.Atoi(func() string { v, _ := q.param("limit"); return v }())
+		logs, err := svc.Logs(project, name, limit)
+		if err != nil {
+			return err
+		}
+		return q.json(200, map[string]any{"logs": logs})
+	case q.is("POST", ":", "run"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		out, err := svc.Try(q.r.Context(), project, strings.ToLower(q.rest[0]), q.text("method"), q.text("query"), q.text("body"))
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
+	default:
+		return errNotFound
+	}
+	out, err := svc.Overview(project)
+	if err != nil {
+		return err
+	}
+	return q.json(200, out)
 }

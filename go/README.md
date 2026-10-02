@@ -61,6 +61,14 @@ Catatan:
   manual, versi publik ada di `data/published/<slug>/` dan `data/db/<slug>@prod.db`; versi dev tetap di
   `data/sites/<slug>/` dan `data/db/<slug>.db`, tampil di `<slug>--dev.<BASE_DOMAIN>`. Sertakan keduanya saat backup.
   Wildcard DNS & sertifikat `*.<BASE_DOMAIN>` sudah mencakup alamat dev.
+- **Fungsi serverless** (`internal/fn`), hanya di server Go: `functions/<nama>.js` di project dijalankan di
+  `<slug>.<BASE_DOMAIN>/api/fn/<nama>` dengan QuickJS di WebAssembly (`third_party/qjs`, salinan fastschema/qjs
+  dengan tambalan sandbox — lihat README di sana). Batas: 10 detik & 64 MB per eksekusi, 8 eksekusi bersamaan,
+  kuota harian per paket (`fn.DailyLimit`). `FN_ALLOW_PRIVATE_FETCH=1` hanya untuk test lokal; **jangan** dipasang
+  di produksi (membuka fetch ke jaringan internal). Folder `functions/` tidak pernah disajikan sebagai file statis
+  oleh server Go — server Node tidak tahu aturan ini. Jadwal (cron, WIB) dijalankan penjadwal di proses Go tiap
+  menit (Pro: min. 15 menit, Unlimited: min. 5 menit); log 100 eksekusi terakhir per project ada di tabel `fn_logs`.
+  Panduan fungsi untuk AI ada di prompt `src/ai.js` (bagian "Serverless functions").
 
 ## Deploy tahap ini
 

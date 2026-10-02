@@ -227,6 +227,11 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, sub string) {
 	if rel == "" || strings.HasSuffix(rel, "/") {
 		rel += "index.html"
 	}
+	// Kode fungsi serverless tidak pernah disajikan sebagai file (isinya logika & pemanggilan rahasia).
+	if hidden(rel) {
+		h.notFoundPage(w, r, "Halaman tidak ditemukan", "File <code>"+stripUnsafe.Replace(pathname)+"</code> tidak ada.")
+		return
+	}
 
 	file := findFile(root, rel)
 	// URL bersih: /about -> about.html
@@ -274,4 +279,11 @@ func (h *Handler) ResolvePage(slug, pathname string) string {
 		return ""
 	}
 	return clean
+}
+
+// hidden: folder functions/ (lihat internal/fn) tidak disajikan. Dibandingkan tanpa membedakan huruf
+// besar/kecil, supaya tidak lolos di sistem file yang tidak peka huruf (mis. macOS).
+func hidden(rel string) bool {
+	rel = strings.ToLower(rel)
+	return rel == "functions" || strings.HasPrefix(rel, "functions/")
 }

@@ -1537,6 +1537,7 @@
     $('#dataView').hidden = mode !== 'data';
     $('#diagramView').hidden = mode !== 'diagram';
     $('#historyView').hidden = mode !== 'history';
+    $('#fnView').hidden = mode !== 'fn';
     $('#historyBack').onclick = () => setHistoryDetail(false);
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.setAttribute('aria-selected', String(btn.dataset.mode === mode));
@@ -1545,6 +1546,8 @@
       dbLoad();
     } else if (mode === 'diagram') {
       diagramLoad();
+    } else if (mode === 'fn') {
+      fnLoad();
     } else if (mode === 'history') {
       setHistoryDetail(false);
       historyLoad();
@@ -3468,6 +3471,280 @@
 
   // ---------- Riwayat versi ----------
   // Bahasa dibuat sederhana untuk pemula: "versi" = potret semua file project pada satu waktu.
+  // ---------- Fungsi serverless ----------
+  // Kode backend di functions/<nama>.js, dipanggil lewat <situs>/api/fn/<nama> (lihat go/internal/fn):
+  // berjalan di server dengan akses db (sebagai pemilik), env (rahasia project), dan fetch.
+  const FN_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+  const fnState = { data: null, logs: [], logFilter: '', openLog: null, open: null, form: { method: 'POST', query: '', body: '{\n  "nama": "Ani"\n}' }, result: null, running: false };
+  const FN_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  // Jadwal cron (WIB) dalam kalimat, untuk bentuk yang dibuat dialog Jadwal; selain itu ekspresinya.
+  function describeCron(c) {
+    let m;
+    if ((m = /^\*\/(\d+) \* \* \* \*$/.exec(c))) return `setiap ${m[1]} menit`;
+    if (c === '0 * * * *') return 'setiap jam';
+    if ((m = /^(\d+) (\d+) \* \* \*$/.exec(c))) return `setiap hari ${pad2(m[2])}.${pad2(m[1])}`;
+    if ((m = /^(\d+) (\d+) \* \* ([0-7])$/.exec(c))) return `setiap ${FN_DAYS[m[3]]} ${pad2(m[2])}.${pad2(m[1])}`;
+    return c;
+  }
+
+  const fnTemplate = (name) => [
+    `// Fungsi serverless — dipanggil lewat /api/fn/${name}`,
+    '// req: { method, query, headers, body } · ctx: { db, env, fetch }',
+    '//   db   : list / get / insert / update / delete tabel project (sebagai pemilik)',
+    '//   env  : rahasia project (atur di tab Fungsi), mis. env.TELEGRAM_TOKEN',
+    '//   fetch: memanggil API luar',
+    'export default async function (req, { db, env, fetch }) {',
+    "  const nama = req.body?.nama ?? req.query.nama ?? 'dunia';",
+    '  return { pesan: `Halo, ${nama}!`, waktu: new Date().toISOString() };',
+    '}',
+    '',
+  ].join('\n');
+
+  async function fnLoadLogs() {
+    try {
+      const q = fnState.logFilter ? `&name=${encodeURIComponent(fnState.logFilter)}` : '';
+      fnState.logs = (await api('GET', `/api/functions/logs?limit=50${q}`)).logs;
+    } catch { /* tetap tampilkan yang lama */ }
+  }
+
+  async function fnLoad() {
+    try {
+      [fnState.data] = await Promise.all([api('GET', '/api/functions'), fnLoadLogs()]);
+    } catch (err) {
+      $('#fnView').replaceChildren(h('div', { class: 'fn-wrap' }, h('p', { class: 'history-empty error' }, err.message)));
+      return;
+    }
+    renderFn();
+  }
+
+  async function fnCreate() {
+    const name = (await ask('Fungsi baru', 'nama-fungsi (huruf kecil, angka, - atau _)'))?.toLowerCase();
+    if (!name) return;
+    if (!FN_NAME_RE.test(name)) return toast('Nama fungsi: huruf kecil, angka, - atau _ (maks. 40)', 'error');
+    const path = `functions/${name}.js`;
+    if (state.entries.some((e) => e.path === path)) return toast(`Fungsi "${name}" sudah ada`, 'error');
+    try {
+      await api('POST', '/api/files', { path });
+      await api('PUT', '/api/files/content', { path, content: fnTemplate(name) });
+      await loadTree();
+      fnState.open = name;
+      await fnLoad();
+      toast(`Fungsi ${name} dibuat`);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  async function fnRun(name) {
+    fnState.running = true;
+    fnState.result = null;
+    renderFn();
+    try {
+      await saveAll(); // jalankan kode yang terakhir diketik
+      fnState.result = await api('POST', `/api/functions/${encodeURIComponent(name)}/run`, fnState.form);
+    } catch (err) {
+      fnState.result = { error: err.message };
+    }
+    fnState.running = false;
+    renderFn();
+    fnLoad(); // perbarui kuota & log
+  }
+
+  function openSchedule(f) {
+    const min = fnState.data.cron.minMinutes; // 0 = paket tanpa jadwal
+    const current = f.schedule?.cron ?? '';
+    // Satu elemen hanya bisa tampil di satu tempat: kolom jam terpisah untuk harian & mingguan.
+    const dayTime = h('input', { type: 'time', value: '07:00', 'aria-label': 'Jam (harian)' });
+    const weekTime = h('input', { type: 'time', value: '07:00', 'aria-label': 'Jam (mingguan)' });
+    const day = h('select', {}, [1, 2, 3, 4, 5, 6, 0].map((d) => h('option', { value: d }, FN_DAYS[d])));
+    const custom = h('input', { value: current, placeholder: 'menit jam tanggal bulan hari, mis. 0 7 * * 1-5', spellcheck: 'false' });
+    let m;
+    if ((m = /^(\d+) (\d+) \* \* (?:[0-7]|\*)$/.exec(current))) dayTime.value = weekTime.value = `${pad2(m[2])}:${pad2(m[1])}`;
+    if ((m = /^\d+ \d+ \* \* ([0-7])$/.exec(current))) day.value = m[1] === '7' ? '0' : m[1];
+    const timeCron = (input, dow) => { const [hh, mm] = (input.value || '07:00').split(':'); return `${Number(mm)} ${Number(hh)} * * ${dow}`; };
+    const options = [
+      { id: 'off', label: 'Tanpa jadwal', cron: () => '' },
+      { id: '5', label: 'Setiap 5 menit', cron: () => '*/5 * * * *', every: 5 },
+      { id: '15', label: 'Setiap 15 menit', cron: () => '*/15 * * * *', every: 15 },
+      { id: '30', label: 'Setiap 30 menit', cron: () => '*/30 * * * *', every: 30 },
+      { id: 'hour', label: 'Setiap jam', cron: () => '0 * * * *', every: 60 },
+      { id: 'day', label: 'Setiap hari jam', cron: () => timeCron(dayTime, '*'), every: 1440, extra: [dayTime] },
+      { id: 'week', label: 'Setiap minggu', cron: () => timeCron(weekTime, day.value), every: 10080, extra: [day, weekTime] },
+      { id: 'custom', label: 'Kustom (cron, WIB)', cron: () => custom.value, extra: [custom] },
+    ];
+    const guess = () => {
+      if (!current) return 'off';
+      const known = { '*/5 * * * *': '5', '*/15 * * * *': '15', '*/30 * * * *': '30', '0 * * * *': 'hour' }[current];
+      if (known) return known;
+      if (/^\d+ \d+ \* \* \*$/.test(current)) return 'day';
+      if (/^\d+ \d+ \* \* [0-7]$/.test(current)) return 'week';
+      return 'custom';
+    };
+    let chosen = guess();
+    const save = h('button', { type: 'button', class: 'primary' }, 'Simpan');
+    const sync = () => document.querySelectorAll('.cron-option').forEach((el) => el.setAttribute('aria-checked', String(el.dataset.id === chosen)));
+    const close = openSheet('publish-modal', 'Jadwal fungsi', (done) => [
+      h('h3', {}, `Jadwal ${f.name}`),
+      min === 0
+        ? h('div', { class: 'cron-locked' },
+          h('p', {}, 'Jadwal (cron) tersedia untuk paket Pro dan Unlimited: fungsi berjalan otomatis, mis. kirim rekap harian atau bersihkan data lama.'),
+          ai.credits?.topupEnabled ? h('button', { type: 'button', class: 'fn-btn primary', onclick: () => { done(); openTopup('plans'); } }, 'Lihat paket') : null)
+        : h('p', { class: 'fn-note' }, `Berjalan otomatis (WIB) memakai versi publik fungsi; req.method = "CRON". Paketmu: paling sering tiap ${min} menit.`),
+      h('div', { class: 'cron-options', role: 'radiogroup' }, options.map((o) => {
+        const blocked = o.id !== 'off' && (min === 0 || (o.every && o.every < min));
+        return h('div', { class: `cron-option${blocked ? ' blocked' : ''}`, role: 'radio', dataset: { id: o.id }, tabindex: 0,
+          onclick: (e) => { if (blocked || ['INPUT', 'SELECT'].includes(e.target.tagName)) return; chosen = o.id; sync(); } },
+        h('span', { class: 'cron-dot' }), h('span', { class: 'cron-label' }, o.label),
+        o.extra ? h('span', { class: 'cron-extra', onclick: () => { if (!blocked) { chosen = o.id; sync(); } } }, ...o.extra) : null,
+        blocked && o.every ? h('span', { class: 'cron-plan' }, min ? `min. ${min} mnt` : 'Pro') : null);
+      })),
+      f.schedule?.lastRunAt ? h('p', { class: 'fn-note' }, `Terakhir berjalan ${new Date(f.schedule.lastRunAt).toLocaleString('id-ID')} — status ${f.schedule.lastStatus ?? '-'}`) : null,
+      h('div', { class: 'modal-buttons' }, save, h('button', { type: 'button', onclick: done }, 'Batal')),
+    ]);
+    sync();
+    save.onclick = async () => {
+      save.disabled = true;
+      try {
+        const cron = options.find((o) => o.id === chosen).cron();
+        fnState.data = await api('PUT', `/api/functions/${encodeURIComponent(f.name)}/schedule`, { cron });
+        close();
+        renderFn();
+        toast(cron ? `Jadwal ${f.name}: ${describeCron(cron)}` : `Jadwal ${f.name} dimatikan`);
+      } catch (err) {
+        toast(err.message, 'error');
+        save.disabled = false;
+      }
+    };
+  }
+
+  function fnLogsSection(d) {
+    const TRIGGER = { http: 'Pengunjung', cron: 'Jadwal', test: 'Uji coba' };
+    const when = (ms) => {
+      const t = new Date(ms);
+      const time = t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return t.toDateString() === new Date().toDateString() ? time : `${t.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} ${time}`;
+    };
+    const filter = h('select', { onchange: async (e) => { fnState.logFilter = e.target.value; await fnLoadLogs(); renderFn(); } },
+      h('option', { value: '' }, 'Semua fungsi'), d.functions.map((f) => h('option', { value: f.name, selected: f.name === fnState.logFilter }, f.name)));
+    return h('section', { class: 'fn-section' },
+      h('div', { class: 'fn-section-head' }, h('h4', {}, 'Log eksekusi'), filter,
+        h('button', { type: 'button', class: 'icon-btn', title: 'Muat ulang log', onclick: async () => { await fnLoadLogs(); renderFn(); } }, svg(ICON.refresh))),
+      fnState.logs.length
+        ? h('ul', { class: 'fn-logs' }, fnState.logs.map((l) => {
+          const open = fnState.openLog === l.id;
+          return h('li', { class: open ? 'open' : '' },
+            h('button', { type: 'button', class: 'fn-log-row', onclick: () => { fnState.openLog = open ? null : l.id; renderFn(); } },
+              h('span', { class: 'fn-log-time' }, when(l.createdAt)),
+              h('code', {}, l.name),
+              h('span', { class: `fn-chip ${l.trigger}` }, TRIGGER[l.trigger] ?? l.trigger),
+              l.dev ? h('span', { class: 'env-badge' }, 'DEV') : null,
+              h('span', { class: `fn-status s${String(l.status)[0]}` }, l.status),
+              h('span', { class: 'fn-log-ms' }, `${l.ms} ms`),
+              (l.error || l.logs) ? h('span', { class: 'fn-log-more' }, open ? '▴' : '▾') : null),
+            open && l.error ? h('p', { class: 'fn-error' }, l.error) : null,
+            open && l.logs ? h('pre', { class: 'fn-pre logs' }, l.logs) : null);
+        }))
+        : h('p', { class: 'fn-note' }, 'Belum ada eksekusi. Panggilan dari pengunjung, jadwal, dan uji coba akan tercatat di sini (100 terakhir).'));
+  }
+
+  function fnTryPanel(f) {
+    const method = h('select', { onchange: (e) => { fnState.form.method = e.target.value; } },
+      ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => h('option', { value: m, selected: m === fnState.form.method }, m)));
+    const query = h('input', { value: fnState.form.query, placeholder: 'query, mis. nama=Ani&halaman=2', spellcheck: 'false', oninput: (e) => { fnState.form.query = e.target.value; } });
+    const body = h('textarea', { rows: 5, spellcheck: 'false', placeholder: 'body JSON (opsional)', oninput: (e) => { fnState.form.body = e.target.value; } });
+    body.value = fnState.form.body;
+    const r = fnState.result;
+    let shown = r?.body ?? '';
+    try { shown = JSON.stringify(JSON.parse(shown), null, 2); } catch { /* bukan JSON */ }
+    return h('div', { class: 'fn-try' },
+      h('div', { class: 'fn-try-row' }, method, query,
+        h('button', { type: 'button', class: 'fn-run', disabled: fnState.running, onclick: () => fnRun(f.name) }, fnState.running ? 'Menjalankan…' : '▶ Jalankan')),
+      body,
+      r ? h('div', { class: 'fn-result' },
+        r.status ? h('div', { class: 'fn-result-head' },
+          h('span', { class: `fn-status s${String(r.status)[0]}` }, r.status), h('span', {}, `${r.ms} ms`), r.headers?.['content-type'] ? h('code', {}, r.headers['content-type']) : null) : null,
+        r.error ? h('p', { class: 'fn-error' }, r.error) : null,
+        shown ? h('pre', { class: 'fn-pre' }, shown) : null,
+        r.logs ? [h('div', { class: 'fn-label' }, 'console.log'), h('pre', { class: 'fn-pre logs' }, r.logs)] : null) : null);
+  }
+
+  function fnSecrets(d) {
+    const name = h('input', { placeholder: 'NAMA_RAHASIA', spellcheck: 'false', autocomplete: 'off', oninput: (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'); } });
+    const value = h('input', { type: 'password', placeholder: 'isi (mis. API key)', autocomplete: 'new-password' });
+    const save = async () => {
+      try {
+        fnState.data = await api('PUT', '/api/functions/secrets', { name: name.value, value: value.value });
+        toast(`Rahasia ${name.value} disimpan`);
+        renderFn();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    };
+    const remove = async (s) => {
+      const ok = await modal({ title: `Hapus rahasia ${s.name}?`, message: 'Fungsi yang memakai env.' + s.name + ' akan mendapat undefined.', buttons: [{ label: 'Hapus', value: true, danger: true }, { label: 'Batal', value: null }] });
+      if (!ok) return;
+      try {
+        fnState.data = await api('DELETE', `/api/functions/secrets/${encodeURIComponent(s.name)}`);
+        renderFn();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    };
+    return h('section', { class: 'fn-section' },
+      h('h4', {}, 'Rahasia (env)'),
+      h('p', { class: 'fn-note' }, 'Untuk API key & token. Dibaca fungsi lewat env.NAMA; tidak pernah terkirim ke browser pengunjung, dan isinya tidak ditampilkan lagi setelah disimpan.'),
+      d.secrets.length ? h('ul', { class: 'fn-secrets' }, d.secrets.map((s) => h('li', {},
+        h('code', {}, s.name), h('span', { class: 'fn-dots' }, '••••••••'),
+        h('button', { type: 'button', class: 'icon-btn', title: `Hapus ${s.name}`, onclick: () => remove(s) }, svg(ICON.trash))))) : null,
+      h('form', { class: 'fn-secret-form', onsubmit: (e) => { e.preventDefault(); save(); } }, name, value, h('button', { type: 'submit' }, 'Simpan')));
+  }
+
+  function renderFn() {
+    const d = fnState.data;
+    if (!d) return;
+    const usage = d.usage;
+    const list = d.functions.map((f) => h('div', { class: `fn-item${fnState.open === f.name ? ' open' : ''}` },
+      h('div', { class: 'fn-item-head' },
+        h('span', { class: 'fn-icon' }, svg('M9.3 1 3 9.2h4.2L6.3 15l6.6-8.4H8.7z')),
+        h('div', { class: 'fn-item-text' },
+          h('strong', {}, f.name,
+            f.schedule ? h('span', { class: `fn-sched${f.schedule.active ? '' : ' off'}`, title: f.schedule.note || `Berikutnya: ${f.schedule.nextRunAt ? new Date(f.schedule.nextRunAt).toLocaleString('id-ID') : '-'}` },
+              `⏱ ${describeCron(f.schedule.cron)}`) : null),
+          h('code', { title: f.url }, f.url.replace(/^https?:\/\//, ''))),
+        h('button', { type: 'button', class: 'fn-btn', onclick: () => openSchedule(f) }, 'Jadwal'),
+        h('button', { type: 'button', class: 'fn-btn', onclick: () => copyText(f.url, 'URL fungsi disalin') }, 'Salin URL'),
+        h('button', { type: 'button', class: 'fn-btn', onclick: async () => { setMode('code'); expandTo(f.path); await openFile(f.path); } }, 'Buka kode'),
+        h('button', { type: 'button', class: 'fn-btn primary', onclick: () => { fnState.open = fnState.open === f.name ? null : f.name; fnState.result = null; renderFn(); } }, fnState.open === f.name ? 'Tutup' : 'Coba')),
+      fnState.open === f.name ? fnTryPanel(f) : null));
+    $('#fnView').replaceChildren(h('div', { class: 'fn-wrap' },
+      h('div', { class: 'fn-head' },
+        h('div', {}, h('h3', {}, 'Fungsi serverless'),
+          h('p', {}, 'Kode backend yang berjalan di server: simpan API key dengan aman, olah data, kirim notifikasi, atau panggil layanan lain.')),
+        h('button', { type: 'button', class: 'fn-new', onclick: fnCreate }, '+ Fungsi baru')),
+      h('div', { class: 'fn-usage' },
+        h('span', {}, `${usage.today.toLocaleString('id-ID')} / ${usage.limit.toLocaleString('id-ID')} eksekusi hari ini`),
+        h('span', {}, `paket ${usage.plan}`), h('span', {}, `maks. ${d.limits.timeoutSeconds} dtk · ${d.limits.memoryMb} MB per eksekusi`)),
+      h('section', { class: 'fn-section' },
+        h('h4', {}, `Fungsi (${d.functions.length})`),
+        list.length ? list : h('div', { class: 'fn-empty' },
+          h('p', {}, 'Belum ada fungsi. Fungsi disimpan di folder functions/ dan langsung bisa dipanggil dari halaman website-mu.'),
+          h('button', { type: 'button', class: 'fn-new', onclick: fnCreate }, 'Buat fungsi pertama'))),
+      fnSecrets(d),
+      fnLogsSection(d),
+      h('details', { class: 'fn-help' },
+        h('summary', {}, 'Cara memanggil dari halaman website'),
+        h('pre', { class: 'fn-pre' }, [
+          "const res = await fetch('/api/fn/kirim-pesan', {",
+          "  method: 'POST',",
+          "  headers: { 'Content-Type': 'application/json' },",
+          "  body: JSON.stringify({ nama: 'Ani', pesan: 'Halo!' }),",
+          '});',
+          'const data = await res.json();',
+        ].join('\n')))));
+  }
+
   const hist = { list: [], history: null, selected: null, detail: null, seq: 0 };
 
   // Panel sempit (HP): daftar versi dan detailnya ditampilkan bergantian, masing-masing layar penuh.
