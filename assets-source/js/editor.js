@@ -762,6 +762,7 @@
   }
 
   function togglePreview() {
+    if (isSimple()) return;
     const preview = $('#preview');
     preview.hidden = !preview.hidden;
     preview.previousElementSibling.hidden = preview.hidden;
@@ -770,6 +771,7 @@
   }
 
   function toggleSidebar() {
+    if (isSimple()) return;
     const sidebar = $('#sidebar');
     sidebar.hidden = !sidebar.hidden;
     sidebar.nextElementSibling.hidden = sidebar.hidden;
@@ -813,6 +815,32 @@
   // dan menutupi separuh layar. Fokus hanya saat pengguna sendiri mengetuk kotaknya.
   const touchQuery = window.matchMedia('(pointer: coarse)');
   const autoFocus = (target) => { if (!touchQuery.matches) target?.focus(); };
+
+  // ---------- Tampilan editor: Simple / Coding ----------
+  // Simple: hanya chat AI dan preview, untuk yang cukup memberi perintah lalu melihat hasilnya.
+  // Coding: editor lengkap (file, kode, database, diagram, riwayat). Pilihan diingat per browser;
+  // atribut awalnya sudah dipasang skrip kecil di editor.html supaya halaman tidak berkedip.
+  const isSimple = () => document.body.dataset.layout === 'simple';
+
+  function setLayout(layout) {
+    document.body.dataset.layout = layout;
+    storage.set('rakit.layout', layout);
+    document.querySelectorAll('.layout-switch [data-layout]').forEach((btn) => {
+      btn.setAttribute('aria-checked', String(btn.dataset.layout === layout));
+    });
+    // Di Simple preview selalu tampil; kembali ke Coding = ikuti pilihan tampil/sembunyi sebelumnya.
+    const preview = $('#preview');
+    const showPreview = layout === 'simple' || !storage.get('rakit.previewHidden', false);
+    if (preview.hidden === showPreview) {
+      preview.hidden = !showPreview;
+      preview.previousElementSibling.hidden = !showPreview;
+      $('#togglePreview').classList.toggle('active', showPreview);
+    }
+    if (layout === 'simple') {
+      if (document.body.dataset.mobileView === 'files') setMobileView('editor');
+      if ($('#editorArea').dataset.mode !== 'ai') setMode('ai');
+    }
+  }
 
   function setMobileView(view) {
     document.body.dataset.mobileView = view;
@@ -1054,6 +1082,15 @@
     bindPreviewUrl();
     $('#togglePreview').onclick = togglePreview;
     $('#toggleSidebar').onclick = toggleSidebar;
+    // Tombol Simple/Coding disorot (bercahaya) sampai pengguna pertama kali memakainya.
+    if (!storage.get('rakit.layoutSeen', false)) $('.layout-switch').classList.add('attention');
+    document.querySelectorAll('.layout-switch [data-layout]').forEach((btn) => {
+      btn.onclick = () => {
+        setLayout(btn.dataset.layout);
+        $('.layout-switch').classList.remove('attention');
+        storage.set('rakit.layoutSeen', true);
+      };
+    });
 
     const autosave = $('#autosave');
     autosave.checked = state.autosave;
@@ -1245,6 +1282,11 @@
 
   // Area editor punya dua mode: 'code' (Monaco) dan 'ai' (chat asisten).
   function setMode(mode) {
+    // Mis. "buka tabel" dari hasil AI: tampilannya hanya ada di Coding, jadi pindah ke sana.
+    if (mode !== 'ai' && isSimple()) {
+      setLayout('coding');
+      toast('Pindah ke mode Coding');
+    }
     $('#editorArea').dataset.mode = mode;
     $('#codeView').hidden = mode !== 'code';
     $('#aiPanel').hidden = mode !== 'ai';
@@ -1271,7 +1313,7 @@
     }
   }
 
-  const toggleAi = () => setMode($('#editorArea').dataset.mode === 'ai' ? 'code' : 'ai');
+  const toggleAi = () => { if (!isSimple()) setMode($('#editorArea').dataset.mode === 'ai' ? 'code' : 'ai'); };
 
   async function loadCredits() {
     try {
@@ -4050,7 +4092,8 @@
 
     $('#toggleSidebar').classList.add('active');
     $('#togglePreview').classList.add('active');
-    if (storage.get('rakit.previewHidden', false)) togglePreview();
+    if (storage.get('rakit.previewHidden', false) && !isSimple()) togglePreview();
+    setLayout(isSimple() ? 'simple' : 'coding');
     setDevice(storage.get('rakit.device', 'desktop'));
     initSplitters();
     bindEvents();
