@@ -163,7 +163,6 @@ a.chip-btn svg { width: 14px; height: 14px; }
 .mini-btn svg { width: 13px; height: 13px; }
 .mini-btn:hover { background: var(--raised); color: var(--white); }
 
-.file-title { color: var(--muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32vw; }
 .save-pill {
   padding: 3px 10px;
   border-radius: 999px;
@@ -782,7 +781,7 @@ kbd {
 /* ---------- Responsif ---------- */
 @media (max-width: 980px) {
   /* Kolom tengah tinggal tombol Simple/Coding. */
-  .brand-name, .file-title, .save-pill, #togglePreview span, .publish-btn span, #guideLink span { display: none; }
+  .brand-name, .save-pill, #togglePreview span, .publish-btn span, #guideLink span { display: none; }
 }
 
 
@@ -842,6 +841,8 @@ kbd {
 .credit-badge:empty { display: none; }
 
 .ai-messages { flex: 1; overflow-y: auto; padding: 16px max(16px, calc((100% - 760px) / 2)) 12px; display: flex; flex-direction: column; gap: 12px; user-select: text; }
+/* Teks yang tergulir ke bawah bar tab memudar halus, tidak terpotong tajam. */
+.ai-messages { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14px); mask-image: linear-gradient(to bottom, transparent, #000 14px); }
 .ai-messages::-webkit-scrollbar { width: 8px; }
 .ai-messages::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px; }
 
@@ -948,7 +949,6 @@ kbd {
 }
 .ai-composer textarea::placeholder { color: var(--faint); }
 .ai-composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 2px 0 6px; }
-.ai-context { color: var(--faint); font: 11px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-send {
   display: grid;
   place-items: center;
@@ -1315,7 +1315,7 @@ button.credit-badge:disabled { cursor: default; }
 }
 
 /* ---------- Mode Builder / Plan ---------- */
-.ai-context { flex: 1; min-width: 0; }
+.ai-send { margin-left: auto; }
 .ai-mode { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--bg); flex-shrink: 0; }
 .ai-mode button {
   display: inline-flex;
@@ -1366,9 +1366,6 @@ button.credit-badge:disabled { cursor: default; }
 .plan-run:hover:not(:disabled) { filter: brightness(1.1); }
 .plan-run:disabled { background: var(--raised); color: var(--muted); cursor: default; }
 
-@media (max-width: 520px) {
-  .ai-context { display: none; }
-}
 
 .md-table { margin: 0 0 10px; overflow-x: auto; border: 1px solid var(--line-2); border-radius: 10px; }
 .md-table table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -1703,10 +1700,6 @@ button.credit-badge:disabled { cursor: default; }
   .db-grid td.editing input, .db-grid td.editing textarea { font-size: 16px !important; }
 }
 
-@media (max-width: 400px) {
-  /* Label mode disembunyikan, cukup ikon */
-  .mode-switch button { font-size: 0; gap: 0; padding: 0 12px; }
-}
 
 /* Aturan .modal input di atas untuk kotak teks; checkbox di dalam modal tidak boleh ikut. */
 .modal input[type="checkbox"] { width: auto; height: auto; margin: 0; padding: 0; }
@@ -1718,8 +1711,14 @@ button.credit-badge:disabled { cursor: default; }
 @container (max-width: 460px) {
   .ai-head .ai-title { display: none; }
 }
-@container (max-width: 340px) {
+/* Panel sempit: label tab cukup untuk tab yang aktif, sisanya ikon; sangat sempit: semua ikon. */
+@container (max-width: 560px) {
+  .mode-switch button:not([aria-selected="true"]) { font-size: 0; gap: 0; padding: 0 11px; }
+}
+@container (max-width: 380px) {
   .mode-switch button { font-size: 0; gap: 0; padding: 0 11px; }
+}
+@container (max-width: 340px) {
   .data-head .data-title { display: none; }
 }
 @container (max-width: 300px) {
@@ -2195,7 +2194,7 @@ body[data-layout="simple"] .coding-only,
 body:not([data-layout="simple"]) .simple-only { display: none !important; }
 
 /* Simple: hanya chat AI dan preview. */
-body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePreview, .file-title, .save-pill, #tabs, .mode-switch, .data-head) {
+body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePreview, .save-pill, #tabs, .mode-switch, .data-head) {
   display: none !important;
 }
 @media (min-width: 761px) {
@@ -2203,9 +2202,12 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
   body[data-layout="simple"] .editor-area { flex: 0 1 500px; min-width: 340px; }
   body[data-layout="simple"] .preview { flex: 1 1 auto; width: auto !important; }
 }
-@media (max-width: 400px) {
-  .layout-switch button { gap: 0; padding: 0 8px; }
+@media (max-width: 760px) {
+  .layout-switch button { gap: 0; padding: 0 10px; }
   .layout-switch button svg { display: none; }
+}
+@media (max-width: 380px) {
+  .layout-switch button { padding: 0 8px; }
 }
 
 /* Sorotan untuk tombol Simple/Coding sampai pengguna pertama kali memakainya (kelas dipasang JS):

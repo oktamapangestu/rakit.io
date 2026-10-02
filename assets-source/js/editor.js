@@ -311,7 +311,6 @@
       }, svg(ICON.close)));
     }));
     $('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    $('#title').textContent = state.active ?? '';
     const projectName = state.project ? `${state.project.name} · ` : '';
     document.title = `${state.active ? `${isDirty(state.active) ? '● ' : ''}${baseName(state.active)} · ` : ''}${projectName}rakit.io`;
   }
@@ -1254,7 +1253,6 @@
     const canSend = c?.enabled && c.remaining >= promptCost() && !ai.busy && !ai.applying;
     $('#aiSend').disabled = !canSend || !$('#aiInput').value.trim();
     $('#aiInput').disabled = !c?.enabled;
-    $('#aiContext').textContent = state.active ? `konteks: ${state.active}` : 'konteks: semua file';
   }
 
   function renderAiEmpty() {
