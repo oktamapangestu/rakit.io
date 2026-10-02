@@ -3235,9 +3235,18 @@
   };
 
   // Judul & keterangan tiap versi dalam bahasa sehari-hari.
+  // Label versi dipotong server di 80 karakter (lihat versions.go: labelMax).
+  const VERSION_LABEL_MAX = 80;
+
   function versionText(v) {
     if (v.kind === 'manual') return { title: v.label || 'Versi yang kamu simpan', sub: 'Disimpan olehmu' };
-    if (v.kind === 'ai') return { title: 'Sebelum AI mengubah', sub: v.label.replace(/^Sebelum AI:\s*/, '') ? `Permintaan: “${v.label.replace(/^Sebelum AI:\s*/, '')}”` : '' };
+    if (v.kind === 'ai') {
+      // Judul = isi permintaan ke AI, supaya versi yang satu bisa dibedakan dari yang lain.
+      const prompt = v.label.replace(/^Sebelum AI:\s*/, '').replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+      if (!prompt) return { title: 'Sebelum AI mengubah', sub: '' };
+      const cut = v.label.length >= VERSION_LABEL_MAX ? '…' : '';
+      return { title: `${prompt[0].toUpperCase()}${prompt.slice(1)}${cut}`, sub: 'Sebelum AI mengubah file' };
+    }
     if (v.kind === 'restore') return { title: 'Sebelum dikembalikan', sub: v.label.replace(/^Sebelum dikembalikan ke\s*/, 'Lalu dikembalikan ke ') };
     return { title: 'Simpanan otomatis', sub: 'Disimpan sendiri sebelum kamu lanjut mengedit' };
   }
