@@ -650,17 +650,25 @@
   }
 
   // ---------- Context menu ----------
-  function showMenu(x, y, items) {
+  // align 'right': x adalah tepi kanan menu (mis. tepi kanan tombol "⋯"). label: elemen judul di atas menu.
+  // Ukuran diukur setelah semua isi terpasang, lalu menu dijaga di dalam layar.
+  function showMenu(x, y, items, { align = 'left', label = null } = {}) {
     const menu = $('#ctxmenu');
     menu.classList.remove('history-menu');
-    menu.replaceChildren(...items.filter(Boolean).map((item) => (item === '-'
+    menu.replaceChildren(...[label, ...items.filter(Boolean).map((item) => (item === '-'
       ? h('div', { class: 'sep' })
       : h('button', { class: item.danger ? 'danger' : '', onclick: () => { hideMenu(); item.run(); } },
-        h('span', {}, item.label), item.hint ? h('span', { class: 'hint' }, item.hint) : null))));
+        h('span', {}, item.label), item.hint ? h('span', { class: 'hint' }, item.hint) : null)))].filter(Boolean));
     menu.hidden = false;
-    const rect = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(x, innerWidth - rect.width - 4)}px`;
-    menu.style.top = `${Math.min(y, innerHeight - rect.height - 4)}px`;
+    // Ukur di pojok kiri atas (ruang penuh, isi tidak terlipat karena posisi lama di dekat tepi layar).
+    // offsetWidth/Height: ukuran asli, tidak terpengaruh animasi muncul (scale) seperti getBoundingClientRect.
+    menu.style.left = '0px';
+    menu.style.top = '0px';
+    const width = menu.offsetWidth;
+    const height = menu.offsetHeight;
+    const left = align === 'right' ? x - width : x;
+    menu.style.left = `${Math.max(4, Math.min(left, innerWidth - width - 4))}px`;
+    menu.style.top = `${Math.max(4, Math.min(y, innerHeight - height - 4))}px`;
   }
 
   function hideMenu() {
@@ -787,7 +795,7 @@
 
   function showAccountMenu() {
     const rect = $('#avatarBtn').getBoundingClientRect();
-    showMenu(rect.right - 220, rect.bottom + 8, [
+    showMenu(rect.right, rect.bottom + 8, [
       { label: `Project: ${state.project.name}`, hint: 'ganti ›', run: () => setTimeout(() => showProjectMenu($('#avatarBtn')), 0) },
       '-',
       { label: 'Salin URL website', run: () => copyText(state.project.siteUrl) },
@@ -797,9 +805,7 @@
       state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
       '-',
       { label: 'Keluar', danger: true, run: logout },
-    ]);
-    const menu = $('#ctxmenu');
-    menu.prepend(h('div', { class: 'menu-label' }, h('strong', {}, state.me.username), state.me.email));
+    ], { align: 'right', label: h('div', { class: 'menu-label' }, h('strong', {}, state.me.username), state.me.email) });
   }
 
   async function logout() {
@@ -1032,10 +1038,11 @@
       if (!row) return;
       const { path, type } = row.dataset;
       if (e.target.closest('.row-more')) {
+        // Posisi tombol dibaca sebelum renderTree(): setelahnya tombol ini sudah diganti elemen baru.
+        const rect = e.target.closest('.row-more').getBoundingClientRect();
         state.selected = path;
         renderTree();
-        const rect = e.target.closest('.row-more').getBoundingClientRect();
-        showMenu(rect.right - 200, rect.bottom + 4, treeMenu(state.entries.find((x) => x.path === path)));
+        showMenu(rect.right, rect.bottom + 4, treeMenu(state.entries.find((x) => x.path === path)), { align: 'right' });
         return;
       }
       state.selected = path;
