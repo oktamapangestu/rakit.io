@@ -1898,6 +1898,18 @@ button.credit-badge:disabled { cursor: default; }
 }
 .history-item:hover { background: var(--raised); }
 .history-item.selected { border-color: rgb(103 232 249 / 0.35); background: rgb(14 116 144 / 0.16); }
+.history-now {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 2px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--ok);
+  border-radius: 0 10px 10px 0;
+  background: rgb(52 211 153 / 0.06);
+}
+.history-now-dot { justify-self: center; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px rgb(52 211 153 / 0.18); }
 .history-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--raised); color: var(--muted); }
 .history-icon svg { width: 14px; height: 14px; fill: currentColor; }
 .history-item.manual .history-icon, .history-icon.manual { background: rgb(52 211 153 / 0.14); color: var(--ok); }

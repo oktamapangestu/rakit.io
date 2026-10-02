@@ -3238,14 +3238,19 @@
   // Label versi dipotong server di 80 karakter (lihat versions.go: labelMax).
   const VERSION_LABEL_MAX = 80;
 
+  // Isi permintaan ke AI dari label versi "Sebelum AI: …" (tanda kutip di ujungnya dibuang).
+  function aiPrompt(v) {
+    const prompt = v.label.replace(/^Sebelum AI:\s*/, '').replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+    if (!prompt) return '';
+    return `${prompt[0].toUpperCase()}${prompt.slice(1)}${v.label.length >= VERSION_LABEL_MAX ? '…' : ''}`;
+  }
+
   function versionText(v) {
     if (v.kind === 'manual') return { title: v.label || 'Versi yang kamu simpan', sub: 'Disimpan olehmu' };
     if (v.kind === 'ai') {
       // Judul = isi permintaan ke AI, supaya versi yang satu bisa dibedakan dari yang lain.
-      const prompt = v.label.replace(/^Sebelum AI:\s*/, '').replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
-      if (!prompt) return { title: 'Sebelum AI mengubah', sub: '' };
-      const cut = v.label.length >= VERSION_LABEL_MAX ? '…' : '';
-      return { title: `${prompt[0].toUpperCase()}${prompt.slice(1)}${cut}`, sub: 'Sebelum AI mengubah file' };
+      const prompt = aiPrompt(v);
+      return prompt ? { title: prompt, sub: 'Sebelum AI mengubah file' } : { title: 'Sebelum AI mengubah', sub: '' };
     }
     if (v.kind === 'restore') return { title: 'Sebelum dikembalikan', sub: v.label.replace(/^Sebelum dikembalikan ke\s*/, 'Lalu dikembalikan ke ') };
     return { title: 'Simpanan otomatis', sub: 'Disimpan sendiri sebelum kamu lanjut mengedit' };
@@ -3312,7 +3317,13 @@
         text.sub ? h('span', { class: 'history-sub' }, text.sub) : null),
       h('span', { class: 'history-time' }, timeOf(v.createdAt))));
     }
-    $('#historyList').replaceChildren(saveBtn, ...items, note);
+    // Penanda kondisi project saat ini: semua versi di bawahnya adalah foto dari waktu sebelumnya.
+    const now = h('div', { class: 'history-now' },
+      h('span', { class: 'history-now-dot' }),
+      h('span', { class: 'history-text' },
+        h('span', { class: 'history-title' }, 'Kondisi sekarang'),
+        h('span', { class: 'history-sub' }, 'Yang tampil di editor dan website')));
+    $('#historyList').replaceChildren(saveBtn, now, ...items, note);
   }
 
   function renderHistoryWelcome() {
@@ -3332,6 +3343,32 @@
     new: { label: 'File baru', hint: 'Dibuat setelah versi ini' },
     same: { label: 'Sama', hint: 'Tidak berubah' },
   };
+
+  function restoreText(version) {
+    const when = fullTime(version.createdAt);
+    const keep = 'Kondisi sekarang disimpan dulu sebagai versi baru, jadi kamu bisa kembali lagi kapan saja.';
+    if (version.kind !== 'ai') {
+      return {
+        title: 'Kembalikan semua file ke versi ini?',
+        text: 'Tenang, kondisi sekarang disimpan dulu sebagai versi baru. Jadi kalau berubah pikiran, kamu bisa kembali lagi.',
+        button: 'Kembalikan ke versi ini', confirm: `Semua file akan dibuat sama seperti pada ${when}. ${keep}`, done: 'Project dikembalikan ke versi ini',
+      };
+    }
+    const prompt = aiPrompt(version);
+    const what = prompt ? `“${prompt}”` : 'ini';
+    if (hist.list[0]?.id === version.id) {
+      return {
+        title: 'Batalkan perubahan AI ini?',
+        text: `File dikembalikan ke kondisi sebelum AI mengerjakan permintaan ${what}. ${keep}`,
+        button: 'Batalkan perubahan AI', confirm: `File dikembalikan ke kondisi sebelum AI mengerjakan permintaan ${what}. ${keep}`, done: 'Perubahan AI dibatalkan',
+      };
+    }
+    return {
+      title: 'Kembali ke sebelum permintaan ini?',
+      text: `Perubahan dari permintaan ${what} dan semua perubahan sesudahnya ikut dibatalkan. ${keep}`,
+      button: 'Kembalikan ke sebelum ini', confirm: `Semua file dibuat sama seperti pada ${when}, sebelum AI mengerjakan permintaan ${what}. Perubahan sesudahnya ikut dibatalkan. ${keep}`, done: 'Project dikembalikan ke sebelum permintaan ini',
+    };
+  }
 
   async function showVersion(id) {
     const seq = ++hist.seq;
@@ -3381,9 +3418,9 @@
       differs.length
         ? h('div', { class: 'history-restore-box' },
           h('div', {},
-            h('strong', {}, 'Kembalikan semua file ke versi ini?'),
-            h('p', {}, 'Tenang, kondisi sekarang disimpan dulu sebagai versi baru. Jadi kalau berubah pikiran, kamu bisa kembali lagi.')),
-          h('button', { type: 'button', class: 'history-primary', onclick: () => restoreVersion(version) }, 'Kembalikan ke versi ini'))
+            h('strong', {}, restoreText(version).title),
+            h('p', {}, restoreText(version).text)),
+          h('button', { type: 'button', class: 'history-primary', onclick: () => restoreVersion(version) }, restoreText(version).button))
         : null,
       differs.length ? h('h4', { class: 'history-files-title' }, 'Yang berbeda dari sekarang') : null,
       differs.length ? h('div', { class: 'history-files' }, differs.map(fileRow)) : null,
@@ -3478,23 +3515,23 @@
   async function restoreVersion(version, path = null) {
     const files = hist.detail?.files ?? [];
     const removed = path ? [] : files.filter((f) => f.status === 'new').map((f) => f.path);
+    const text = restoreText(version);
     const ok = await modal({
-      title: path ? 'Kembalikan file ini?' : 'Kembalikan ke versi ini?',
+      title: path ? 'Kembalikan file ini?' : text.title,
       message: [
         path
-          ? `"${path}" akan dibuat sama seperti pada ${fullTime(version.createdAt)}.`
-          : `Semua file akan dibuat sama seperti pada ${fullTime(version.createdAt)}.`,
+          ? `"${path}" akan dibuat sama seperti pada ${fullTime(version.createdAt)}. Kondisi sekarang disimpan dulu sebagai versi baru, jadi kamu bisa kembali lagi kapan saja.`
+          : text.confirm,
         removed.length ? ` File yang dibuat setelahnya akan dihapus: ${removed.join(', ')}.` : '',
-        ' Kondisi sekarang disimpan dulu sebagai versi baru, jadi kamu bisa kembali lagi kapan saja.',
       ].join(''),
-      buttons: [{ label: 'Ya, kembalikan', value: true, primary: true }, { label: 'Batal', value: null }],
+      buttons: [{ label: path ? 'Ya, kembalikan' : `Ya, ${text.button[0].toLowerCase()}${text.button.slice(1)}`, value: true, primary: true }, { label: 'Batal', value: null }],
     });
     if (!ok) return;
     try {
       await saveAll();
       const { touched } = await api('POST', `/api/versions/${version.id}/restore`, path ? { path } : {});
       await syncFromServer(touched);
-      toast(touched.length ? (path ? 'File dikembalikan' : 'Project dikembalikan ke versi ini') : 'Tidak ada yang perlu dikembalikan');
+      toast(touched.length ? (path ? 'File dikembalikan' : text.done) : 'Tidak ada yang perlu dikembalikan');
       historyLoad(version.id);
     } catch (err) {
       toast(err.message, 'error');
