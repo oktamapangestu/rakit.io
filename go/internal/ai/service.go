@@ -324,7 +324,9 @@ func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 
 // ---------- Konteks proyek ----------
 
-func (s *Service) projectContext(ctx context.Context, slug, activePath string) (string, error) {
+// projectContext: isi project untuk AI. priority (halaman & CSS/JS blok terpilih) didahulukan, lalu file
+// yang sedang dibuka, lalu yang kecil-kecil — yang tidak muat di batas konteks dilewati.
+func (s *Service) projectContext(ctx context.Context, slug, activePath string, priority []string) (string, error) {
 	schema, err := s.userdb.SchemaSummary(ctx, slug)
 	if err != nil {
 		return "", err
@@ -344,11 +346,19 @@ func (s *Service) projectContext(ctx context.Context, slug, activePath string) (
 			images = append(images, e)
 		}
 	}
-	// File yang sedang dibuka didahulukan, lalu yang kecil-kecil.
+	rank := map[string]int{}
+	for i, p := range priority {
+		rank[p] = len(priority) - i
+	}
+	if _, listed := rank[activePath]; activePath != "" && !listed {
+		rank[activePath] = 0
+	}
 	sort.SliceStable(texts, func(i, j int) bool {
 		a, b := texts[i], texts[j]
-		if a.Path == activePath || b.Path == activePath {
-			return a.Path == activePath && b.Path != activePath
+		ra, okA := rank[a.Path]
+		rb, okB := rank[b.Path]
+		if okA || okB {
+			return okA && (!okB || ra > rb)
 		}
 		return a.Size < b.Size
 	})
@@ -419,6 +429,24 @@ func (s *Service) outsideBlocks(slug string, list []blocks.Block, changes []chan
 		before, err := files.ReadText(root, c.Path)
 		if err == nil && blocks.ChangedOutside(before, c.Content, selectors) {
 			out = append(out, c.Path)
+		}
+	}
+	return out
+}
+
+// scripts: isi semua file .js project (untuk mencari baris yang menyebut blok terpilih).
+func (s *Service) scripts(slug string) map[string]string {
+	root := s.cfg.SiteRoot(slug)
+	entries, err := files.ListTree(root)
+	out := map[string]string{}
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		if !e.Dir && strings.HasSuffix(strings.ToLower(e.Path), ".js") {
+			if content, err := files.ReadText(root, e.Path); err == nil {
+				out[e.Path] = content
+			}
 		}
 	}
 	return out
@@ -588,9 +616,10 @@ func (s *Service) runJob(j *job, in jobInput) {
 		}
 
 		if len(in.blocks) > 0 {
+			blocks.FindJS(in.blocks, s.scripts(slug))
 			ask += "\n\n" + blocks.Instructions(in.blocks)
 		}
-		projectContext, err := s.projectContext(j.ctx, slug, in.activePath)
+		projectContext, err := s.projectContext(j.ctx, slug, in.activePath, blocks.Related(in.blocks))
 		if err != nil {
 			return err
 		}

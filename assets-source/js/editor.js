@@ -1652,7 +1652,7 @@
     box.querySelector('.ai-empty')?.remove();
     const mode = ai.mode;
     const attached = ai.images;
-    const picked = pick.blocks.map((b) => ({ page: b.page, selector: b.selector, label: b.label, html: b.html }));
+    const picked = pick.blocks.map((b) => ({ page: b.page, selector: b.selector, label: b.label, html: b.html, css: b.css }));
     box.append(userBubble({ mode, content: prompt, images: attached.map((i) => i.thumb), blocks: picked }));
     if (pick.on) setPick(false); // halaman akan berubah; pilih ulang untuk permintaan berikutnya
     ai.images = [];

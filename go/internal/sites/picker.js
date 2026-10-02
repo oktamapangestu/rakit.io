@@ -55,11 +55,57 @@
     return name ? `${NAMES[tag] || 'Blok'} .${name}` : NAMES[tag] || `Blok <${tag}>`;
   }
 
+  // ---------- Aturan CSS yang mengenai blok ----------
+  // Pseudo-element & state (:hover, ::before, …) dibuang dulu supaya bisa dicocokkan dengan elemen.
+  const PSEUDO = /::?(?:before|after|placeholder|marker|selection|first-line|first-letter|backdrop|hover|focus-visible|focus-within|focus|active|visited|link|target|checked|disabled)\b(?:\([^)]*\))?/g;
+  const GENERIC = new Set(['*', 'html', 'body', ':root', 'html, body', 'body, html']);
+  function applies(el, selectorText) {
+    const sel = selectorText.replace(PSEUDO, '').trim();
+    if (!sel || GENERIC.has(sel)) return false;
+    try {
+      return el.matches(sel) || Boolean(el.querySelector(sel));
+    } catch {
+      return false;
+    }
+  }
+  function cssOf(el) {
+    const bySource = new Map(); // file ("" = <style> di halaman) -> aturan
+    let total = 0;
+    const visit = (rules, file, wrap) => {
+      for (const rule of rules) {
+        if (total > 5000) return;
+        if (rule instanceof CSSStyleRule) {
+          if (!applies(el, rule.selectorText)) continue;
+          const text = wrap ? `${wrap} { ${rule.cssText} }` : rule.cssText;
+          total += text.length;
+          bySource.set(file, [...(bySource.get(file) || []), text]);
+        } else if (rule.cssRules) {
+          // @media / @supports / @container: aturan di dalamnya ikut, dengan kondisinya.
+          const at = rule instanceof CSSMediaRule ? `@media ${rule.media.mediaText}`
+            : rule.conditionText ? `@${rule.constructor.name.replace(/^CSS|Rule$/g, '').toLowerCase()} ${rule.conditionText}` : wrap;
+          visit(rule.cssRules, file, at);
+        }
+      }
+    };
+    for (const sheet of document.styleSheets) {
+      let rules;
+      try {
+        rules = sheet.cssRules; // stylesheet dari situs lain (mis. font) tidak bisa dibaca: dilewati
+      } catch {
+        continue;
+      }
+      const url = sheet.href && new URL(sheet.href);
+      if (url && url.origin !== location.origin) continue;
+      visit(rules, url ? url.pathname : '', '');
+    }
+    return [...bySource].map(([file, rules]) => ({ file, rules: rules.join('\n') }));
+  }
+
   function report() {
     send({
       type: 'blocks',
       page: location.pathname,
-      blocks: selected.map((el) => ({ selector: selectorOf(el), label: labelOf(el), html: el.outerHTML.slice(0, 6000) })),
+      blocks: selected.map((el) => ({ selector: selectorOf(el), label: labelOf(el), html: el.outerHTML.slice(0, 6000), css: cssOf(el) })),
     });
   }
 

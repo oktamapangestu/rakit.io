@@ -104,3 +104,49 @@ func TestInstructions(t *testing.T) {
 		}
 	}
 }
+
+func TestCSSdanJS(t *testing.T) {
+	resolve := func(string) string { return "index.html" }
+	got, err := Parse([]any{map[string]any{
+		"page": "/", "selector": hero, "label": "Hero", "html": `<section class="hero" id="atas"><h1 class="judul">Hai</h1><a class="btn">Mulai</a></section>`,
+		"css": []any{
+			map[string]any{"file": "/style.css", "rules": ".hero { padding: 2rem; }"},
+			map[string]any{"file": "", "rules": "h1 { color: red; }"},
+			map[string]any{"file": "/../rahasia.css", "rules": "x{}"},
+			map[string]any{"file": "/skrip.js", "rules": "x{}"},
+			map[string]any{"file": "/kosong.css", "rules": "  "},
+			"bukan objek",
+			map[string]any{"file": "/besar.css", "rules": strings.Repeat("a", 6000)},
+		},
+	}}, resolve)
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := got[0].CSS
+	if len(css) != 3 || css[0] != (CSS{"style.css", ".hero { padding: 2rem; }"}) || css[1] != (CSS{"", "h1 { color: red; }"}) || css[2].File != "besar.css" {
+		t.Fatalf("CSS = %+v", css)
+	}
+	if total := len(css[0].Rules) + len(css[1].Rules) + len(css[2].Rules); total != maxCSS {
+		t.Fatalf("total CSS %d, mau dipotong di %d", total, maxCSS)
+	}
+
+	FindJS(got, map[string]string{
+		"script.js": "const x = 1;\ndocument.querySelector('.hero').classList.add('on');\nconst heroic = 2;\ndocument.getElementById('atas');",
+		"lain.js":   "// .judul dipakai di sini\nconst btn = 1; // 'btn' sebagai kata utuh",
+		"aman.js":   "console.log('heroes', 'judulnya')",
+	})
+	want := []string{"lain.js:1: // .judul dipakai di sini", "lain.js:2: const btn = 1; // 'btn' sebagai kata utuh", "script.js:2: document.querySelector('.hero').classList.add('on');", "script.js:4: document.getElementById('atas');"}
+	if strings.Join(got[0].JS, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("JS =\n%s", strings.Join(got[0].JS, "\n"))
+	}
+
+	if r := Related(got); strings.Join(r, ",") != "index.html,style.css,besar.css,lain.js,script.js" {
+		t.Fatalf("Related = %v", r)
+	}
+	text := Instructions(got)
+	for _, w := range []string{"<css file=\"style.css\">\n.hero { padding: 2rem; }\n</css>", "<css file=\"inline <style> in index.html\">", "JavaScript lines that refer to this block's id/class names:\n- lain.js:1:"} {
+		if !strings.Contains(text, w) {
+			t.Errorf("instruksi tidak memuat %q", w)
+		}
+	}
+}

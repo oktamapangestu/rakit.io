@@ -12,11 +12,14 @@ package blocks
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 
+	"rakit.io/server/internal/files"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
 )
@@ -26,14 +29,24 @@ const (
 	maxSelector = 400
 	maxLabel    = 60
 	maxHTML     = 6000 // potongan HTML blok yang ikut dikirim ke AI
+	maxCSS      = 5000 // aturan CSS yang mengenai blok, per blok
+	maxJSRefs   = 8    // baris JS yang menyebut id/class blok, per blok
 )
 
-// Block: satu blok terpilih. HTML hanya untuk konteks AI dan tidak disimpan.
+// Block: satu blok terpilih. HTML, CSS, dan JS hanya untuk konteks AI dan tidak disimpan.
 type Block struct {
-	Page     string `json:"page"`     // file HTML, mis. index.html
-	Selector string `json:"selector"` // body > section:nth-of-type(2)
-	Label    string `json:"label"`    // nama yang ditampilkan, mis. "Hero"
-	HTML     string `json:"-"`
+	Page     string   `json:"page"`     // file HTML, mis. index.html
+	Selector string   `json:"selector"` // body > section:nth-of-type(2)
+	Label    string   `json:"label"`    // nama yang ditampilkan, mis. "Hero"
+	HTML     string   `json:"-"`
+	CSS      []CSS    `json:"-"` // aturan CSS yang mengenai blok, dicatat browser saat dipilih
+	JS       []string `json:"-"` // "script.js:12: …" baris JS yang menyebut id/class blok (diisi FindJS)
+}
+
+// CSS: aturan dari satu sumber. File kosong = <style> di dalam halaman.
+type CSS struct {
+	File  string
+	Rules string
 }
 
 type step struct {
@@ -95,9 +108,127 @@ func Parse(raw any, resolve func(pathname string) string) ([]Block, error) {
 			label = "Blok"
 		}
 		code, _ := m["html"].(string)
-		out = append(out, Block{Page: file, Selector: selector, Label: label, HTML: jsconv.Slice(code, maxHTML)})
+		out = append(out, Block{Page: file, Selector: selector, Label: label, HTML: jsconv.Slice(code, maxHTML), CSS: parseCSS(m["css"])})
 	}
 	return out, nil
+}
+
+// parseCSS: [{file: "/style.css" | "", rules}] dari browser. Sumber yang tidak valid diabaikan; total
+// aturan dipotong di maxCSS.
+func parseCSS(raw any) []CSS {
+	list, _ := raw.([]any)
+	var out []CSS
+	budget := maxCSS
+	for _, item := range list {
+		m, _ := item.(map[string]any)
+		rules, _ := m["rules"].(string)
+		file, _ := m["file"].(string)
+		if rules = strings.TrimSpace(rules); rules == "" || budget <= 0 {
+			continue
+		}
+		if file != "" {
+			clean, err := files.CleanPath(strings.TrimPrefix(file, "/"))
+			if err != nil || !strings.HasSuffix(strings.ToLower(clean), ".css") {
+				continue
+			}
+			file = clean
+		}
+		rules = jsconv.Slice(rules, budget)
+		budget -= jsconv.Len(rules)
+		out = append(out, CSS{File: file, Rules: rules})
+	}
+	return out
+}
+
+// Related: file CSS/JS yang berkaitan dengan blok-blok ini (untuk didahulukan di konteks AI).
+func Related(blocks []Block) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(p string) {
+		if p != "" && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	for _, b := range blocks {
+		add(b.Page)
+		for _, c := range b.CSS {
+			add(c.File)
+		}
+		for _, ref := range b.JS {
+			add(ref[:strings.Index(ref, ":")])
+		}
+	}
+	return out
+}
+
+// ---------- JS yang menyebut blok ----------
+
+// names: id dan class di dalam blok (elemen blok dan isinya), yang cukup khas untuk dicari di JS.
+func names(code string) []string {
+	nodes, err := html.ParseFragment(strings.NewReader(code), &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body})
+	if err != nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	var walk func(n *html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			for _, a := range n.Attr {
+				if a.Key != "id" && a.Key != "class" {
+					continue
+				}
+				for _, name := range strings.Fields(a.Val) {
+					if len(name) >= 3 && !seen[name] && len(out) < 20 {
+						seen[name] = true
+						out = append(out, name)
+					}
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	for _, n := range nodes {
+		walk(n)
+	}
+	return out
+}
+
+// FindJS mengisi Block.JS: baris di file JS (path -> isi) yang menyebut id/class blok sebagai kata utuh.
+func FindJS(list []Block, scripts map[string]string) {
+	paths := make([]string, 0, len(scripts))
+	for p := range scripts {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for i := range list {
+		var patterns []*regexp.Regexp
+		for _, name := range names(list[i].HTML) {
+			patterns = append(patterns, regexp.MustCompile(`(^|[^\w-])`+regexp.QuoteMeta(name)+`([^\w-]|$)`))
+		}
+		if len(patterns) == 0 {
+			continue
+		}
+		var refs []string
+	files:
+		for _, p := range paths {
+			for n, line := range strings.Split(scripts[p], "\n") {
+				for _, re := range patterns {
+					if re.MatchString(line) {
+						refs = append(refs, fmt.Sprintf("%s:%d: %s", p, n+1, jsconv.Slice(strings.TrimSpace(line), 160)))
+						if len(refs) == maxJSRefs {
+							break files
+						}
+						break
+					}
+				}
+			}
+		}
+		list[i].JS = refs
+	}
 }
 
 // Pages: file HTML yang memuat blok-blok ini, beserta selectornya.
@@ -122,6 +253,22 @@ func Instructions(blocks []Block) string {
 		fmt.Fprintf(&b, "%d. %q in %s (CSS path: %s)\n", i+1, blk.Label, blk.Page, blk.Selector)
 		if blk.HTML != "" {
 			fmt.Fprintf(&b, "<block>\n%s\n</block>\n", blk.HTML)
+		}
+		if len(blk.CSS) > 0 {
+			b.WriteString("CSS rules that currently style this block (recorded by the browser):\n")
+			for _, c := range blk.CSS {
+				file := c.File
+				if file == "" {
+					file = "inline <style> in " + blk.Page
+				}
+				fmt.Fprintf(&b, "<css file=%q>\n%s\n</css>\n", file, c.Rules)
+			}
+		}
+		if len(blk.JS) > 0 {
+			b.WriteString("JavaScript lines that refer to this block's id/class names:\n")
+			for _, ref := range blk.JS {
+				fmt.Fprintf(&b, "- %s\n", ref)
+			}
 		}
 	}
 	b.WriteString("\nChange ONLY the selected blocks: their HTML, and CSS/JS that applies to them. Keep every other " +

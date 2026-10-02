@@ -157,3 +157,24 @@ test('blok dari beberapa halaman sekaligus: diperiksa per halaman', { skip }, as
   ({ final } = await user.build('rapikan', { blocks: [heroBlock, footer] }));
   assert.match(final.message.content, /\(tentang\.html\)\. Cek dulu/);
 });
+
+test('CSS dan JS terkait blok ikut dikirim ke AI dan didahulukan di konteks', { skip }, async () => {
+  const user = await owner('toko-css');
+  const root = path.join(stack.dataDir, 'sites', 'toko-css');
+  // Project besar: style.css (terkait blok) lebih besar dari file lain, total melebihi batas konteks AI.
+  fs.writeFileSync(path.join(root, 'style.css'), `.hero { padding: 2rem; }\n/* ${'x'.repeat(90_000)} */`);
+  fs.writeFileSync(path.join(root, 'script.js'), "const x = 1;\ndocument.querySelector('.hero').classList.add('tampil');\n");
+  fs.writeFileSync(path.join(root, 'a.js'), `// ${'a'.repeat(60_000)}`);
+  fs.writeFileSync(path.join(root, 'b.js'), `// ${'b'.repeat(60_000)}`);
+  stack.ai.script.push({ text: 'Rencana: ubah padding hero.' });
+  const block = { ...heroBlock, css: [{ file: '/style.css', rules: '.hero { padding: 2rem; }' }, { file: '', rules: 'h1 { margin: 0; }' }] };
+  const { final } = await user.prompt('rencanakan perubahan hero', { mode: 'plan', blocks: [block] });
+  assert.equal(final.type, 'done');
+
+  const asked = stack.ai.requests.at(-1).messages.at(-1).content;
+  assert.ok(asked.includes('CSS rules that currently style this block (recorded by the browser):\n<css file="style.css">\n.hero { padding: 2rem; }\n</css>\n<css file="inline <style> in index.html">\nh1 { margin: 0; }\n</css>'));
+  assert.ok(asked.includes("JavaScript lines that refer to this block's id/class names:\n- script.js:2: document.querySelector('.hero').classList.add('tampil');"));
+  // Didahulukan: halaman blok, CSS-nya, lalu JS-nya; file lain yang tidak muat dilewati.
+  assert.ok(asked.includes('<file path="index.html">') && asked.includes('<file path="style.css">') && asked.includes('<file path="script.js">'));
+  assert.match(asked, /Not included because the project is too large: (a\.js|b\.js)$/m);
+});
