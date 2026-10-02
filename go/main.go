@@ -30,6 +30,7 @@ import (
 	"rakit.io/server/internal/google"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/plans"
+	"rakit.io/server/internal/publish"
 	"rakit.io/server/internal/siteapi"
 	"rakit.io/server/internal/sites"
 	"rakit.io/server/internal/store"
@@ -94,7 +95,8 @@ func main() {
 	appAPI, err := api.New(cfg, db, sessions, api.Services{
 		Plans: limits, UserDB: projectDB, Versions: history, Credits: wallet,
 		Billing: billing.New(cfg, db, limits, wallet), AI: editorAI, AIModels: models, Assistant: helper,
-		Admin: admin.New(cfg, db, limits, models, queue),
+		Admin:   admin.New(cfg, db, limits, models, queue),
+		Publish: publish.New(cfg, db, projectDB),
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -122,18 +124,24 @@ func main() {
 			return
 		}
 		sub, ok := strings.CutSuffix(host, suffix)
+		slug, _ := strings.CutSuffix(sub, config.DevSuffix) // toko--dev = versi dev project "toko"
 		switch {
 		case !ok:
 			// Akses lewat IP / host lain -> arahkan ke domain utama.
 			http.Redirect(w, r, cfg.AppOrigin+r.URL.RequestURI(), http.StatusFound)
 		case sub == "www":
 			http.Redirect(w, r, cfg.AppOrigin+r.URL.RequestURI(), http.StatusMovedPermanently)
-		case !usernameRE.MatchString(sub):
+		case !usernameRE.MatchString(slug):
 			http.Error(w, "Not found", http.StatusNotFound)
 		case siteapi.Matches(r.URL.Path):
-			siteDB.Serve(w, r, sub)
+			// Database versi yang sedang dibuka: prod di <slug>, dev di <slug>--dev.
+			key := sub
+			if target, err := site.Resolve(sub); err == nil && target != nil {
+				key = target.DBKey
+			}
+			siteDB.Serve(w, r, key)
 		case assistant.MatchesSite(r.URL.Path):
-			helper.ServeSite(w, r, sub)
+			helper.ServeSite(w, r, slug)
 		case under(strings.ToLower(r.URL.Path), "/api"):
 			// Seluruh /api/ di domain user dicadangkan untuk sistem.
 			httpx.Fail(w, httpx.Errorf(404, "Endpoint tidak ditemukan"))

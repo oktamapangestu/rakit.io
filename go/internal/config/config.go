@@ -280,5 +280,18 @@ func (c *Config) SiteURL(slug string) string {
 	return c.Protocol + "://" + slug + "." + c.BaseDomain + c.portSuffix
 }
 
-// SiteRoot: folder file website project (data/sites/<slug>).
+// SiteRoot: folder file website project (data/sites/<slug>). Pada project dengan publikasi manual, ini
+// versi dev yang diedit di editor.
 func (c *Config) SiteRoot(slug string) string { return filepath.Join(c.DataDir, "sites", slug) }
+
+// PublishedRoot: versi prod project dengan publikasi manual (data/published/<slug>), yang tayang di
+// <slug>.rakit.io.
+func (c *Config) PublishedRoot(slug string) string {
+	return filepath.Join(c.DataDir, "published", slug)
+}
+
+// DevSuffix: alamat versi dev, mis. toko--dev.rakit.io. Aman: subdomain project tidak boleh memuat "--".
+const DevSuffix = "--dev"
+
+// DevURL: alamat versi dev project dengan publikasi manual.
+func (c *Config) DevURL(slug string) string { return c.SiteURL(slug + DevSuffix) }

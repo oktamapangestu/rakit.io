@@ -781,7 +781,7 @@ kbd {
 /* ---------- Responsif ---------- */
 @media (max-width: 980px) {
   /* Kolom tengah tinggal tombol Simple/Coding. */
-  .brand-name, .save-pill, #togglePreview span, .publish-btn span, #guideLink span { display: none; }
+  .brand-name, .save-pill, #togglePreview span, .publish-btn span, .release-btn span, #guideLink span { display: none; }
 }
 
 
@@ -1591,7 +1591,7 @@ button.credit-badge:disabled { cursor: default; }
 
   .topbar { height: 52px; padding: 0 12px; border-bottom: 1px solid var(--line); }
   .project-chip, #toggleSidebar, #togglePreview { display: none; }
-  .publish-btn { width: 34px; padding: 0; justify-content: center; }
+  .publish-btn, .release-btn { width: 34px; padding: 0; justify-content: center; }
   /* Panduan tetap tersedia di HP sebagai ikon saja. */
   #guideLink { width: 34px; padding: 0; justify-content: center; }
   .plan-badge { height: 30px; padding: 0 9px; }
@@ -2334,3 +2334,67 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 .msg-blocks .ai-block { padding-right: 9px; }
 .ai-block-page { padding: 1px 6px; border-radius: 5px; background: rgb(0 0 0 / 0.25); color: var(--muted); font: 500 11px var(--mono); }
 .ai-block.other-page { border-style: dashed; }
+
+/* ---------- Publikasi manual (dev/prod) ---------- */
+.release-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--white);
+  font: 600 13px var(--ui);
+  cursor: pointer;
+  transition: background 0.15s, filter 0.15s;
+}
+.release-btn svg { width: 14px; height: 14px; color: #86efac; }
+.release-btn:hover { background: var(--accent-soft); }
+.release-btn.pending { border-color: transparent; background: var(--accent); }
+.release-btn.pending svg { color: #fff; }
+.release-btn.pending:hover { filter: brightness(1.1); }
+/* Titik penanda: ada perubahan di dev yang belum tayang. */
+.release-dot { display: none; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border: 2px solid var(--bg); border-radius: 50%; background: var(--warn); }
+.release-btn.pending .release-dot { display: block; animation: release-pulse 1.8s ease-in-out infinite; }
+@keyframes release-pulse { 50% { box-shadow: 0 0 0 4px rgb(251 191 36 / 0.25); } }
+@media (prefers-reduced-motion: reduce) { .release-btn.pending .release-dot { animation: none; } }
+
+.env-badge { flex-shrink: 0; padding: 1px 6px; border-radius: 5px; background: rgb(251 191 36 / 0.16); color: var(--warn); font: 700 10px var(--mono); letter-spacing: 0.06em; }
+
+.modal.publish-modal { max-width: 560px; max-height: calc(100dvh - 32px); overflow-y: auto; }
+.publish-modal h4 { margin: 16px 0 6px; color: var(--white); font-size: 13px; }
+.pub-lead { color: var(--text); }
+.pub-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 10px; max-height: 220px; overflow-y: auto; }
+.pub-list li { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-top: 1px solid var(--line); font-size: 12.5px; }
+.pub-list li:first-child { border-top: 0; }
+.pub-file code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); color: var(--text); }
+.pub-mark { width: 16px; text-align: center; font: 700 13px var(--mono); }
+.pub-file.added .pub-mark { color: var(--ok); }
+.pub-file.changed .pub-mark { color: var(--warn); }
+.pub-file.removed .pub-mark { color: var(--danger); }
+.pub-what { color: var(--muted); font-size: 11.5px; }
+.pub-schema.destructive { color: #fecaca; background: rgb(248 113 113 / 0.08); }
+.pub-note { margin-top: 12px; color: var(--muted); font-size: 12px; }
+.pub-confirm { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 10px 12px; border: 1px solid rgb(248 113 113 / 0.4); border-radius: 10px; background: rgb(248 113 113 / 0.08); color: var(--text); font-size: 12.5px; cursor: pointer; }
+.pub-confirm input { margin-top: 2px; accent-color: var(--danger); }
+.pub-warn p { margin: 12px 0 0; color: #fde68a; font-size: 12.5px; }
+.publish-modal .modal-buttons { align-items: center; }
+.publish-modal .pub-mode { margin-right: auto; font-size: 12.5px; }
+
+.mode-options { display: grid; gap: 8px; }
+.mode-option { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel-2); color: var(--muted); text-align: left; font: 12.5px/1.5 var(--ui); cursor: pointer; }
+.mode-option strong { color: var(--white); font-size: 13.5px; }
+.mode-option[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
+/* Tombol dialog yang belum bisa dipakai (mis. menunggu persetujuan) harus terlihat nonaktif. */
+.modal-buttons button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.4); }
+
+@media (max-width: 760px) {
+  /* Tombol mode di tengah ruang antara logo dan tombol kanan, supaya tidak pernah menimpa tombol. */
+  .topbar { grid-template-columns: auto 1fr auto; }
+  .top-center { justify-content: center; }
+  /* Publikasi manual: tombol Publikasikan menggantikan "Lihat situs" (ada di menu akun). */
+  body[data-publish="manual"] #visitSite { display: none; }
+}

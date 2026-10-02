@@ -164,14 +164,39 @@ type Project struct {
 	Slug      string
 	Name      string
 	CreatedAt int64
+	// Mode publikasi: "live" (setiap simpan langsung tayang) atau "manual" (edit di dev, tayang setelah
+	// dipublikasikan). PublishedAt: publikasi terakhir (ms), 0 = belum pernah.
+	Mode        string
+	PublishedAt int64
 }
+
+// Manual: project memakai dev/prod.
+func (p *Project) Manual() bool { return p.Mode == ModeManual }
+
+const (
+	ModeLive   = "live"
+	ModeManual = "manual"
+)
 
 func scanProject(row interface{ Scan(...any) error }) (*Project, error) {
 	var p Project
-	return oneOrNil(&p, row.Scan(&p.ID, &p.UserID, &p.Slug, &p.Name, &p.CreatedAt))
+	var published sql.NullInt64
+	err := row.Scan(&p.ID, &p.UserID, &p.Slug, &p.Name, &p.CreatedAt, &p.Mode, &published)
+	p.PublishedAt = published.Int64
+	return oneOrNil(&p, err)
 }
 
-const projectColumns = "id, user_id, slug, name, created_at"
+const projectColumns = "id, user_id, slug, name, created_at, publish_mode, published_at"
+
+// SetPublishMode mengganti mode publikasi project; published_at = waktu publikasi (atau NULL).
+func (s *Store) SetPublishMode(id int64, mode string, publishedAt int64) error {
+	var at any
+	if publishedAt > 0 {
+		at = publishedAt
+	}
+	_, err := s.db.Exec("UPDATE projects SET publish_mode = ?, published_at = ? WHERE id = ?", mode, at, id)
+	return err
+}
 
 func (s *Store) ProjectBySlug(slug string) (*Project, error) {
 	return scanProject(s.db.QueryRow("SELECT "+projectColumns+" FROM projects WHERE slug = ?", slug))

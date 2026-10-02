@@ -205,3 +205,41 @@ func (h *Handler) admin(q *request) error {
 	}
 	return q.json(200, out)
 }
+
+// ---------- /api/publish (publikasi manual: dev/prod) ----------
+
+// publish: status mode publikasi project aktif, ganti mode, dan publikasikan versi dev ke website publik.
+func (h *Handler) publish(q *request) error {
+	if err := h.requireAuth(q); err != nil {
+		return err
+	}
+	project, err := h.loadProject(q)
+	if err != nil {
+		return err
+	}
+	svc, ctx := h.svc.Publish, q.r.Context()
+	var out any
+	switch {
+	case q.is("GET"):
+		out, err = svc.Status(ctx, project)
+	case q.is("POST"):
+		if err = q.load(); err == nil {
+			out, err = svc.Publish(ctx, project, jsconv.Truthy(q.body["confirm"]))
+		}
+	case q.is("PUT", "mode"):
+		if err = q.load(); err == nil {
+			if busy, e := h.db.ActiveJobIn(project.ID); e != nil {
+				return e
+			} else if busy {
+				return httpx.Errorf(409, "AI sedang bekerja di project ini. Tunggu selesai atau tekan Stop.")
+			}
+			out, err = svc.SetMode(ctx, project, q.text("mode"), jsconv.Truthy(q.body["confirm"]))
+		}
+	default:
+		return errNotFound
+	}
+	if err != nil {
+		return err
+	}
+	return q.json(200, map[string]any{"publish": out, "project": h.public(project)})
+}

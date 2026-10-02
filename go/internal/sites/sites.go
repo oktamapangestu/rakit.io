@@ -18,11 +18,38 @@ import (
 
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/files"
+	"rakit.io/server/internal/store"
+	"rakit.io/server/internal/userdb"
 )
 
 // Projects: yang dibutuhkan dari database.
 type Projects interface {
-	ProjectExists(slug string) (bool, error)
+	ProjectBySlug(slug string) (*store.Project, error)
+}
+
+// Target: versi website yang disajikan untuk satu subdomain.
+type Target struct {
+	Project *store.Project
+	Dev     bool   // <slug>--dev: versi dev project dengan publikasi manual
+	Root    string // folder file yang disajikan
+	DBKey   string // kunci database untuk /api/db
+}
+
+// Resolve menerjemahkan subdomain ("toko" atau "toko--dev") menjadi versi website yang disajikan.
+// nil = tidak ada (project tidak ada, atau versi dev diminta untuk project yang langsung tayang).
+func (h *Handler) Resolve(sub string) (*Target, error) {
+	slug, dev := strings.CutSuffix(sub, config.DevSuffix)
+	p, err := h.projects.ProjectBySlug(slug)
+	if err != nil || p == nil || (dev && !p.Manual()) {
+		return nil, err
+	}
+	switch {
+	case dev:
+		return &Target{p, true, h.cfg.SiteRoot(slug), slug}, nil
+	case p.Manual():
+		return &Target{p, false, h.cfg.PublishedRoot(slug), userdb.ProdKey(slug)}, nil
+	}
+	return &Target{p, false, h.cfg.SiteRoot(slug), slug}, nil
 }
 
 type Handler struct {
@@ -163,25 +190,33 @@ func (h *Handler) notFoundPage(w http.ResponseWriter, r *http.Request, title, me
 
 var stripUnsafe = strings.NewReplacer("<", "", ">", "", "&", "", `"`, "")
 
-// Serve menyajikan satu request untuk website project `slug`.
-func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, slug string) {
+// Serve menyajikan satu request untuk website di subdomain `sub` (mis. "toko" atau "toko--dev").
+func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, sub string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	exists, err := h.projects.ProjectExists(slug)
+	target, err := h.Resolve(sub)
 	if err != nil {
-		log.Printf("sites: cek project %q: %v", slug, err)
+		log.Printf("sites: cek project %q: %v", sub, err)
 		http.Error(w, "Terjadi kesalahan di server", http.StatusInternalServerError)
 		return
 	}
-	if !exists {
-		h.notFoundPage(w, r, "Situs tidak ditemukan", h.cfg.SiteHost(slug)+" belum dipakai siapa pun.")
+	if target == nil {
+		if slug, dev := strings.CutSuffix(sub, config.DevSuffix); dev {
+			h.notFoundPage(w, r, "Versi dev tidak aktif", h.cfg.SiteHost(slug)+" tidak memakai publikasi manual.")
+		} else {
+			h.notFoundPage(w, r, "Situs tidak ditemukan", h.cfg.SiteHost(sub)+" belum dipakai siapa pun.")
+		}
 		return
 	}
+	if target.Dev {
+		// Versi dev (draft) jangan sampai diindeks mesin pencari.
+		w.Header().Set("X-Robots-Tag", "noindex")
+	}
 
-	root := h.cfg.SiteRoot(slug)
+	root := target.Root
 	pathname, err := decodedPathname(r.URL.EscapedPath())
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)

@@ -191,6 +191,9 @@ func (s *Store) Migrate() error {
 		// Lampiran gambar pesan AI: JSON { thumbs: [dataURL kecil], description: teks dari model vision }.
 		{"ai_messages", "attachments", "TEXT"},
 		{"ai_threads", "project_id", "INTEGER REFERENCES projects(id) ON DELETE CASCADE"},
+		// Publikasi manual (dev/prod): lihat internal/publish.
+		{"projects", "publish_mode", "TEXT NOT NULL DEFAULT 'live'"},
+		{"projects", "published_at", "INTEGER"},
 	} {
 		if err := addColumn(c[0], c[1], c[2]); err != nil {
 			return err

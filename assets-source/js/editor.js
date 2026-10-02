@@ -497,7 +497,9 @@
   }
 
   // ---------- Gambar ----------
-  const imageUrl = (path) => `${state.project.siteUrl}/${path}?v=${state.entries.find((e) => e.path === path)?.size ?? 0}-${Date.now()}`;
+  // Alamat versi yang sedang diedit: dev pada publikasi manual, selain itu website itu sendiri.
+  const previewBase = () => state.project.previewUrl || state.project.siteUrl;
+  const imageUrl = (path) => `${previewBase()}/${path}?v=${state.entries.find((e) => e.path === path)?.size ?? 0}-${Date.now()}`;
 
   // Nama file dari perangkat user dirapikan supaya lolos validasi path (huruf, angka, . - _).
   function cleanFileName(name) {
@@ -726,8 +728,9 @@
 
   function reloadPreview() {
     const route = state.previewRoute ?? routeFor(state.previewPath);
-    const url = `${state.project.siteUrl}${route}`;
-    $('#previewHost').textContent = state.project.siteUrl;
+    const url = `${previewBase()}${route}`;
+    $('#previewHost').textContent = previewBase();
+    schedulePublishCheck();
     if (document.activeElement !== $('#previewUrl')) $('#previewUrl').value = route;
     $('#openPreview').href = url;
     // Server mengirim Cache-Control: no-cache, jadi cukup set ulang src untuk memuat versi terbaru.
@@ -743,7 +746,7 @@
   const MAX_BLOCKS = 5;
   const pick = { on: false, page: null, blocks: [] };
   const AI_PLACEHOLDER = 'Minta AI membuat atau mengubah kode… (Enter kirim, Shift+Enter baris baru)';
-  const siteOrigin = () => new URL(state.project.siteUrl).origin;
+  const siteOrigin = () => new URL(previewBase()).origin;
   const toPicker = (message) => $('#previewFrame').contentWindow?.postMessage({ rakit: true, ...message }, siteOrigin());
   const blocksOn = (page) => pick.blocks.filter((b) => b.page === page);
   // Jatah di halaman yang sedang tampil = 5 dikurangi blok di halaman lain.
@@ -830,7 +833,7 @@
     const current = () => state.previewRoute ?? routeFor(state.previewPath);
     const go = () => {
       let value = input.value.trim();
-      const host = state.project.siteUrl;
+      const host = previewBase();
       // Tempel alamat lengkap website ini tetap boleh; host lain ditolak.
       if (value.toLowerCase().startsWith(host.toLowerCase())) value = value.slice(host.length);
       else if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(value)) {
@@ -889,7 +892,9 @@
     showMenu(rect.right, rect.bottom + 8, [
       { label: `Project: ${state.project.name}`, hint: 'ganti ›', run: () => setTimeout(() => showProjectMenu($('#avatarBtn')), 0) },
       '-',
+      { label: 'Buka website publik', run: () => window.open(state.project.siteUrl, '_blank', 'noopener') },
       { label: 'Salin URL website', run: () => copyText(state.project.siteUrl) },
+      { label: 'Mode publikasi', hint: isManual() ? 'manual' : 'langsung', run: openPublishMode },
       { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
       { label: 'Asisten AI website', hint: 'baru', run: openAssistant },
       ai.credits?.topupEnabled && { label: 'Langganan & kredit AI', hint: ai.credits.plan?.name, run: () => openTopup('plans') },
@@ -1060,6 +1065,147 @@
     $('#visitSite').href = p.siteUrl;
     $('#projectSwitch').title = `Project: ${p.name} — ganti atau buat project`;
     document.title = `${p.name} · rakit.io`;
+    renderPublish();
+  }
+
+  // ---------- Publikasi manual (dev/prod) ----------
+  // Mode "manual": editor & AI mengubah versi dev (<slug>--dev); website publik baru berubah saat
+  // dipublikasikan. Database dev terpisah; struktur tabelnya ikut dipublikasikan, datanya tidak.
+  const isManual = () => state.project?.mode === 'manual';
+  const pub = { status: null, timer: 0 };
+  const hostOf = (url) => url.replace(/^https?:\/\//, '');
+
+  function renderPublish() {
+    const manual = isManual();
+    document.body.dataset.publish = manual ? 'manual' : 'live';
+    $('#publishBtn').hidden = !manual;
+    $('#envBadge').hidden = !manual;
+    const pending = manual && Boolean(pub.status?.pending);
+    $('#publishBtn').classList.toggle('pending', pending);
+    $('#publishBtn').title = pending ? 'Ada perubahan yang belum dipublikasikan' : 'Website publik sudah sama dengan versi dev';
+  }
+
+  async function refreshPublish() {
+    pub.status = null;
+    if (isManual()) {
+      try { pub.status = (await api('GET', '/api/publish')).publish; } catch { /* coba lagi nanti */ }
+    }
+    renderPublish();
+  }
+  // Dipanggil setelah file/tabel berubah; dikumpulkan supaya tidak memeriksa tiap ketikan.
+  function schedulePublishCheck() {
+    clearTimeout(pub.timer);
+    if (isManual()) pub.timer = setTimeout(refreshPublish, 1500);
+  }
+
+  // Ganti data project (mode/alamat preview berubah): perbarui tampilan & muat ulang preview.
+  function applyProject(project) {
+    state.project = { ...state.project, ...project, mode: project.mode, previewUrl: project.previewUrl };
+    state.projects = state.projects.map((p) => (p.slug === project.slug ? state.project : p));
+    if (pick.on) setPick(false);
+    renderProjectInfo();
+    reloadPreview();
+  }
+
+  function openSheet(className, label, build) {
+    const root = $('#modal');
+    const close = () => { root.hidden = true; root.replaceChildren(); };
+    root.replaceChildren(h('div', { class: `modal ${className}`, role: 'dialog', 'aria-label': label }, ...build(close)));
+    root.hidden = false;
+    root.onmousedown = (e) => { if (e.target === root) close(); };
+    return close;
+  }
+
+  async function openPublish() {
+    let st;
+    try {
+      await saveAll(); // yang belum tersimpan ikut terhitung
+      st = (await api('GET', '/api/publish')).publish;
+    } catch (err) {
+      return toast(err.message, 'error');
+    }
+    pub.status = st;
+    renderPublish();
+    const agree = h('input', { type: 'checkbox' });
+    const go = h('button', { type: 'button', class: 'primary' }, 'Publikasikan');
+    go.disabled = !st.pending || st.destructive;
+    agree.onchange = () => { go.disabled = !agree.checked; };
+    const MARK = { added: ['+', 'baru'], changed: ['~', 'diubah'], removed: ['−', 'dihapus'] };
+    const close = openSheet('publish-modal', 'Publikasikan website', (done) => [
+      h('h3', {}, 'Publikasikan ke website publik'),
+      h('p', { class: 'pub-lead' }, st.pending
+        ? ['Perubahan di versi dev akan tayang di ', h('strong', {}, hostOf(st.siteUrl)), '.']
+        : ['Website publik ', h('strong', {}, hostOf(st.siteUrl)), ' sudah sama dengan versi dev.']),
+      st.files.length ? h('h4', {}, `File (${st.files.length})`) : null,
+      st.files.length ? h('ul', { class: 'pub-list' }, st.files.map((f) => h('li', { class: `pub-file ${f.change}` },
+        h('span', { class: 'pub-mark' }, MARK[f.change][0]), h('code', {}, f.path), h('span', { class: 'pub-what' }, MARK[f.change][1])))) : null,
+      st.schema.length ? h('h4', {}, 'Struktur database') : null,
+      st.schema.length ? h('ul', { class: 'pub-list' }, st.schema.map((c) => h('li', { class: `pub-schema${c.destructive ? ' destructive' : ''}` }, c.destructive ? '⚠️ ' : '', c.text))) : null,
+      st.pending ? h('p', { class: 'pub-note' }, 'Data hasil uji coba di versi dev tidak ikut; data dan gambar kiriman pengunjung di website publik tetap aman.') : null,
+      st.destructive ? h('label', { class: 'pub-confirm' }, agree, 'Saya mengerti: data di tabel/kolom yang dihapus akan hilang dari website publik.') : null,
+      h('div', { class: 'modal-buttons' },
+        h('button', { type: 'button', class: 'link-btn pub-mode', onclick: () => { done(); openPublishMode(); } }, 'Ubah mode publikasi'),
+        go,
+        h('button', { type: 'button', onclick: done }, 'Tutup')),
+    ]);
+    go.onclick = async () => {
+      go.disabled = true;
+      go.textContent = 'Mempublikasikan…';
+      try {
+        pub.status = (await api('POST', '/api/publish', { confirm: agree.checked })).publish;
+        renderPublish();
+        close();
+        toast(`Dipublikasikan ke ${hostOf(st.siteUrl)}`);
+      } catch (err) {
+        toast(err.message, 'error');
+        go.disabled = false;
+        go.textContent = 'Publikasikan';
+      }
+    };
+  }
+
+  function openPublishMode() {
+    const current = isManual() ? 'manual' : 'live';
+    let chosen = current;
+    const slug = state.project.slug;
+    const devHost = hostOf(state.project.siteUrl).replace(`${slug}.`, `${slug}--dev.`);
+    const agree = h('input', { type: 'checkbox' });
+    const warn = h('div', { class: 'pub-warn', hidden: true },
+      h('p', {}, 'Perubahan yang belum dipublikasikan akan langsung tayang, dan data uji coba di versi dev diganti data asli dari website publik.'),
+      h('label', { class: 'pub-confirm' }, agree, 'Saya mengerti'));
+    const apply = h('button', { type: 'button', class: 'primary' }, 'Terapkan');
+    const sync = () => {
+      document.querySelectorAll('.mode-option').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === chosen)));
+      warn.hidden = !(current === 'manual' && chosen === 'live');
+      apply.disabled = chosen === current || (!warn.hidden && !agree.checked);
+    };
+    agree.onchange = sync;
+    const option = (mode, title, text) => h('button', { type: 'button', role: 'radio', class: 'mode-option', dataset: { mode }, onclick: () => { chosen = mode; sync(); } },
+      h('strong', {}, title), h('span', {}, text));
+    const close = openSheet('publish-modal', 'Mode publikasi', (done) => [
+      h('h3', {}, 'Mode publikasi'),
+      h('div', { class: 'mode-options', role: 'radiogroup' },
+        option('live', 'Langsung tayang', `Setiap perubahan langsung terlihat di ${hostOf(state.project.siteUrl)}. Cocok untuk belajar dan mencoba-coba.`),
+        option('manual', 'Publikasi manual (dev/prod)', `Kamu mengedit versi dev di ${devHost} (bisa dibagikan untuk minta pendapat). Website publik baru berubah saat kamu menekan Publikasikan. Database dev terpisah untuk uji coba.`)),
+      warn,
+      h('div', { class: 'modal-buttons' }, apply, h('button', { type: 'button', onclick: done }, 'Batal')),
+    ]);
+    sync();
+    apply.onclick = async () => {
+      apply.disabled = true;
+      try {
+        await saveAll();
+        const res = await api('PUT', '/api/publish/mode', { mode: chosen, confirm: agree.checked });
+        close();
+        applyProject(res.project);
+        pub.status = res.publish;
+        renderPublish();
+        toast(chosen === 'manual' ? 'Publikasi manual aktif: edit di versi dev, lalu tekan Publikasikan' : 'Website kembali langsung tayang');
+      } catch (err) {
+        toast(err.message, 'error');
+        sync();
+      }
+    };
   }
 
   // ---------- Status bar ----------
@@ -1179,6 +1325,7 @@
     bindPreviewUrl();
     bindBlockPicker();
     $('#togglePreview').onclick = togglePreview;
+    $('#publishBtn').onclick = openPublish;
     $('#toggleSidebar').onclick = toggleSidebar;
     // Tombol Simple/Coding disorot (bercahaya) sampai pengguna pertama kali memakainya.
     if (!storage.get('rakit.layoutSeen', false)) $('.layout-switch').classList.add('attention');
@@ -2035,6 +2182,7 @@
   const tableUrl = (name) => `/api/database/tables/${encodeURIComponent(name)}`;
 
   async function dbLoad() {
+    schedulePublishCheck(); // struktur tabel bisa berubah
     try {
       const data = await api('GET', '/api/database/tables');
       dbState.tables = data.tables;
@@ -2102,7 +2250,7 @@
 
   // ---------- Kolom gambar ----------
   // Nilai kolom image = alamat file ("/uploads/..." di website ini) atau URL https.
-  const dbImageSrc = (value) => (String(value).startsWith('/') ? `${state.project.siteUrl}${value}` : String(value));
+  const dbImageSrc = (value) => (String(value).startsWith('/') ? `${previewBase()}${value}` : String(value));
 
   async function uploadDbImage(t, column, file) {
     const res = await fetch(`${tableUrl(t.name)}/upload?column=${encodeURIComponent(column.name)}`, {
@@ -4235,6 +4383,7 @@
     storage.set('rakit.project', state.projectSlug);
     history.replaceState(null, '', projectUrl(state.projectSlug));
     renderProjectInfo();
+    refreshPublish();
     $('#avatarBtn').textContent = state.me.username[0];
     $('#statusUser').textContent = 'HTML · CSS · JS';
 

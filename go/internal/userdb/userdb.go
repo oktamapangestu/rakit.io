@@ -255,7 +255,7 @@ func (d *DB) prepare(c *conn, slug string) error {
 		return err
 	}
 	var applied int64
-	limit := d.plans.StorageFor(slug).DBBytes / pageSize
+	limit := d.plans.StorageFor(baseSlug(slug)).DBBytes / pageSize
 	return c.QueryRowContext(c.ctx, "PRAGMA max_page_count = "+strconv.FormatInt(limit, 10)).Scan(&applied)
 }
 
@@ -909,7 +909,7 @@ func (d *DB) UploadImage(ctx context.Context, slug, name, columnName string, buf
 	}
 	rel := fmt.Sprintf("uploads/%s/%s-%s.%s", t.Name, strconv.FormatInt(time.Now().UnixMilli(), 36), hex.EncodeToString(random), ext)
 	// Cek ukuran per gambar & kuota storage paket.
-	if _, err := files.WriteImage(d.cfg.SiteRoot(slug), rel, buf, false, d.plans.StorageFor(slug)); err != nil {
+	if _, err := files.WriteImage(d.siteRoot(slug), rel, buf, false, d.plans.StorageFor(baseSlug(slug))); err != nil {
 		return "", err
 	}
 	return "/" + rel, nil
@@ -933,7 +933,7 @@ func (d *DB) removeUnusedUploads(c *conn, slug string, t *Table, urls []any) {
 			used, _ = c.exists("SELECT 1 FROM "+ident(t.Name)+" WHERE "+ident(col.Name)+" = ? LIMIT 1", u)
 		}
 		if !used {
-			os.Remove(filepath.Join(d.cfg.SiteRoot(slug), filepath.FromSlash(u[1:])))
+			os.Remove(filepath.Join(d.siteRoot(slug), filepath.FromSlash(u[1:])))
 		}
 	}
 }

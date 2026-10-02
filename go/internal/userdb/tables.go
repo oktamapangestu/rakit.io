@@ -235,7 +235,7 @@ func (d *DB) Usage(ctx context.Context, slug string) (*Usage, error) {
 			return err
 		}
 		u.Bytes = pages * pageSize
-		u.Limits.Bytes = d.plans.StorageFor(slug).DBBytes
+		u.Limits.Bytes = d.plans.StorageFor(baseSlug(slug)).DBBytes
 		u.Limits.Tables = limitTables
 		var err error
 		u.Tables, err = c.countTables()
@@ -313,6 +313,9 @@ func (d *DB) CreateTable(ctx context.Context, slug string, input map[string]any)
 			}
 			t := &Table{Name: name, Columns: columns, Rules: rules, CreatedAt: jsNow()}
 			if err := c.writeMeta(t); err != nil {
+				return err
+			}
+			if err := c.logOp(Op{Kind: "create", Table: name, Input: input}); err != nil {
 				return err
 			}
 			info, err = c.describe(t)
@@ -470,6 +473,9 @@ func (d *DB) UpdateTable(ctx context.Context, slug, name string, patch map[strin
 			if err := c.writeMeta(t); err != nil {
 				return err
 			}
+			if err := c.logOp(Op{Kind: "update", Table: name, Input: patch}); err != nil {
+				return err
+			}
 			info, err = c.describe(t)
 			return err
 		})
@@ -498,14 +504,16 @@ func (d *DB) DeleteTable(ctx context.Context, slug, name string) error {
 			if _, err := c.exec("DROP TABLE " + ident(t.Name)); err != nil {
 				return err
 			}
-			_, err = c.exec("DELETE FROM _rakit_tables WHERE name = ?", t.Name)
-			return err
+			if _, err := c.exec("DELETE FROM _rakit_tables WHERE name = ?", t.Name); err != nil {
+				return err
+			}
+			return c.logOp(Op{Kind: "delete", Table: t.Name})
 		})
 	})
 	if err != nil {
 		return err
 	}
-	return os.RemoveAll(filepath.Join(d.cfg.SiteRoot(slug), "uploads", name))
+	return os.RemoveAll(filepath.Join(d.siteRoot(slug), "uploads", name))
 }
 
 // SchemaSummary: ringkasan tabel project untuk AI. Kosong bila project belum punya database.

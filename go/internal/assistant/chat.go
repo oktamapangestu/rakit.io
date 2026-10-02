@@ -293,7 +293,7 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request, slug string) erro
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	// Hanya dari halaman website ini sendiri (browser selalu mengirim Origin untuk POST).
-	if r.Header.Get("Origin") != s.cfg.SiteURL(slug) {
+	if origin := r.Header.Get("Origin"); origin != s.cfg.SiteURL(slug) && origin != s.cfg.DevURL(slug) {
 		return httpx.Errorf(403, "Asisten hanya bisa dipakai dari halaman website ini sendiri.")
 	}
 	active, err := s.activeSite(slug)

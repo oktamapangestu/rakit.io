@@ -26,6 +26,7 @@ import (
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/plans"
+	"rakit.io/server/internal/publish"
 	"rakit.io/server/internal/store"
 	"rakit.io/server/internal/userdb"
 	"rakit.io/server/internal/versions"
@@ -44,6 +45,7 @@ type Services struct {
 	AIModels  *aimodels.Service
 	Assistant *assistant.Service
 	Admin     *admin.Service
+	Publish   *publish.Service
 }
 
 type Handler struct {
@@ -185,6 +187,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = h.assistant(req)
 	case "admin":
 		err = h.admin(req)
+	case "publish":
+		err = h.publish(req)
 	default:
 		err = errNotFound
 	}
@@ -321,10 +325,18 @@ type publicProject struct {
 	SiteURL   string `json:"siteUrl"`
 	SiteHost  string `json:"siteHost"`
 	CreatedAt int64  `json:"createdAt"`
+	// Hanya untuk publikasi manual: mode "manual" dan PreviewURL = versi dev yang dimuat preview editor.
+	// Tanpa keduanya, project langsung tayang dan preview memakai SiteURL.
+	Mode       string `json:"mode,omitempty"`
+	PreviewURL string `json:"previewUrl,omitempty"`
 }
 
 func (h *Handler) public(p *store.Project) publicProject {
-	return publicProject{Slug: p.Slug, Name: p.Name, SiteURL: h.cfg.SiteURL(p.Slug), SiteHost: h.cfg.SiteHost(p.Slug), CreatedAt: p.CreatedAt}
+	out := publicProject{Slug: p.Slug, Name: p.Name, SiteURL: h.cfg.SiteURL(p.Slug), SiteHost: h.cfg.SiteHost(p.Slug), CreatedAt: p.CreatedAt}
+	if p.Manual() {
+		out.Mode, out.PreviewURL = store.ModeManual, h.cfg.DevURL(p.Slug)
+	}
+	return out
 }
 
 func (h *Handler) publicAll(list []*store.Project) []publicProject {

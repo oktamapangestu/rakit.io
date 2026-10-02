@@ -235,6 +235,9 @@ func (h *Handler) projects(q *request) error {
 		if err := removeAll(h.cfg.SiteRoot(project.Slug)); err != nil {
 			return err
 		}
+		if err := h.svc.Publish.Remove(project.Slug); err != nil {
+			return err
+		}
 		if err := h.versions.Remove(project.Slug); err != nil {
 			return err
 		}
