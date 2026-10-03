@@ -15,8 +15,10 @@ import { aiModels, countFallback, modelOrder, reportModelDown, reportModelUp } f
 export const ai = express.Router();
 
 
-const MAX_PROMPT_CHARS = 10000;
+const MAX_PROMPT_CHARS = 20_000;
 const MAX_HISTORY = 10;
+const MAX_HISTORY_CHARS = 8_000; // per pesan lama di riwayat yang dikirim ulang ke model
+const MAX_HISTORY_TOTAL = 40_000; // total riwayat; pesan terbaru didahulukan
 const MAX_CONTEXT_CHARS = 200_000; // batas isi file proyek yang dikirim ke model
 
 const BASE_PROMPT = `You are the AI assistant built into rakit.io, an online code editor where people build websites.
@@ -420,12 +422,22 @@ async function projectContext(slug, activePath) {
   ].filter(Boolean).join('\n\n');
 }
 
+// Batas total riwayat: ambil dari yang terbaru, pesan yang lebih lama dibuang bila tidak muat.
+function withinHistoryBudget(messages) {
+  let total = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    total += messages[i].content.length;
+    if (total > MAX_HISTORY_TOTAL) return messages.slice(i + 1);
+  }
+  return messages;
+}
+
 function sanitizeHistory(history) {
   if (!Array.isArray(history)) return [];
-  return history
+  return withinHistoryBudget(history
     .filter((m) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
     .slice(-MAX_HISTORY)
-    .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_PROMPT_CHARS) }))
+    .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_HISTORY_CHARS) })))
     // Harus diawali user dan bergantian.
     .filter((m, i, arr) => (i === 0 ? m.role === 'user' : m.role !== arr[i - 1].role));
 }

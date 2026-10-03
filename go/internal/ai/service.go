@@ -31,8 +31,10 @@ import (
 )
 
 const (
-	maxPromptChars  = 10000
+	maxPromptChars  = 20_000
 	maxHistory      = 10
+	maxHistoryChars = 8_000   // per pesan lama di riwayat yang dikirim ulang ke model
+	maxHistoryTotal = 40_000  // total riwayat; pesan terbaru didahulukan
 	maxContextChars = 200_000 // batas isi file proyek yang dikirim ke model
 
 	maxThreadsPerUser = 50
@@ -308,11 +310,20 @@ func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 	for i := len(history) - 1; i >= 0; i-- {
 		h := history[i]
 		if (h.role == "user" || h.role == "assistant") && strings.TrimSpace(h.content) != "" {
-			filtered = append(filtered, item{h.role, jsconv.Slice(h.content, maxPromptChars)})
+			filtered = append(filtered, item{h.role, jsconv.Slice(h.content, maxHistoryChars)})
 		}
 	}
 	if len(filtered) > maxHistory {
 		filtered = filtered[len(filtered)-maxHistory:]
+	}
+	// Batas total: ambil dari yang terbaru, pesan yang lebih lama dibuang bila tidak muat.
+	total := 0
+	for i := len(filtered) - 1; i >= 0; i-- {
+		total += jsconv.Len(filtered[i].content)
+		if total > maxHistoryTotal {
+			filtered = filtered[i+1:]
+			break
+		}
 	}
 	// Harus diawali user dan bergantian.
 	var out []message

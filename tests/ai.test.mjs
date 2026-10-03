@@ -337,6 +337,26 @@ test('job: progres bisa diikuti ulang kapan saja, juga setelah selesai', async (
   assert.equal((await user.get(`/api/ai/threads/${started.body.threadId}`)).body.messages[1].status, 'done');
 });
 
+test('riwayat panjang: tiap pesan lama dipotong 8000 karakter, total 40000, yang terbaru didahulukan', async () => {
+  const user = await stack.register();
+  let threadId;
+  for (const letter of 'abcdef') {
+    stack.ai.script.push({ text: `jawab ${letter}` });
+    const res = await user.prompt(letter.repeat(20_000), threadId ? { threadId } : {});
+    assert.equal(res.final.type, 'done');
+    threadId = res.started.body.threadId;
+  }
+  stack.ai.script.push({ text: 'selesai' });
+  await user.prompt('terakhir', { threadId });
+  const history = sent().messages.slice(1, -1); // tanpa system & prompt baru
+  assert.ok(history.every((m) => m.content.length <= 8000));
+  assert.ok(history.reduce((n, m) => n + m.content.length, 0) <= 40_000);
+  assert.deepEqual(history.at(-1), { role: 'assistant', content: 'jawab f' });
+  assert.equal(history.at(-2).content, 'f'.repeat(8000));
+  assert.equal(history[0].role, 'user');
+  assert.ok(!history.some((m) => m.content.startsWith('a')), 'pesan paling lama dibuang');
+});
+
 test('job berjalan terlihat sebagai activeJob dan mengunci hapus riwayat', async () => {
   const user = await stack.register();
   stack.ai.script.push({ hang: true });
