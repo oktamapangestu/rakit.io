@@ -15,7 +15,7 @@ import { aiModels, countFallback, modelOrder, reportModelDown, reportModelUp } f
 export const ai = express.Router();
 
 
-const MAX_PROMPT_CHARS = 4000;
+const MAX_PROMPT_CHARS = 5000;
 const MAX_HISTORY = 10;
 const MAX_CONTEXT_CHARS = 200_000; // batas isi file proyek yang dikirim ke model
 

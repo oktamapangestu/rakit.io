@@ -145,7 +145,7 @@ test('prompt dengan gambar memakai 2 kredit; ditolak bila sisa kredit kurang', a
 test('prompt tidak valid ditolak tanpa memotong kredit', async () => {
   const user = await stack.register();
   assert.equal((await user.startPrompt('   ')).status, 400);
-  assert.equal((await user.startPrompt('x'.repeat(4001))).status, 400);
+  assert.equal((await user.startPrompt('x'.repeat(5001))).status, 400);
   assert.equal((await user.startPrompt('gambar rusak', { images: ['data:image/png;base64,AAAA'] })).status, 400);
   assert.equal((await user.credits()).remaining, 4);
 });

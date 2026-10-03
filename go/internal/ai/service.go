@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	maxPromptChars  = 4000
+	maxPromptChars  = 5000
 	maxHistory      = 10
 	maxContextChars = 200_000 // batas isi file proyek yang dikirim ke model
 
