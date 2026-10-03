@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/scrypt"
@@ -18,18 +19,26 @@ import (
 	"rakit.io/server/internal/store"
 )
 
-const sessionTTL = 30 * 24 * time.Hour
+const (
+	sessionTTL = 30 * 24 * time.Hour
+	// touchEvery: users.last_seen_at ditulis paling sering sekali per jangka ini per akun.
+	touchEvery = 5 * time.Minute
+)
 
 type Sessions interface {
 	SessionUser(tokenHash string, nowMs int64) (*store.User, error)
 	InsertSession(tokenHash string, userID, expiresAt int64) error
 	DeleteSession(tokenHash string) error
+	TouchUser(userID, nowMs int64) error
 }
 
 type Auth struct {
 	cookieName string
 	secure     bool
 	sessions   Sessions
+
+	mu      sync.Mutex
+	touched map[int64]time.Time // kapan last_seen_at akun terakhir ditulis
 }
 
 func New(cfg *config.Config, sessions Sessions) *Auth {
@@ -38,7 +47,7 @@ func New(cfg *config.Config, sessions Sessions) *Auth {
 	if cfg.SecureCookies {
 		name = "__Host-rakit_sid"
 	}
-	return &Auth{cookieName: name, secure: cfg.SecureCookies, sessions: sessions}
+	return &Auth{cookieName: name, secure: cfg.SecureCookies, sessions: sessions, touched: map[int64]time.Time{}}
 }
 
 // ReadCookie membaca nilai cookie apa adanya (tanpa decode), sama seperti di Node.
@@ -67,7 +76,32 @@ func (a *Auth) User(r *http.Request) *store.User {
 		log.Printf("auth: membaca sesi: %v", err)
 		return nil
 	}
+	if user != nil {
+		a.touch(user.ID, false)
+	}
 	return user
+}
+
+// touch mencatat akun sedang aktif (users.last_seen_at); force = tulis sekarang juga (saat login).
+func (a *Auth) touch(userID int64, force bool) {
+	now := time.Now()
+	a.mu.Lock()
+	if !force && now.Sub(a.touched[userID]) < touchEvery {
+		a.mu.Unlock()
+		return
+	}
+	a.touched[userID] = now
+	if len(a.touched) > 10000 { // buang catatan lama supaya map tidak terus membesar
+		for id, at := range a.touched {
+			if now.Sub(at) >= touchEvery {
+				delete(a.touched, id)
+			}
+		}
+	}
+	a.mu.Unlock()
+	if err := a.sessions.TouchUser(userID, now.UnixMilli()); err != nil {
+		log.Printf("auth: mencatat waktu aktif: %v", err)
+	}
 }
 
 // cookie: tanpa Domain, jadi tidak dikirim ke *.rakit.io.
@@ -86,6 +120,7 @@ func (a *Auth) Login(w http.ResponseWriter, userID int64) error {
 	if err := a.sessions.InsertSession(sha256Hex(token), userID, expires.UnixMilli()); err != nil {
 		return err
 	}
+	a.touch(userID, true)
 	c := a.cookie(token)
 	c.MaxAge = int(sessionTTL.Seconds())
 	c.Expires = expires

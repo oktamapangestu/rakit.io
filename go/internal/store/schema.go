@@ -233,6 +233,8 @@ func (s *Store) Migrate() error {
 		// Publikasi manual (dev/prod): lihat internal/publish.
 		{"projects", "publish_mode", "TEXT NOT NULL DEFAULT 'live'"},
 		{"projects", "published_at", "INTEGER"},
+		// Terakhir aktif (ms): diperbarui saat akun memakai aplikasi, paling sering 5 menit sekali.
+		{"users", "last_seen_at", "INTEGER"},
 	} {
 		if err := addColumn(c[0], c[1], c[2]); err != nil {
 			return err

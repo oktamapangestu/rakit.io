@@ -163,7 +163,7 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
   const count = (sql) => before.prepare(sql).get().n;
   const { status, body: s } = await admin.get('/api/admin/stats?days=7');
   assert.equal(status, 200);
-  assert.deepEqual(Object.keys(s).sort(), ['ai', 'creditUsers', 'credits', 'days', 'generatedAt', 'queue', 'recentPayments', 'recentUsers', 'revenue', 'revenueByDay', 'signupsByDay', 'storage', 'subscribers', 'topUsers', 'users']);
+  assert.deepEqual(Object.keys(s).sort(), ['activeUsers', 'ai', 'creditUsers', 'credits', 'days', 'generatedAt', 'queue', 'recentPayments', 'recentUsers', 'revenue', 'revenueByDay', 'signupsByDay', 'storage', 'subscribers', 'tokenRanking', 'topUsers', 'users']);
   assert.equal(s.days, 7);
   assert.ok(Math.abs(Date.parse(s.generatedAt) - Date.now()) < 10_000);
   assert.equal((await admin.get('/api/admin/stats?days=15')).body.days, 30);
@@ -192,6 +192,7 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
 
   // Kredit, langganan, pendapatan
   assert.equal(s.credits.freePerUser, 2);
+  assert.equal(s.credits.freeBonus, 2);
   assert.equal(s.credits.purchasedOutstanding, 20);
   assert.equal(typeof s.credits.usedToday, 'number');
   assert.deepEqual(s.subscribers, { pro: 1 });
@@ -209,9 +210,29 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
   // Pengguna teraktif & terbaru
   const top = s.topUsers.find((u) => u.username === 'statistik-a');
   assert.deepEqual({ ...top, createdAt: 0 }, { username: 'statistik-a', createdAt: 0, slug: 'statistik-a', aiRequests: 2, tokens: 1200, spent: 0, siteUrl: `http://statistik-a.${stack.origin.slice(7)}` });
+  // Ranking token (editor + asisten website), urut dari terbanyak
+  assert.equal(s.tokenRanking.editorTokens, s.ai.tokensIn + s.ai.tokensOut);
+  assert.equal(s.tokenRanking.assistantTokens, count('SELECT COALESCE(SUM(tokens), 0) AS n FROM assistant_usage'));
+  const ranked = s.tokenRanking.users.find((u) => u.username === 'statistik-a');
+  assert.deepEqual(ranked, {
+    username: 'statistik-a', email: 'statistik-a@test.local', aiRequests: 2, inTokens: 1000, outTokens: 200,
+    assistantTokens: 0, assistantMessages: 0, tokens: 1200, spent: 0, siteUrl: `http://statistik-a.${stack.origin.slice(7)}`,
+  });
+  assert.ok(!s.tokenRanking.users.some((u) => u.username === 'statistik-b'));
+  assert.ok(s.tokenRanking.users.every((u, i) => u.tokens > 0 && (i === 0 || u.tokens <= s.tokenRanking.users[i - 1].tokens)));
   const recent = s.recentUsers.find((u) => u.username === 'statistik-b');
   assert.deepEqual({ ...recent, createdAt: 0 }, { username: 'statistik-b', email: 'statistik-b@test.local', createdAt: 0, slug: 'statistik-b', projects: 2, siteUrl: `http://statistik-b.${stack.origin.slice(7)}` });
   assert.ok(s.recentUsers.length <= 10);
+
+  // Pengguna aktif terakhir: login/daftar langsung tercatat, urut dari yang paling baru
+  assert.equal(s.activeUsers.day, users);
+  assert.equal(s.activeUsers.week, users);
+  const act = s.activeUsers.users.find((u) => u.username === 'statistik-b');
+  assert.deepEqual({ ...act, lastSeenAt: '' }, { username: 'statistik-b', email: 'statistik-b@test.local', lastSeenAt: '', lastAiAt: null, projects: 2, plan: 'pro', siteUrl: `http://statistik-b.${stack.origin.slice(7)}` });
+  assert.ok(Math.abs(Date.parse(act.lastSeenAt) - Date.now()) < 60_000);
+  assert.match(s.activeUsers.users.find((u) => u.username === 'statistik-a').lastAiAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.ok(s.activeUsers.users.every((u, i) => i === 0 || u.lastSeenAt <= s.activeUsers.users[i - 1].lastSeenAt));
+  assert.ok(s.activeUsers.users.length <= 20);
 
   // Kredit per pengguna
   const ca = s.creditUsers.find((u) => u.username === 'statistik-a');

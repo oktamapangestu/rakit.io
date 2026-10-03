@@ -5,6 +5,17 @@ import { q } from './db.js';
 
 const scrypt = promisify(crypto.scrypt);
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 hari
+const TOUCH_EVERY = 5 * 60 * 1000; // users.last_seen_at ditulis paling sering sekali per 5 menit per akun
+
+// Mencatat akun sedang aktif (users.last_seen_at); force = tulis sekarang juga (saat login).
+const touched = new Map();
+function touch(userId, force = false) {
+  const now = Date.now();
+  if (!force && now - (touched.get(userId) ?? 0) < TOUCH_EVERY) return;
+  touched.set(userId, now);
+  if (touched.size > 10000) for (const [id, at] of touched) if (now - at >= TOUCH_EVERY) touched.delete(id);
+  q.touchUser.run(now, userId);
+}
 
 // __Host- mencegah subdomain user (mis. budi.rakit.io) menimpa cookie sesi rakit.io.
 export const COOKIE_NAME = config.secureCookies ? '__Host-rakit_sid' : 'rakit_sid';
@@ -27,6 +38,7 @@ export async function verifyPassword(password, stored) {
 export function createSession(userId) {
   const token = crypto.randomBytes(32).toString('base64url');
   q.insertSession.run(sha256(token), userId, Date.now() + SESSION_TTL);
+  touch(userId, true);
   return token;
 }
 
@@ -64,6 +76,7 @@ function readCookie(header = '', name) {
 export function loadUser(req, res, next) {
   const token = readCookie(req.headers.cookie, COOKIE_NAME);
   if (token) req.user = q.sessionUser.get(sha256(token), Date.now()) ?? null;
+  if (req.user) touch(req.user.id);
   next();
 }
 

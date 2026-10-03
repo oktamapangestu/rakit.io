@@ -203,6 +203,7 @@ admin.get('/stats', async (req, res) => {
     usedToday: one('SELECT COALESCE(SUM(used), 0) AS n FROM ai_usage WHERE period = ?', freePeriod()).n,
     purchasedOutstanding: one('SELECT COALESCE(SUM(balance), 0) AS n FROM credit_balance').n,
     freePerUser: freeDailyCredits(),
+    freeBonus: freeBonusCredits(),
   };
 
   // Langganan yang masih aktif, per paket
@@ -239,11 +240,76 @@ admin.get('/stats', async (req, res) => {
     FROM users u JOIN ai_requests r ON r.user_id = u.id AND r.created_at >= ?
     GROUP BY u.id ORDER BY aiRequests DESC, tokens DESC LIMIT 10
   `, since).map((u) => ({ ...u, siteUrl: config.siteUrl(u.slug ?? u.username) }));
+  // Ranking token: AI editor + asisten website (assistant_usage.day = tanggal WIB) dalam periode.
+  const tokenRanking = {
+    editorTokens: aiTotals.tokensIn + aiTotals.tokensOut,
+    assistantTokens: one('SELECT COALESCE(SUM(tokens), 0) AS n FROM assistant_usage WHERE day >= ?', dayList[0]).n,
+    users: all(`
+      SELECT u.username, u.email, ${PRIMARY_SLUG} AS slug,
+             COALESCE(e.requests, 0) AS aiRequests, COALESCE(e.inTokens, 0) AS inTokens, COALESCE(e.outTokens, 0) AS outTokens,
+             COALESCE(a.tokens, 0) AS assistantTokens, COALESCE(a.messages, 0) AS assistantMessages,
+             (SELECT COALESCE(SUM(amount), 0) FROM payments p WHERE p.user_id = u.id AND p.status = 'succeeded') AS spent
+      FROM users u
+      LEFT JOIN (
+        SELECT user_id, COUNT(*) AS requests, SUM(input_tokens) AS inTokens, SUM(output_tokens) AS outTokens
+        FROM ai_requests WHERE created_at >= ? GROUP BY user_id
+      ) e ON e.user_id = u.id
+      LEFT JOIN (
+        SELECT p.user_id, SUM(au.tokens) AS tokens, SUM(au.messages) AS messages
+        FROM assistant_usage au JOIN projects p ON p.id = au.project_id
+        WHERE au.day >= ? GROUP BY p.user_id
+      ) a ON a.user_id = u.id
+      WHERE COALESCE(e.inTokens, 0) + COALESCE(e.outTokens, 0) + COALESCE(a.tokens, 0) > 0
+      ORDER BY COALESCE(e.inTokens, 0) + COALESCE(e.outTokens, 0) + COALESCE(a.tokens, 0) DESC, u.username
+      LIMIT 20
+    `, since, dayList[0]).map(({ slug, ...u }) => ({
+      username: u.username,
+      email: u.email,
+      aiRequests: u.aiRequests,
+      inTokens: u.inTokens,
+      outTokens: u.outTokens,
+      assistantTokens: u.assistantTokens,
+      assistantMessages: u.assistantMessages,
+      tokens: u.inTokens + u.outTokens + u.assistantTokens,
+      spent: u.spent,
+      siteUrl: config.siteUrl(slug ?? u.username),
+    })),
+  };
   const recentUsers = all(`
     SELECT username, email, created_at AS createdAt, ${PRIMARY_SLUG} AS slug,
            (SELECT COUNT(*) FROM projects p WHERE p.user_id = u.id) AS projects
     FROM users u ORDER BY created_at DESC LIMIT 10
   `).map((u) => ({ ...u, siteUrl: config.siteUrl(u.slug ?? u.username) }));
+
+  // Pengguna aktif terakhir: waktu terakhir memakai aplikasi (users.last_seen_at), request AI, atau
+  // menyimpan versi file, mana yang paling baru.
+  const activitySql = `
+    SELECT u.id, MAX(COALESCE(u.last_seen_at, 0), COALESCE(ai.lastAt, 0), COALESCE(v.lastAt, 0)) AS seenAt, ai.lastAt AS lastAiAt
+    FROM users u
+    LEFT JOIN (SELECT user_id, MAX(created_at) AS lastAt FROM ai_requests GROUP BY user_id) ai ON ai.user_id = u.id
+    LEFT JOIN (SELECT user_id, MAX(created_at) AS lastAt FROM versions GROUP BY user_id) v ON v.user_id = u.id`;
+  const activeCounts = one(`SELECT COALESCE(SUM(seenAt >= ?), 0) AS day, COALESCE(SUM(seenAt >= ?), 0) AS week FROM (${activitySql})`,
+    Date.now() - DAY_MS, Date.now() - 7 * DAY_MS);
+  const activeUsers = {
+    day: activeCounts.day,
+    week: activeCounts.week,
+    users: all(`
+      SELECT u.username, u.email, ${PRIMARY_SLUG} AS slug, a.seenAt, a.lastAiAt,
+             (SELECT COUNT(*) FROM projects p WHERE p.user_id = u.id) AS projects,
+             (SELECT plan FROM subscriptions sub WHERE sub.user_id = u.id AND sub.expires_at > ?) AS plan
+      FROM (${activitySql}) a JOIN users u ON u.id = a.id
+      WHERE a.seenAt > 0
+      ORDER BY a.seenAt DESC, u.username LIMIT 20
+    `, Date.now()).map((u) => ({
+      username: u.username,
+      email: u.email,
+      lastSeenAt: new Date(u.seenAt).toISOString(),
+      lastAiAt: u.lastAiAt ? new Date(u.lastAiAt).toISOString() : null,
+      projects: u.projects,
+      plan: u.plan ?? null,
+      siteUrl: config.siteUrl(u.slug ?? u.username),
+    })),
+  };
 
   const freeLimit = freeDailyCredits();
   const bonusLimit = freeBonusCredits();
@@ -307,7 +373,9 @@ admin.get('/stats', async (req, res) => {
     revenueByDay,
     recentPayments,
     topUsers,
+    tokenRanking,
     recentUsers,
+    activeUsers,
     storage: await storage(),
     queue: queueStats(),
   });

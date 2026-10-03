@@ -149,6 +149,8 @@ if (!hasColumn('users', 'google_id')) db.exec('ALTER TABLE users ADD COLUMN goog
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google ON users(google_id) WHERE google_id IS NOT NULL');
 // Lampiran gambar pesan AI: JSON { thumbs: [dataURL kecil], description: teks dari model vision }.
 if (!hasColumn('ai_messages', 'attachments')) db.exec('ALTER TABLE ai_messages ADD COLUMN attachments TEXT');
+// Terakhir aktif (ms): diperbarui saat akun memakai aplikasi, paling sering 5 menit sekali.
+if (!hasColumn('users', 'last_seen_at')) db.exec('ALTER TABLE users ADD COLUMN last_seen_at INTEGER');
 if (!hasColumn('ai_threads', 'project_id')) db.exec('ALTER TABLE ai_threads ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE');
 // Dulu 1 akun = 1 website di <username>.rakit.io: jadikan itu project pertamanya (URL tetap sama).
 db.exec(`
@@ -185,6 +187,7 @@ export const q = {
     WHERE s.token_hash = ? AND s.expires_at > ?
   `),
   deleteSession: db.prepare('DELETE FROM sessions WHERE token_hash = ?'),
+  touchUser: db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?'),
   deleteExpiredSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
 
   ensureUsage: db.prepare('INSERT INTO ai_usage (user_id, period, used) VALUES (?, ?, 0) ON CONFLICT DO NOTHING'),

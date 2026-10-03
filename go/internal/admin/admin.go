@@ -269,6 +269,7 @@ type Credits struct {
 	UsedToday            int64 `json:"usedToday"`
 	PurchasedOutstanding int64 `json:"purchasedOutstanding"`
 	FreePerUser          int   `json:"freePerUser"`
+	FreeBonus            int   `json:"freeBonus"`
 }
 
 type Revenue struct {
@@ -332,6 +333,52 @@ type CreditUser struct {
 	SiteURL        string  `json:"siteUrl"`
 }
 
+// TokenUser: satu baris ranking pemakaian token dalam periode — AI editor (input/output) dan asisten
+// website milik pengguna (semua project-nya).
+type TokenUser struct {
+	Username          string `json:"username"`
+	Email             string `json:"email"`
+	AIRequests        int64  `json:"aiRequests"`
+	InTokens          int64  `json:"inTokens"`
+	OutTokens         int64  `json:"outTokens"`
+	AssistantTokens   int64  `json:"assistantTokens"`
+	AssistantMessages int64  `json:"assistantMessages"`
+	Tokens            int64  `json:"tokens"`
+	Spent             int64  `json:"spent"`
+	SiteURL           string `json:"siteUrl"`
+}
+
+type TokenRanking struct {
+	EditorTokens    int64       `json:"editorTokens"`
+	AssistantTokens int64       `json:"assistantTokens"`
+	Users           []TokenUser `json:"users"`
+}
+
+// ActiveUser: akun yang terakhir aktif — waktu terakhir memakai aplikasi (users.last_seen_at), request AI,
+// atau menyimpan versi file, mana yang paling baru.
+type ActiveUser struct {
+	Username   string  `json:"username"`
+	Email      string  `json:"email"`
+	LastSeenAt string  `json:"lastSeenAt"`
+	LastAIAt   *string `json:"lastAiAt"`
+	Projects   int64   `json:"projects"`
+	Plan       *string `json:"plan"`
+	SiteURL    string  `json:"siteUrl"`
+}
+
+type ActiveUsers struct {
+	Day   int64        `json:"day"`  // aktif dalam 24 jam terakhir
+	Week  int64        `json:"week"` // aktif dalam 7 hari terakhir
+	Users []ActiveUser `json:"users"`
+}
+
+// activitySQL: waktu aktif terakhir per akun (ms; 0 = belum pernah tercatat).
+const activitySQL = `
+	SELECT u.id, MAX(COALESCE(u.last_seen_at, 0), COALESCE(ai.lastAt, 0), COALESCE(v.lastAt, 0)) AS seenAt, ai.lastAt AS lastAiAt
+	FROM users u
+	LEFT JOIN (SELECT user_id, MAX(created_at) AS lastAt FROM ai_requests GROUP BY user_id) ai ON ai.user_id = u.id
+	LEFT JOIN (SELECT user_id, MAX(created_at) AS lastAt FROM versions GROUP BY user_id) v ON v.user_id = u.id`
+
 type Stats struct {
 	GeneratedAt    string           `json:"generatedAt"`
 	Days           int              `json:"days"`
@@ -345,7 +392,9 @@ type Stats struct {
 	RevenueByDay   []Day            `json:"revenueByDay"`
 	RecentPayments []Payment        `json:"recentPayments"`
 	TopUsers       []TopUser        `json:"topUsers"`
+	TokenRanking   TokenRanking     `json:"tokenRanking"`
 	RecentUsers    []RecentUser     `json:"recentUsers"`
+	ActiveUsers    ActiveUsers      `json:"activeUsers"`
 	Storage        *Storage         `json:"storage"`
 	Queue          aiqueue.Stats    `json:"queue"`
 }
@@ -429,6 +478,7 @@ func (s *Service) Stats(days int) (*Stats, error) {
 		UsedToday:            count("SELECT COALESCE(SUM(used), 0) FROM ai_usage WHERE period = ?", credits.FreePeriod()),
 		PurchasedOutstanding: count("SELECT COALESCE(SUM(balance), 0) FROM credit_balance"),
 		FreePerUser:          s.plans.FreeDailyCredits(),
+		FreeBonus:            s.plans.FreeBonusCredits(),
 	}
 
 	// Langganan yang masih aktif, per paket
@@ -483,6 +533,38 @@ func (s *Service) Stats(days int) (*Stats, error) {
 		       (SELECT COALESCE(SUM(amount), 0) FROM payments p WHERE p.user_id = u.id AND p.status = 'succeeded')
 		FROM users u JOIN ai_requests r ON r.user_id = u.id AND r.created_at >= ?
 		GROUP BY u.id ORDER BY aiRequests DESC, tokens DESC LIMIT 10`, since))
+	// Ranking token: AI editor + asisten website (assistant_usage.day = tanggal WIB) dalam periode.
+	rank := &out.TokenRanking
+	rank.EditorTokens = ai.TokensIn + ai.TokensOut
+	rank.AssistantTokens = count("SELECT COALESCE(SUM(tokens), 0) FROM assistant_usage WHERE day >= ?", dayList[0])
+	rank.Users = []TokenUser{}
+	keep(s.each(func(rows *sql.Rows) error {
+		var u TokenUser
+		var slug *string
+		err := rows.Scan(&u.Username, &u.Email, &slug, &u.AIRequests, &u.InTokens, &u.OutTokens, &u.AssistantTokens, &u.AssistantMessages, &u.Spent)
+		u.Tokens = u.InTokens + u.OutTokens + u.AssistantTokens
+		u.SiteURL = s.siteURL(slug, u.Username)
+		rank.Users = append(rank.Users, u)
+		return err
+	}, `
+		SELECT u.username, u.email, `+primarySlug+`,
+		       COALESCE(e.requests, 0), COALESCE(e.inTokens, 0), COALESCE(e.outTokens, 0),
+		       COALESCE(a.tokens, 0), COALESCE(a.messages, 0),
+		       (SELECT COALESCE(SUM(amount), 0) FROM payments p WHERE p.user_id = u.id AND p.status = 'succeeded')
+		FROM users u
+		LEFT JOIN (
+			SELECT user_id, COUNT(*) AS requests, SUM(input_tokens) AS inTokens, SUM(output_tokens) AS outTokens
+			FROM ai_requests WHERE created_at >= ? GROUP BY user_id
+		) e ON e.user_id = u.id
+		LEFT JOIN (
+			SELECT p.user_id, SUM(au.tokens) AS tokens, SUM(au.messages) AS messages
+			FROM assistant_usage au JOIN projects p ON p.id = au.project_id
+			WHERE au.day >= ? GROUP BY p.user_id
+		) a ON a.user_id = u.id
+		WHERE COALESCE(e.inTokens, 0) + COALESCE(e.outTokens, 0) + COALESCE(a.tokens, 0) > 0
+		ORDER BY COALESCE(e.inTokens, 0) + COALESCE(e.outTokens, 0) + COALESCE(a.tokens, 0) DESC, u.username
+		LIMIT 20`, since, dayList[0]))
+
 	out.RecentUsers = []RecentUser{}
 	keep(s.each(func(rows *sql.Rows) error {
 		var u RecentUser
@@ -494,6 +576,33 @@ func (s *Service) Stats(days int) (*Stats, error) {
 		SELECT username, email, created_at, `+primarySlug+`,
 		       (SELECT COUNT(*) FROM projects p WHERE p.user_id = u.id)
 		FROM users u ORDER BY created_at DESC LIMIT 10`))
+
+	active := &out.ActiveUsers
+	keep(s.db.QueryRow(`
+		SELECT COALESCE(SUM(seenAt >= ?), 0), COALESCE(SUM(seenAt >= ?), 0) FROM (`+activitySQL+`)`,
+		now-dayMs, now-7*dayMs).Scan(&active.Day, &active.Week))
+	active.Users = []ActiveUser{}
+	keep(s.each(func(rows *sql.Rows) error {
+		var u ActiveUser
+		var slug *string
+		var seenAt int64
+		var lastAI sql.NullInt64
+		err := rows.Scan(&u.Username, &u.Email, &slug, &seenAt, &lastAI, &u.Projects, &u.Plan)
+		u.LastSeenAt = plans.ISO(seenAt)
+		if lastAI.Valid {
+			iso := plans.ISO(lastAI.Int64)
+			u.LastAIAt = &iso
+		}
+		u.SiteURL = s.siteURL(slug, u.Username)
+		active.Users = append(active.Users, u)
+		return err
+	}, `
+		SELECT u.username, u.email, `+primarySlug+`, a.seenAt, a.lastAiAt,
+		       (SELECT COUNT(*) FROM projects p WHERE p.user_id = u.id),
+		       (SELECT plan FROM subscriptions sub WHERE sub.user_id = u.id AND sub.expires_at > ?)
+		FROM (`+activitySQL+`) a JOIN users u ON u.id = a.id
+		WHERE a.seenAt > 0
+		ORDER BY a.seenAt DESC, u.username LIMIT 20`, now))
 
 	freeLimit := int64(s.plans.FreeDailyCredits())
 	bonusLimit := int64(s.plans.FreeBonusCredits())

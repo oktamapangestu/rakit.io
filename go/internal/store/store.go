@@ -115,6 +115,12 @@ func (s *Store) InsertSession(tokenHash string, userID, expiresAt int64) error {
 	return err
 }
 
+// TouchUser mencatat waktu terakhir akun aktif.
+func (s *Store) TouchUser(userID, nowMs int64) error {
+	_, err := s.db.Exec("UPDATE users SET last_seen_at = ? WHERE id = ?", nowMs, userID)
+	return err
+}
+
 func (s *Store) DeleteSession(tokenHash string) error {
 	_, err := s.db.Exec("DELETE FROM sessions WHERE token_hash = ?", tokenHash)
 	return err

@@ -11,6 +11,11 @@
   <header class="top">
     <a class="brand" href="/editor"><img class="logo" src="/logo.svg" alt=""><span class="wordmark">rakit<span class="dim">.io</span></span></a>
     <span class="page-title">Dashboard pemilik</span>
+    <nav class="tabs" role="tablist" aria-label="Bagian dashboard">
+      <button type="button" role="tab" data-tab="ringkasan">Ringkasan</button>
+      <button type="button" role="tab" data-tab="pengguna">Pengguna &amp; token</button>
+      <button type="button" role="tab" data-tab="pengaturan">Pengaturan</button>
+    </nav>
     <div class="top-actions">
       <div class="range" role="radiogroup" aria-label="Periode">
         <button type="button" role="radio" data-days="7">7 hari</button>
@@ -24,14 +29,18 @@
     </div>
   </header>
 
-  <section class="page plans-page" id="plans" aria-label="Harga langganan"></section>
-
-  <section class="page plans-page" id="aiModels" aria-label="Model AI editor"></section>
-
-  <section class="page plans-page" id="assistantAdmin" aria-label="Asisten AI website"></section>
-
-  <main class="page" id="page">
+  <main class="page" id="tab-ringkasan" role="tabpanel" aria-label="Ringkasan">
     <p class="loading">Memuat statistik…</p>
+  </main>
+
+  <main class="page" id="tab-pengguna" role="tabpanel" aria-label="Pengguna &amp; token" hidden>
+    <p class="loading">Memuat statistik…</p>
+  </main>
+
+  <main class="page" id="tab-pengaturan" role="tabpanel" aria-label="Pengaturan" hidden>
+    <section id="plans" aria-label="Harga langganan"><p class="loading">Memuat harga langganan…</p></section>
+    <section id="aiModels" aria-label="Model AI editor"></section>
+    <section id="assistantAdmin" aria-label="Asisten AI website"></section>
   </main>
 
   <div class="tooltip" id="tooltip" role="status" hidden></div>

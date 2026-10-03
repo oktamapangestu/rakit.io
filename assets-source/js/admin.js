@@ -38,6 +38,15 @@
   const pct = (part, whole) => (whole ? `${Math.round((part / whole) * 100)}%` : '—');
   const dayLabel = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
   const dateTime = (value) => new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+  // Waktu relatif: "baru saja", "12 menit lalu", "3 jam lalu", lalu tanggal untuk yang lebih lama.
+  function ago(value) {
+    const mins = Math.floor((Date.now() - new Date(value)) / 60000);
+    if (mins < 2) return 'baru saja';
+    if (mins < 60) return `${mins} menit lalu`;
+    if (mins < 24 * 60) return `${Math.floor(mins / 60)} jam lalu`;
+    if (mins < 7 * 24 * 60) return `${Math.floor(mins / 1440)} hari lalu`;
+    return shortTime(value);
+  }
   const shortTime = (value) => new Date(value).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   // ---------- Data ----------
@@ -56,7 +65,7 @@
       stats = data;
       render();
     } catch (err) {
-      $('#page').replaceChildren(h('p', { class: 'error' }, `Gagal memuat statistik: ${err.message}`));
+      for (const id of ['#tab-ringkasan', '#tab-pengguna']) $(id).replaceChildren(h('p', { class: 'error' }, `Gagal memuat statistik: ${err.message}`));
     } finally {
       $('#refresh').classList.remove('spin');
     }
@@ -182,21 +191,56 @@
     queue_timeout: { label: 'Kelamaan di antrean', color: 'var(--serious)' },
   };
 
+  // Di layar sempit tabel ditampilkan sebagai kartu per baris (CSS `table.cards`): tiap sel diberi label dari
+  // judul kolomnya. lead = indeks sel judul kartu (lebar penuh, tanpa label); wide = sel lain yang lebar penuh.
+  function stack(tableEl, { lead = 0, wide = [] } = {}) {
+    const labels = [...tableEl.querySelectorAll('thead th')].map((th) => th.textContent);
+    tableEl.classList.add('cards');
+    for (const tr of tableEl.querySelectorAll('tbody tr')) {
+      [...tr.children].forEach((td, i) => {
+        if (td.hasAttribute('colspan')) return;
+        if (labels[i]) td.dataset.label = labels[i];
+        if (i === lead) td.classList.add('lead');
+        if (wide.includes(i)) td.classList.add('wide');
+      });
+    }
+    return tableEl;
+  }
+
   function table(columns, rows, empty) {
-    return h('div', { class: 'table-wrap' }, h('table', {},
+    return h('div', { class: 'table-wrap' }, stack(h('table', {},
       h('thead', {}, h('tr', {}, columns.map((c) => h('th', { class: c.num ? 'num' : null }, c.label)))),
       h('tbody', {}, rows.length
         ? rows.map((r) => h('tr', {}, columns.map((c) => h('td', { class: c.num ? 'num' : null }, c.value(r)))))
-        : h('tr', {}, h('td', { class: 'empty-row', colspan: String(columns.length) }, empty)))));
+        : h('tr', {}, h('td', { class: 'empty-row', colspan: String(columns.length) }, empty)))),
+    { wide: columns.flatMap((c, i) => (c.wide ? [i] : [])) }));
   }
 
   const userLink = (u) => h('a', { href: u.siteUrl, target: '_blank', rel: 'noopener' }, u.username);
 
   // ---------- Render ----------
+  const muted = (text = '—') => h('span', { class: 'muted' }, text);
+  const sectionTitle = (text) => h('h2', { class: 'section-title' }, text);
+
+  // Bar kecil untuk menunjukkan sisa kredit relatif terhadap bonus + jatah + saldo.
+  const creditBar = (u) => {
+    const total = u.bonusRemaining + u.freeRemaining + u.purchased;
+    const cap = u.used + u.bonusUsed + total || 1;
+    const seg = (n, cls) => (n > 0 ? h('span', { class: `seg ${cls}`, style: `width:${(n / cap) * 100}%` }) : null);
+    return h('span', { class: 'creditbar', title: `Bonus terpakai ${num(u.bonusUsed)} (sisa ${num(u.bonusRemaining)}) · gratis terpakai ${num(u.used)} (sisa ${num(u.freeRemaining)}) · saldo ${num(u.purchased)}` },
+      seg(u.used, 'used'), seg(u.bonusUsed, 'bonus'), seg(u.bonusRemaining, 'bonus-left'), seg(u.freeRemaining, 'free'), seg(u.purchased, 'paid'));
+  };
+
   function render() {
+    renderOverview();
+    renderPeople();
+  }
+
+  function renderOverview() {
     const st = stats;
     const period = `${st.days} hari terakhir`;
     const failed = st.ai.requests - (st.ai.byStatus.ok ?? 0);
+    const totalTokens = st.tokenRanking.editorTokens + st.tokenRanking.assistantTokens;
 
     const tiles = h('div', { class: 'grid tiles' },
       tile({
@@ -211,19 +255,24 @@
         detail: [`${num(st.revenue.paidCount)} transaksi · total `, h('strong', {}, rupiahCompact(st.revenue.allTime))],
       }),
       tile({
+        label: 'Pelanggan aktif',
+        value: num((st.subscribers?.pro ?? 0) + (st.subscribers?.unlimited ?? 0)),
+        detail: [`Pro ${num(st.subscribers?.pro ?? 0)} · Unlimited `, h('strong', {}, num(st.subscribers?.unlimited ?? 0))],
+      }),
+      tile({
         label: 'Request AI',
         value: num(st.ai.requests),
         detail: [`${num(st.ai.users)} pengguna · `, h('strong', {}, pct(failed, st.ai.requests)), ' gagal'],
       }),
       tile({
+        label: 'Token terpakai',
+        value: compact(totalTokens),
+        detail: [`Editor ${compact(st.tokenRanking.editorTokens)} · asisten `, h('strong', {}, compact(st.tokenRanking.assistantTokens))],
+      }),
+      tile({
         label: 'Kredit terjual',
         value: num(st.revenue.creditsSold),
         detail: [`${num(st.revenue.payingUsers)} pembeli · saldo belum terpakai `, h('strong', {}, num(st.credits.purchasedOutstanding))],
-      }),
-      tile({
-        label: 'Pelanggan aktif',
-        value: num((st.subscribers?.pro ?? 0) + (st.subscribers?.unlimited ?? 0)),
-        detail: [`Pro ${num(st.subscribers?.pro ?? 0)} · Unlimited `, h('strong', {}, num(st.subscribers?.unlimited ?? 0))],
       }));
 
     const charts = h('div', { class: 'grid three' },
@@ -233,11 +282,11 @@
       card('Pendapatan per hari', `${period} · pembayaran berhasil${st.revenue.livemode ? '' : ' (mode uji coba)'}`,
         barChart({ data: st.revenueByDay, value: (d) => d.amount, color: 'var(--series-revenue)', format: (d) => `${rupiah(d.amount)} · ${num(d.count)} transaksi`, tickFormat: rupiahCompact }),
         dataTable(st.revenueByDay, [{ label: 'Tanggal', value: (d) => dayLabel(d.date) }, { label: 'Transaksi', num: true, value: (d) => num(d.count) }, { label: 'Pendapatan', num: true, value: (d) => rupiah(d.amount) }])),
-      card('Request AI per hari', period,
-        barChart({ data: st.ai.byDay, value: (d) => d.requests, color: 'var(--series-ai)', format: (d) => `${num(d.requests)} request · ${num(d.failed)} gagal` }),
+      card('Request AI per hari', `${period} · AI editor`,
+        barChart({ data: st.ai.byDay, value: (d) => d.requests, color: 'var(--series-ai)', format: (d) => `${num(d.requests)} request · ${num(d.failed)} gagal · ${compact(d.tokens)} token` }),
         dataTable(st.ai.byDay, [{ label: 'Tanggal', value: (d) => dayLabel(d.date) }, { label: 'Request', num: true, value: (d) => num(d.requests) }, { label: 'Gagal', num: true, value: (d) => num(d.failed) }, { label: 'Token', num: true, value: (d) => num(d.tokens) }])));
 
-    const health = card('Kesehatan AI', period,
+    const health = card('Kesehatan AI editor', period,
       st.ai.requests
         ? h('ul', { class: 'status-list' }, Object.entries(st.ai.byStatus).map(([status, count]) => h('li', {},
           h('span', { class: 'dot', style: `background:${STATUS[status]?.color ?? 'var(--faint)'}` }),
@@ -246,45 +295,10 @@
           h('span', { class: 'pct' }, pct(count, st.ai.requests)))))
         : h('p', { class: 'sub' }, 'Belum ada request AI di periode ini.'),
       h('dl', { class: 'kv' },
-        h('dt', {}, 'Token input'), h('dd', {}, num(st.ai.tokensIn)),
-        h('dt', {}, 'Token output'), h('dd', {}, num(st.ai.tokensOut)),
-        h('dt', {}, 'Model aktif'), h('dd', {}, st.ai.currentModel),
+        h('dt', {}, 'Model aktif'), h('dd', { class: 'mono' }, st.ai.currentModel),
+        st.ai.models.flatMap((m) => [h('dt', { class: 'mono' }, m.model), h('dd', {}, `${num(m.requests)} request`)]),
+        h('dt', {}, 'Token input / output'), h('dd', {}, `${num(st.ai.tokensIn)} / ${num(st.ai.tokensOut)}`),
         h('dt', {}, 'Kredit gratis terpakai hari ini'), h('dd', {}, num(st.credits.usedToday))));
-
-    const topUsers = card('Pengguna paling aktif', `Berdasarkan request AI · ${period}`, table([
-      { label: 'Pengguna', value: userLink },
-      { label: 'Request', num: true, value: (u) => num(u.aiRequests) },
-      { label: 'Token', num: true, value: (u) => compact(u.tokens) },
-      { label: 'Belanja', num: true, value: (u) => (u.spent ? rupiah(u.spent) : h('span', { class: 'muted' }, '—')) },
-    ], st.topUsers, 'Belum ada pemakaian AI.'));
-
-    // Bar kecil untuk menunjukkan sisa kredit relatif terhadap bonus + jatah + saldo.
-    const creditBar = (u) => {
-      const total = u.bonusRemaining + u.freeRemaining + u.purchased;
-      const cap = u.used + u.bonusUsed + total || 1;
-      const seg = (n, cls) => (n > 0 ? h('span', { class: `seg ${cls}`, style: `width:${(n / cap) * 100}%` }) : null);
-      return h('span', { class: 'creditbar', title: `Bonus terpakai ${num(u.bonusUsed)} (sisa ${num(u.bonusRemaining)}) · gratis terpakai ${num(u.used)} (sisa ${num(u.freeRemaining)}) · saldo ${num(u.purchased)}` },
-        seg(u.used, 'used'), seg(u.bonusUsed, 'bonus'), seg(u.bonusRemaining, 'bonus-left'), seg(u.freeRemaining, 'free'), seg(u.purchased, 'paid'));
-    };
-
-    const creditUsers = card('Kredit & token per pengguna',
-      `Bonus awal ${num(st.credits.freeBonus)} (sekali) · jatah gratis ${num(st.credits.freePerUser)}/hari (reset 00.00 WIB) · total ${num(st.creditUsers.length)} pengguna`,
-      table([
-        { label: 'Pengguna', value: userLink },
-        { label: 'Bonus sisa', num: true, value: (u) => (u.bonusLimit ? `${num(u.bonusRemaining)} / ${num(u.bonusLimit)}` : h('span', { class: 'muted' }, '—')) },
-        { label: 'Gratis terpakai', num: true, value: (u) => `${num(u.used)} / ${num(u.freeLimit)}` },
-        { label: 'Gratis sisa', num: true, value: (u) => num(u.freeRemaining) },
-        { label: 'Saldo beli', num: true, value: (u) => (u.purchased ? num(u.purchased) : h('span', { class: 'muted' }, '—')) },
-        { label: 'Total tersedia', num: true, value: (u) => h('strong', {}, num(u.remaining)) },
-        { label: 'Bar', value: creditBar },
-        { label: 'Token (in/out)', num: true, value: (u) => `${compact(u.inTokens)} / ${compact(u.outTokens)}` },
-        { label: 'AI terakhir', value: (u) => (u.lastAt ? shortTime(u.lastAt) : h('span', { class: 'muted' }, '—')) },
-      ], st.creditUsers, 'Belum ada pengguna.'));
-
-    const storage = card('Penyimpanan', `Dihitung ${dateTime(st.storage.computedAt)}`, h('dl', { class: 'kv flush' },
-      h('dt', {}, 'File website'), h('dd', {}, `${bytes(st.storage.siteBytes)} · ${num(st.storage.siteFiles)} file`),
-      h('dt', {}, 'Database proyek'), h('dd', {}, `${bytes(st.storage.dbBytes)} · ${num(st.storage.projectsWithDatabase)} proyek`),
-      h('dt', {}, 'Sesi login aktif'), h('dd', {}, `${num(st.users.activeSessions)} pengguna`)));
 
     const q = st.queue;
     const secs = (ms) => `${(ms / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} dtk`;
@@ -296,27 +310,122 @@
       h('dt', {}, 'Coba ulang karena provider sibuk'), h('dd', {}, num(q.retries)),
       h('dt', {}, 'Ditolak: antrean penuh / kelamaan'), h('dd', {}, `${num(q.rejectedFull)} / ${num(q.timedOut)}`)));
 
+    const storage = card('Penyimpanan', `Dihitung ${dateTime(st.storage.computedAt)}`, h('dl', { class: 'kv flush' },
+      h('dt', {}, 'File website'), h('dd', {}, `${bytes(st.storage.siteBytes)} · ${num(st.storage.siteFiles)} file`),
+      h('dt', {}, 'Database proyek'), h('dd', {}, `${bytes(st.storage.dbBytes)} · ${num(st.storage.projectsWithDatabase)} proyek`),
+      h('dt', {}, 'Sesi login aktif'), h('dd', {}, `${num(st.users.activeSessions)} pengguna`)));
+
     const payments = card('Transaksi terbaru', `${num(st.revenue.pending)} QRIS masih menunggu pembayaran`, table([
       { label: 'Waktu', value: (p) => shortTime(p.createdAt) },
       { label: 'Pengguna', value: (p) => p.username },
-      { label: 'Item', num: true, value: (p) => (p.packageId?.startsWith('plan:') ? `Langganan ${p.packageId.slice(5)}` : p.packageId?.startsWith('asst:') ? 'Saldo asisten' : `${num(p.credits)} kredit`) },
+      { label: 'Item', value: (p) => (p.packageId?.startsWith('plan:') ? `Langganan ${p.packageId.slice(5)}` : p.packageId?.startsWith('asst:') ? 'Saldo asisten' : `${num(p.credits)} kredit`) },
       { label: 'Nominal', num: true, value: (p) => rupiah(p.amount) },
-      { label: 'Status', value: (p) => h('span', { class: `pill ${p.status}` }, { succeeded: 'Lunas', pending: 'Menunggu', failed: 'Gagal', expired: 'Kedaluwarsa', canceled: 'Batal' }[p.status] ?? p.status, p.livemode ? null : h('span', { class: 'muted' }, ' · uji')) },
+      { label: 'Status', value: (p) => h('span', { class: `pill ${p.status}` }, { succeeded: 'Lunas', pending: 'Menunggu', failed: 'Gagal', expired: 'Kedaluwarsa', canceled: 'Batal' }[p.status] ?? p.status, p.livemode ? null : muted(' · uji')) },
     ], st.recentPayments, 'Belum ada transaksi.'));
 
-    const signups = card('Pendaftar terbaru', null, table([
-      { label: 'Pengguna', value: userLink },
-      { label: 'Email', value: (u) => u.email },
-      { label: 'Daftar', value: (u) => shortTime(u.createdAt) },
-    ], st.recentUsers, 'Belum ada pengguna.'));
-
-    $('#page').replaceChildren(
+    $('#tab-ringkasan').replaceChildren(
       h('p', { class: 'meta' }, `Diperbarui ${dateTime(st.generatedAt)} · waktu WIB`),
       tiles,
+      sectionTitle('Tren harian'),
       charts,
-      h('div', { class: 'grid three' }, health, topUsers, h('div', { class: 'stack' }, queueCard, storage)),
-      creditUsers,
-      h('div', { class: 'grid two' }, payments, signups));
+      sectionTitle('Sistem & transaksi'),
+      h('div', { class: 'grid three' }, health, h('div', { class: 'stack' }, queueCard, storage), payments));
+  }
+
+  // Ranking pemakaian token: bar tersusun (input / output editor / asisten) relatif terhadap peringkat 1.
+  function tokenRankingCard(st) {
+    const tr = st.tokenRanking;
+    const total = tr.editorTokens + tr.assistantTokens;
+    const top = tr.users[0]?.tokens || 1;
+    const seg = (n, cls) => (n > 0 ? h('span', { class: `seg ${cls}`, style: `width:${(n / top) * 100}%` }) : null);
+    const legend = h('div', { class: 'legend' },
+      h('span', {}, h('i', { class: 'in' }), 'Input editor'),
+      h('span', {}, h('i', { class: 'out' }), 'Output editor'),
+      h('span', {}, h('i', { class: 'asst' }), 'Asisten website'));
+
+    const rows = tr.users.map((u, i) => h('tr', { class: i < 3 ? `rank-top rank-${i + 1}` : null },
+      h('td', { class: 'rank' }, h('span', { class: 'rank-no' }, String(i + 1))),
+      h('td', {}, h('div', { class: 'who' }, userLink(u), h('span', { class: 'muted' }, u.email))),
+      h('td', { class: 'share-cell' },
+        h('span', { class: 'tokenbar', title: `Input ${num(u.inTokens)} · output ${num(u.outTokens)} · asisten ${num(u.assistantTokens)}` },
+          seg(u.inTokens, 'in'), seg(u.outTokens, 'out'), seg(u.assistantTokens, 'asst'))),
+      h('td', { class: 'num' }, h('strong', {}, compact(u.tokens)), h('div', { class: 'muted small' }, pct(u.tokens, total))),
+      h('td', { class: 'num' }, u.aiRequests ? `${compact(u.inTokens)} / ${compact(u.outTokens)}` : muted()),
+      h('td', { class: 'num' }, u.aiRequests ? [num(u.aiRequests), h('div', { class: 'muted small' }, `≈ ${compact(Math.round((u.inTokens + u.outTokens) / u.aiRequests))}/request`)] : muted()),
+      h('td', { class: 'num' }, u.assistantTokens ? [compact(u.assistantTokens), h('div', { class: 'muted small' }, `${num(u.assistantMessages)} jawaban`)] : muted()),
+      h('td', { class: 'num' }, u.spent ? rupiah(u.spent) : muted())));
+
+    return h('section', { class: 'card' },
+      h('div', { class: 'card-head' },
+        h('div', {},
+          h('h2', {}, 'Ranking pemakaian token'),
+          h('p', { class: 'sub' }, `20 pengguna teratas · ${st.days} hari terakhir · total ${num(total)} token (editor ${compact(tr.editorTokens)}, asisten ${compact(tr.assistantTokens)})`)),
+        legend),
+      h('div', { class: 'table-wrap' }, stack(h('table', { class: 'ranking' },
+        h('thead', {}, h('tr', {},
+          h('th', { class: 'rank' }, '#'), h('th', {}, 'Pengguna'), h('th', {}, 'Komposisi'), h('th', { class: 'num' }, 'Total token'),
+          h('th', { class: 'num' }, 'Editor in / out'), h('th', { class: 'num' }, 'Request editor'), h('th', { class: 'num' }, 'Asisten'), h('th', { class: 'num' }, 'Belanja'))),
+        h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { class: 'empty-row', colspan: '8' }, 'Belum ada pemakaian token di periode ini.')))), { lead: 1, wide: [2] })));
+  }
+
+  // Kredit per pengguna: semua akun, bisa dicari; ditampilkan bertahap supaya tabel tidak terlalu panjang.
+  let creditQuery = '';
+  let creditLimit = 25;
+  function creditUsersCard(st) {
+    const body = h('div', {});
+    const draw = () => {
+      const q = creditQuery.trim().toLowerCase();
+      const list = q ? st.creditUsers.filter((u) => u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)) : st.creditUsers;
+      const shown = list.slice(0, creditLimit);
+      body.replaceChildren(
+        table([
+          { label: 'Pengguna', value: (u) => h('div', { class: 'who' }, userLink(u), h('span', { class: 'muted' }, u.email)) },
+          { label: 'Bonus sisa', num: true, value: (u) => (u.bonusLimit ? `${num(u.bonusRemaining)} / ${num(u.bonusLimit)}` : muted()) },
+          { label: 'Gratis hari ini', num: true, value: (u) => `${num(u.used)} / ${num(u.freeLimit)}` },
+          { label: 'Saldo beli', num: true, value: (u) => (u.purchased ? num(u.purchased) : muted()) },
+          { label: 'Total tersedia', num: true, value: (u) => h('strong', {}, num(u.remaining)) },
+          { label: 'Komposisi', value: creditBar, wide: true },
+          { label: 'Token seumur akun', num: true, value: (u) => (u.tokens ? compact(u.tokens) : muted()) },
+          { label: 'AI terakhir', value: (u) => (u.lastAt ? shortTime(u.lastAt) : muted()) },
+        ], shown, q ? 'Tidak ada pengguna yang cocok.' : 'Belum ada pengguna.'),
+        list.length > shown.length
+          ? h('div', { class: 'more' }, h('button', { type: 'button', class: 'ghost-btn small', onclick: () => { creditLimit += 50; draw(); } }, `Tampilkan lagi (${num(list.length - shown.length)} tersisa)`))
+          : null);
+    };
+    const search = h('input', { type: 'search', class: 'search', placeholder: 'Cari username / email', value: creditQuery, 'aria-label': 'Cari pengguna' });
+    search.addEventListener('input', () => { creditQuery = search.value; creditLimit = 25; draw(); });
+    draw();
+    return h('section', { class: 'card' },
+      h('div', { class: 'card-head' },
+        h('div', {},
+          h('h2', {}, 'Kredit per pengguna'),
+          h('p', { class: 'sub' }, `Bonus awal ${num(st.credits.freeBonus)} (sekali) · jatah gratis ${num(st.credits.freePerUser)}/hari (reset 00.00 WIB) · ${num(st.creditUsers.length)} pengguna`)),
+        search),
+      body);
+  }
+
+  function renderPeople() {
+    const st = stats;
+    const signups = card('Pendaftar terbaru', '10 akun terakhir', table([
+      { label: 'Pengguna', value: (u) => h('div', { class: 'who' }, userLink(u), h('span', { class: 'muted' }, u.email)) },
+      { label: 'Daftar', value: (u) => h('span', { title: dateTime(u.createdAt) }, ago(u.createdAt)) },
+      { label: 'Project', num: true, value: (u) => num(u.projects) },
+    ], st.recentUsers, 'Belum ada pengguna.'));
+
+    // "Online" = aktif dalam 10 menit terakhir (waktu aktif dicatat paling sering 5 menit sekali).
+    const au = st.activeUsers;
+    const active = card('Aktif terakhir', `${num(au.day)} pengguna aktif 24 jam terakhir · ${num(au.week)} dalam 7 hari`, table([
+      { label: 'Pengguna', value: (u) => h('div', { class: 'who' }, h('span', {}, userLink(u), u.plan ? h('span', { class: 'badge' }, u.plan === 'unlimited' ? 'Unlimited' : 'Pro') : null), h('span', { class: 'muted' }, u.email)) },
+      { label: 'Terakhir aktif', value: (u) => h('span', { class: `seen${Date.now() - new Date(u.lastSeenAt) < 10 * 60000 ? ' online' : ''}`, title: dateTime(u.lastSeenAt) }, ago(u.lastSeenAt)) },
+      { label: 'AI terakhir', value: (u) => (u.lastAiAt ? h('span', { title: dateTime(u.lastAiAt) }, ago(u.lastAiAt)) : muted()) },
+      { label: 'Project', num: true, value: (u) => num(u.projects) },
+    ], au.users, 'Belum ada aktivitas tercatat.'));
+
+    $('#tab-pengguna').replaceChildren(
+      h('p', { class: 'meta' }, `Diperbarui ${dateTime(st.generatedAt)} · waktu WIB`),
+      tokenRankingCard(st),
+      h('div', { class: 'grid two' }, active, signups),
+      creditUsersCard(st));
   }
 
   // ---------- Harga langganan ----------
@@ -500,7 +609,7 @@
         field('Model gambar (vision)', inputs.vision, 'Membaca gambar yang dilampirkan di prompt.'),
         field('Model gambar cadangan', inputs.visionFallback, 'Dipakai saat model gambar gangguan.')),
       h('h3', { class: 'sub-title' }, 'Keadaan model'),
-      h('div', { class: 'table-wrap' }, h('table', {},
+      h('div', { class: 'table-wrap' }, stack(h('table', {},
         h('thead', {}, h('tr', {}, ['Model', 'Status', 'Gangguan', 'Error terakhir'].map((t) => h('th', {}, t)))),
         h('tbody', {}, data.health.map((m) => h('tr', {},
           h('td', { class: 'mono' }, m.model),
@@ -508,7 +617,7 @@
           h('td', { class: 'num' }, num(m.failures)),
           h('td', {}, m.lastError
             ? h('span', { class: 'muted', title: m.lastError }, `${new Date(m.lastFailureAt).toLocaleString('id-ID')} · ${m.lastError.slice(0, 80)}`)
-            : h('span', { class: 'muted' }, '—'))))))),
+            : h('span', { class: 'muted' }, '—')))))), { wide: [1, 3] })),
       h('p', { class: 'usage-note' }, `Dialihkan ke model cadangan ${num(data.fallbackUsed)} kali sejak server dinyalakan.`));
 
     const markDirty = () => { saveBtn.disabled = false; status.textContent = 'Belum disimpan'; status.className = 'save-status dirty'; };
@@ -561,6 +670,7 @@
     const rowsEl = h('tbody', {});
     const rows = [];
 
+    const MODEL_COLS = ['Aktif', 'Kode', 'Nama', 'Label', 'ID model', 'Biaya/1jt token', 'Margin ×', 'Harga jual/jawaban', ''];
     const perAnswer = (cost, markup) => ((data.typicalTokens * cost * markup) / 1e6);
     function addRow(m) {
       const input = (value, attrs = {}) => h('input', { value: String(value ?? ''), ...attrs });
@@ -592,6 +702,11 @@
           r.tr.remove();
           markDirty();
         } }, '×')));
+      // Label kolom untuk tampilan kartu di layar sempit (baris bisa ditambah setelah tabel dibuat).
+      [...r.tr.children].forEach((td, i) => {
+        if (MODEL_COLS[i]) td.dataset.label = MODEL_COLS[i];
+        if (i === 4 || i === 7) td.classList.add('wide');
+      });
       r.enabled.addEventListener('change', () => r.tr.classList.toggle('off', !r.enabled.checked));
       rows.push(r);
       rowsEl.append(r.tr);
@@ -605,15 +720,15 @@
           h('h2', {}, 'Asisten AI website'),
           h('p', { class: 'sub' }, `Model yang bisa dipilih pengguna untuk chatbot websitenya. Biaya = Rp per 1 juta token dari gateway; harga jual = biaya × margin. Perkiraan per jawaban memakai ±${num(data.typicalTokens)} token.`)),
         h('div', { class: 'plans-actions' }, status, saveBtn)),
-      h('div', { class: 'table-wrap' }, h('table', { class: 'model-table' },
-        h('thead', {}, h('tr', {}, ['Aktif', 'Kode', 'Nama', 'Label', 'ID model', 'Biaya/1jt token', 'Margin ×', 'Harga jual/jawaban', ''].map((t) => h('th', {}, t)))),
+      h('div', { class: 'table-wrap' }, h('table', { class: 'model-table cards' },
+        h('thead', {}, h('tr', {}, MODEL_COLS.map((t) => h('th', {}, t)))),
         rowsEl)),
       h('div', { class: 'model-actions' },
         h('button', { type: 'button', class: 'ghost-btn', onclick: () => { addRow({ key: '', name: '', tier: '', model: '', cost: '', markup: 3, enabled: false }); markDirty(); } }, '+ Tambah model'),
         h('label', { class: 'field inline' }, h('span', {}, 'Saldo percobaan per akun (Rp)'), trialInput)),
       h('h3', { class: 'sub-title' }, 'Website yang memakai asisten'),
       data.sites.length
-        ? h('div', { class: 'table-wrap' }, h('table', {},
+        ? h('div', { class: 'table-wrap' }, stack(h('table', {},
           h('thead', {}, h('tr', {}, ['Website', 'Pemilik', 'Status', 'Model', 'Hari ini', '30 hari', ''].map((t) => h('th', {}, t)))),
           h('tbody', {}, data.sites.map((site) => h('tr', {},
             h('td', {}, h('a', { href: site.siteUrl, target: '_blank', rel: 'noopener' }, site.slug)),
@@ -628,7 +743,7 @@
               } catch (err) {
                 alertStatus(err.message);
               }
-            } }, site.blocked ? 'Buka blokir' : 'Blokir')))))))
+            } }, site.blocked ? 'Buka blokir' : 'Blokir'))))))))
         : h('p', { class: 'sub' }, 'Belum ada website yang mengatur asisten.'));
 
     function alertStatus(message) {
@@ -671,6 +786,21 @@
   document.querySelectorAll('.range [data-days]').forEach((btn) => {
     btn.onclick = () => { setDays(Number(btn.dataset.days)); load(); };
   });
+  // Tab disimpan di hash URL (#ringkasan, #pengguna, #pengaturan) supaya bisa ditautkan & bertahan saat reload.
+  const TABS = ['ringkasan', 'pengguna', 'pengaturan'];
+  function showTab(name) {
+    const tab = TABS.includes(name) ? name : 'ringkasan';
+    for (const t of TABS) $(`#tab-${t}`).hidden = t !== tab;
+    document.querySelectorAll('.tabs [data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+    $('.range').hidden = tab === 'pengaturan'; // periode tidak berlaku untuk pengaturan
+    $('#tooltip').hidden = true;
+  }
+  document.querySelectorAll('.tabs [data-tab]').forEach((btn) => {
+    btn.onclick = () => { history.replaceState(null, '', `#${btn.dataset.tab}`); showTab(btn.dataset.tab); };
+  });
+  addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+  showTab(location.hash.slice(1));
+
   $('#refresh').onclick = load;
   setDays([7, 30, 90].includes(days) ? days : 30);
   load();
