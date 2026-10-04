@@ -1,13 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#059669"/>
-      <stop offset="1" stop-color="#15803d"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="18" fill="url(#bg)"/>
-  <!-- Balok isometrik dari 3 keping yang "dirakit"; celahnya memperlihatkan latar gradasi. -->
-  <path d="M32 10 49.5 19.7 32 29.4 14.5 19.7Z" fill="#fff"/>
-  <path d="M13 24.9 30.5 34.6V52.5L13 42.8Z" fill="#fff" fill-opacity=".6"/>
-  <path d="M51 24.9 33.5 34.6V52.5L51 42.8Z" fill="#fff" fill-opacity=".82"/>
+  <!-- Tema "kertas": kotak kuning stabilo bergaris tinta, balok isometrik dari 3 keping yang "dirakit". -->
+  <rect x="1.5" y="1.5" width="61" height="61" rx="17" fill="#ffca54" stroke="#1a1320" stroke-width="3"/>
+  <path d="M32 11 49 20.4 32 29.8 15 20.4Z" fill="#1a1320"/>
+  <path d="M13.5 25.3 30.5 34.7V52L13.5 42.6Z" fill="#1a1320" fill-opacity=".45"/>
+  <path d="M50.5 25.3 33.5 34.7V52L50.5 42.6Z" fill="#1a1320" fill-opacity=".75"/>
 </svg>

@@ -907,13 +907,33 @@
 
   // ---------- Pengaturan (per browser) ----------
   const settings = { complete: storage.get('rakit.autocomplete', true) };
+  const isDark = () => document.documentElement.dataset.theme === 'dark';
+
+  // Tema editor: 'light' (default, kertas krem) atau 'dark'. Atribut awalnya dipasang skrip di editor.html.
+  function setTheme(theme) {
+    if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
+    storage.set('rakit.theme', theme);
+    if (monaco) monaco.editor.setTheme(monacoTheme());
+    if (diagram.saved && $('#editorArea').dataset.mode === 'diagram') renderDiagram(); // warna Mermaid ikut tema
+  }
 
   function openSettings() {
     const { body, close } = openPanel('db-modal settings-modal');
     const complete = h('input', { type: 'checkbox', checked: settings.complete,
       onchange: () => { setAutocomplete(complete.checked); toast(complete.checked ? 'Prediksi kode aktif' : 'Prediksi kode dimatikan'); } });
+    const themeBtn = (value, label) => h('button', {
+      type: 'button', role: 'radio', 'aria-checked': String((value === 'dark') === isDark()),
+      onclick: (e) => {
+        setTheme(value);
+        e.currentTarget.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b === e.currentTarget)));
+      },
+    }, h('span', { class: `theme-swatch ${value}` }), label);
     body.append(
       h('h3', {}, 'Pengaturan'),
+      h('div', { class: 'settings-group' },
+        h('h4', {}, 'Tampilan'),
+        h('div', { class: 'theme-choice', role: 'radiogroup', 'aria-label': 'Tema' }, themeBtn('light', 'Terang'), themeBtn('dark', 'Gelap'))),
       h('div', { class: 'settings-group' },
         h('h4', {}, 'Editor kode'),
         h('label', { class: 'switch asst-switch settings-row' }, complete, h('span', { class: 'track' }, h('span', { class: 'thumb' })),
@@ -2194,7 +2214,7 @@
 
     const language = { html: 'html', css: 'css', js: 'javascript' }[extOf(change.path)];
     diffEditor = monaco.editor.createDiffEditor(body, {
-      theme: 'rakit',
+      theme: monacoTheme(),
       readOnly: true,
       automaticLayout: true,
       renderSideBySide: body.clientWidth > 700,
@@ -2909,14 +2929,16 @@
   const diagramTime = (ms) => new Date(ms).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   async function loadMermaid() {
-    if (diagram.mermaid) return diagram.mermaid;
-    const { default: mermaid } = await import(MERMAID_URL);
+    const dark = isDark();
+    if (diagram.mermaid && diagram.mermaidDark === dark) return diagram.mermaid;
+    const mermaid = diagram.mermaid ?? (await import(MERMAID_URL)).default;
+    diagram.mermaidDark = dark;
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
       theme: 'base',
       fontFamily: 'Inter, -apple-system, "Segoe UI", system-ui, sans-serif',
-      themeVariables: {
+      themeVariables: dark ? {
         darkMode: true,
         background: '#11151f',
         primaryColor: '#1b2130',
@@ -2930,6 +2952,24 @@
         attributeBackgroundColorOdd: '#161b27',
         attributeBackgroundColorEven: '#11151f',
         edgeLabelBackground: '#11151f',
+      } : {
+        darkMode: false,
+        background: '#fffdf7',
+        primaryColor: '#fff8e7',
+        primaryTextColor: '#1a1320',
+        primaryBorderColor: '#d6a01e',
+        secondaryColor: '#fbf2dc',
+        tertiaryColor: '#fbf2dc',
+        lineColor: '#8a8274',
+        textColor: '#2b2330',
+        fontSize: '14px',
+        attributeBackgroundColorOdd: '#fbf2dc',
+        attributeBackgroundColorEven: '#fffdf7',
+        edgeLabelBackground: '#fffdf7',
+        actorBkg: '#fff8e7',
+        actorBorder: '#d6a01e',
+        noteBkgColor: '#ffe9b0',
+        noteBorderColor: '#d6a01e',
       },
       er: { useMaxWidth: false },
       flowchart: { useMaxWidth: false, curve: 'basis', htmlLabels: false },
@@ -3250,7 +3290,7 @@
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('width', String(diagram.view.w));
     clone.setAttribute('height', String(diagram.view.h));
-    clone.style.background = '#11151f';
+    clone.style.background = isDark() ? '#11151f' : '#fffdf7';
     const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' });
     const a = h('a', { href: URL.createObjectURL(blob), download: `${state.project.slug}-${diagram.kind}.svg` });
     document.body.append(a);
@@ -4404,6 +4444,9 @@
   }
 
   // Tema warna editor, disamakan dengan palet UI.
+  // Tema Monaco mengikuti tema editor: 'rakit' (gelap) dan 'rakit-light' (kertas krem).
+  const monacoTheme = () => (isDark() ? 'rakit' : 'rakit-light');
+
   function defineTheme() {
     monaco.editor.defineTheme('rakit', {
       base: 'vs-dark',
@@ -4453,7 +4496,57 @@
         'editorGutter.background': '#11151f',
       },
     });
+    monaco.editor.defineTheme('rakit-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: '', foreground: '2b2330' },
+        { token: 'comment', foreground: '9a917f', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '7b4fb0' },
+        { token: 'string', foreground: '2e7d4f' },
+        { token: 'number', foreground: 'b45309' },
+        { token: 'regexp', foreground: 'b8326e' },
+        { token: 'type', foreground: '2f7f90' },
+        { token: 'identifier', foreground: '2b2330' },
+        { token: 'delimiter', foreground: '6f6657' },
+        { token: 'tag', foreground: '2f6f80' },
+        { token: 'metatag', foreground: '7b4fb0' },
+        { token: 'attribute.name', foreground: 'b8326e' },
+        { token: 'attribute.value', foreground: '2e7d4f' },
+        { token: 'attribute.value.number.css', foreground: 'b45309' },
+        { token: 'attribute.value.unit.css', foreground: 'b45309' },
+      ],
+      colors: {
+        'editor.background': '#fffdf7',
+        'editor.foreground': '#2b2330',
+        'editor.lineHighlightBackground': '#fbf2dc',
+        'editor.lineHighlightBorder': '#00000000',
+        'editor.selectionBackground': '#ffca5470',
+        'editor.inactiveSelectionBackground': '#ffca5440',
+        'editorCursor.foreground': '#1a1320',
+        'editorLineNumber.foreground': '#cbbd9c',
+        'editorLineNumber.activeForeground': '#8a5a00',
+        'editorIndentGuide.background1': '#efe3c6',
+        'editorIndentGuide.activeBackground1': '#d6c59e',
+        'editorBracketMatch.background': '#ffca5440',
+        'editorBracketMatch.border': '#d6a01e',
+        'editorWidget.background': '#fffdf7',
+        'editorWidget.border': '#d6c59e',
+        'editorSuggestWidget.background': '#fffdf7',
+        'editorSuggestWidget.border': '#d6c59e',
+        'editorSuggestWidget.selectedBackground': '#ffca5455',
+        'editorHoverWidget.background': '#fffdf7',
+        'editorHoverWidget.border': '#d6c59e',
+        'editorGhostText.foreground': '#a59a84',
+        'minimap.background': '#fffdf7',
+        'scrollbarSlider.background': '#1a132018',
+        'scrollbarSlider.hoverBackground': '#1a132028',
+        'scrollbarSlider.activeBackground': '#d6a01e80',
+        'editorGutter.background': '#fffdf7',
+      },
+    });
   }
+
 
   // ---------- Init ----------
   function loadMonaco() {
@@ -4500,7 +4593,7 @@
     defineTheme();
     editor = monaco.editor.create($('#editor'), {
       model: null,
-      theme: 'rakit',
+      theme: monacoTheme(),
       automaticLayout: true,
       fontFamily: getComputedStyle(document.body).getPropertyValue('--mono'),
       fontSize: 14,

@@ -1,4 +1,41 @@
 :root {
+  /* Tema terang (default) sama dengan homepage & editor; gelap bila dipilih di Pengaturan editor. */
+  color-scheme: light;
+  --bg: #fff8e7;
+  --panel: #fffdf7;
+  --panel-2: #fbf2dc;
+  --raised: #f3e6c4;
+  --line: #e6d9bc;
+  --line-2: #d6c59e;
+  --text: #2b2330;
+  --muted: #5a5347;
+  --faint: #8a8274;
+  --white: #1a1320;
+  --accent: #ffca54;
+  --grad: linear-gradient(135deg, #ffca54, #ffbf3a);
+  --on-accent: #17150e;
+  --top-bg: rgb(255 248 231 / 0.9);
+  --ok-text: #2e7d4f;
+  --warn-text: #8a5a00;
+  --danger-text: #b42318;
+  --silver-text: #5a5347;
+  --bronze-text: #a8532a;
+  --shadow: rgb(26 19 32 / 0.16);
+  /* Warna seri grafik (kontras ≥ 3:1 terhadap --panel terang) */
+  --series-users: #2f6fd0;
+  --series-revenue: #1a8a62;
+  --series-ai: #7b5fd6;
+  --series-ai-out: #8f7fe0;
+  --series-assistant: #b7801f;
+  --good: #2e7d4f;
+  --warning: #c98a0b;
+  --serious: #c8603a;
+  --critical: #c2362b;
+  --ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #0a0d14;
   --panel: #11151f;
@@ -23,8 +60,14 @@
   --warning: #fab219;
   --serious: #ec835a;
   --critical: #d03b3b;
-  --ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --on-accent: #fff;
+  --top-bg: rgb(10 13 20 / 0.9);
+  --ok-text: #4ade80;
+  --warn-text: #fcd34d;
+  --danger-text: #fca5a5;
+  --silver-text: #e2e8f0;
+  --bronze-text: #f4a382;
+  --shadow: rgb(0 0 0 / 0.45);
 }
 
 * { box-sizing: border-box; }
@@ -50,7 +93,7 @@ svg { width: 16px; height: 16px; fill: currentColor; }
   align-items: center;
   gap: 14px;
   padding: 12px 24px;
-  background: rgb(10 13 20 / 0.9);
+  background: var(--top-bg);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
 }
@@ -111,7 +154,7 @@ svg { width: 16px; height: 16px; fill: currentColor; }
   padding: 0 14px;
   border-radius: 10px;
   background: var(--grad);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
   text-decoration: none;
 }
@@ -119,7 +162,7 @@ svg { width: 16px; height: 16px; fill: currentColor; }
 /* ---------- Halaman ---------- */
 .page { max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .loading, .error { padding: 48px 0; text-align: center; color: var(--muted); }
-.error { color: #fca5a5; }
+.error { color: var(--danger-text); }
 .meta { margin: -4px 0 0; color: var(--faint); font-size: 12px; }
 
 .grid { display: grid; gap: 16px; }
@@ -139,7 +182,7 @@ svg { width: 16px; height: 16px; fill: currentColor; }
 .tile .detail { color: var(--muted); font-size: 12.5px; }
 .tile .detail strong { color: var(--text); font-weight: 600; }
 .tile.hero .value { font-size: 40px; }
-.badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: rgb(250 178 25 / 0.14); color: #fcd34d; font-size: 11px; font-weight: 600; vertical-align: 3px; }
+.badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, var(--warning) 16%, transparent); color: var(--warn-text); font-size: 11px; font-weight: 600; vertical-align: 3px; }
 
 /* ---------- Grafik batang ---------- */
 .chart { position: relative; }
@@ -164,7 +207,7 @@ svg { width: 16px; height: 16px; fill: currentColor; }
   border: 1px solid var(--line-2);
   border-radius: 9px;
   background: var(--raised);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  box-shadow: 0 8px 24px var(--shadow);
   font-size: 12.5px;
   pointer-events: none;
   white-space: nowrap;
@@ -196,9 +239,9 @@ td a { color: var(--text); text-decoration: none; }
 td a:hover { color: var(--white); text-decoration: underline; }
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); font-size: 12px; }
 .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.pill.succeeded { color: #4ade80; }
-.pill.pending { color: #fcd34d; }
-.pill.failed, .pill.expired, .pill.canceled { color: #fca5a5; }
+.pill.succeeded { color: var(--ok-text); }
+.pill.pending { color: var(--warn-text); }
+.pill.failed, .pill.expired, .pill.canceled { color: var(--danger-text); }
 
 /* Kredit per pengguna: bar tersusun (terpakai / gratis sisa / saldo beli) */
 .creditbar { display: inline-flex; width: 120px; height: 8px; border-radius: 999px; overflow: hidden; background: var(--panel-2); vertical-align: middle; }
@@ -214,8 +257,8 @@ td a:hover { color: var(--white); text-decoration: underline; }
 .who .muted { font-size: 12px; }
 .seen { display: inline-flex; align-items: center; gap: 6px; }
 .seen::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
-.seen.online { color: #4ade80; }
-.seen.online::before { background: var(--good); box-shadow: 0 0 0 3px rgb(12 163 12 / 0.2); }
+.seen.online { color: var(--ok-text); }
+.seen.online::before { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent); }
 td .small { font-size: 11.5px; }
 .more { display: flex; justify-content: center; padding-top: 12px; }
 .search {
@@ -241,9 +284,9 @@ td .small { font-size: 11.5px; }
 .ranking td { vertical-align: middle; }
 .ranking .rank { width: 40px; }
 .rank-no { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 7px; background: var(--panel-2); color: var(--muted); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.rank-1 .rank-no { background: rgb(250 178 25 / 0.18); color: #fcd34d; }
-.rank-2 .rank-no { background: rgb(203 213 225 / 0.16); color: #e2e8f0; }
-.rank-3 .rank-no { background: rgb(236 131 90 / 0.18); color: #f4a382; }
+.rank-1 .rank-no { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warn-text); }
+.rank-2 .rank-no { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--silver-text); }
+.rank-3 .rank-no { background: color-mix(in srgb, var(--serious) 18%, transparent); color: var(--bronze-text); }
 .share-cell { width: 34%; min-width: 160px; }
 .tokenbar { display: flex; gap: 1px; width: 100%; height: 10px; border-radius: 999px; overflow: hidden; background: var(--panel-2); }
 .tokenbar .seg { height: 100%; }
@@ -331,15 +374,15 @@ td .small { font-size: 11.5px; }
 .save-status { color: var(--muted); font-size: 12.5px; }
 .save-status:empty { display: none; }
 .save-status.dirty { color: var(--warning); }
-.save-status.ok { color: #4ade80; }
-.save-status.error-text { color: #fca5a5; }
+.save-status.ok { color: var(--ok-text); }
+.save-status.error-text { color: var(--danger-text); }
 .save-btn {
   height: 34px;
   padding: 0 16px;
   border: 0;
   border-radius: 10px;
   background: var(--grad);
-  color: #fff;
+  color: var(--on-accent);
   font: 600 13px var(--ui);
   cursor: pointer;
 }
@@ -367,12 +410,12 @@ td .small { font-size: 11.5px; }
   font: 600 14px var(--ui);
   font-variant-numeric: tabular-nums;
 }
-.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgb(34 197 94 / 0.2); }
+.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .plan-storage { margin: 10px 0 0; color: var(--faint); font-size: 12px; }
 .estimate { display: grid; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; }
 .estimate div { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); }
 .estimate strong { color: var(--white); font-variant-numeric: tabular-nums; }
-.estimate .good strong { color: #4ade80; }
+.estimate .good strong { color: var(--ok-text); }
 .estimate .warn strong { color: var(--warning); }
 .plan-free { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; align-items: end; gap: 6px 16px; margin-top: 12px; padding: 14px 16px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel-2); }
 .plan-free .plan-head { grid-column: 1 / -1; margin-bottom: 0; }
@@ -409,7 +452,7 @@ td.mono { font-family: var(--mono); font-size: 12px; }
 .model-table tr.off input:not([type="checkbox"]) { opacity: 0.55; }
 .num-cell { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .row-del { width: 28px; height: 28px; border: 1px solid var(--line-2); border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
-.row-del:hover { color: #fca5a5; border-color: #fca5a5; }
+.row-del:hover { color: var(--danger-text); border-color: var(--danger-text); }
 .model-actions { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 12px 0 4px; }
 .ghost-btn { height: 34px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel-2); color: var(--text); font: 600 13px var(--ui); cursor: pointer; }
 .ghost-btn:hover { color: var(--white); border-color: var(--faint); }

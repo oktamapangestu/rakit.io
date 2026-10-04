@@ -171,11 +171,14 @@ const notFoundTemplate = `<!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>%s</title>
 <style>
-  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0d1117;color:#c9d1d9;
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#fff8e7;color:#5a5347;
        font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;padding:16px;box-sizing:border-box}
   main{text-align:center;max-width:420px}
-  h1{font-size:64px;margin:0;color:#58a6ff;font-family:ui-monospace,Menlo,monospace}
-  a{color:#58a6ff}
+  h1{display:inline-block;font-size:64px;line-height:1;margin:0 0 8px;color:#1a1320;font-family:ui-monospace,Menlo,monospace;
+     background:linear-gradient(transparent 60%%,#ffca54 60%%);padding:0 .1em}
+  strong{color:#1a1320}
+  a{display:inline-block;margin-top:4px;padding:10px 18px;border-radius:10px;background:#ffca54;color:#17150e;font-weight:700;text-decoration:none}
+  a:hover{background:#ffd97e}
 </style></head>
 <body><main><h1>404</h1><p><strong>%s</strong><br>%s</p>
 <p><a href="%s">Buat website gratis di %s</a></p></main></body></html>`
