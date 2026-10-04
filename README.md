@@ -286,6 +286,19 @@ pendaftar terbaru, serta ukuran penyimpanan. Periode bisa dipilih 7/30/90 hari (
 Hanya akun dengan email di `ADMIN_EMAILS` (dipisah koma) yang bisa membukanya; link-nya muncul di
 menu avatar editor. Pengguna lain diarahkan kembali ke editor, dan API `/api/admin/*` menolak dengan 403.
 
+## Prediksi kode (editor)
+
+Saat menulis kode di editor lalu berhenti mengetik sebentar (±0,5 detik), AI menebak lanjutan kodenya dan
+menampilkannya sebagai teks abu-abu: **Tab** menerima, **Esc** atau lanjut mengetik mengabaikan. Hanya di server Go
+(`go/internal/ai/complete.go`, `POST /api/ai/complete`).
+
+- Gratis (tidak memakai kredit), dibatasi `AI_COMPLETE_DAILY_LIMIT` permintaan per akun per hari (default 500,
+  `0` = fitur mati). Pemakaian & token tercatat di tabel `ai_complete_usage`.
+- Model: `AI_COMPLETE_MODEL`, atau bila kosong model gambar (cepat) yang diatur owner, lalu model utama. Tidak lewat
+  antrean prompt AI dan tidak menghalangi job AI user; satu prediksi berjalan per akun, batas 12 detik.
+- Yang dikirim: path file, maks. 6.000 karakter sebelum kursor dan 2.000 sesudahnya.
+- Bisa dimatikan di menu avatar → **Pengaturan** → "Prediksi kode otomatis (AI)" (disimpan per browser).
+
 ## Diagram buatan AI
 
 Tab **Diagram** di editor (di samping Data) menampilkan diagram project aktif yang **digambar AI** (kode Mermaid)

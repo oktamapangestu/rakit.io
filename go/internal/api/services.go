@@ -46,6 +46,16 @@ func (h *Handler) ai(q *request) error {
 		}
 		return q.json(status, out)
 
+	case q.is("POST", "complete"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		out, err := svc.Complete(q.r.Context(), q.user, q.body)
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
+
 	case q.is("GET", "jobs", ":", "events"):
 		return svc.Events(q.w, q.r, q.user, q.rest[1])
 

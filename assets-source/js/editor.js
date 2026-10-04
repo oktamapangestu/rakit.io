@@ -896,12 +896,88 @@
       { label: 'Salin URL website', run: () => copyText(state.project.siteUrl) },
       { label: 'Mode publikasi', hint: isManual() ? 'manual' : 'langsung', run: openPublishMode },
       { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
+      { label: 'Pengaturan', run: openSettings },
       { label: 'Asisten AI website', hint: 'baru', run: openAssistant },
       ai.credits?.topupEnabled && { label: 'Langganan & kredit AI', hint: ai.credits.plan?.name, run: () => openTopup('plans') },
       state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
       '-',
       { label: 'Keluar', danger: true, run: logout },
     ], { align: 'right', label: h('div', { class: 'menu-label' }, h('strong', {}, state.me.username), state.me.email) });
+  }
+
+  // ---------- Pengaturan (per browser) ----------
+  const settings = { complete: storage.get('rakit.autocomplete', true) };
+
+  function openSettings() {
+    const { body, close } = openPanel('db-modal settings-modal');
+    const complete = h('input', { type: 'checkbox', checked: settings.complete,
+      onchange: () => { setAutocomplete(complete.checked); toast(complete.checked ? 'Prediksi kode aktif' : 'Prediksi kode dimatikan'); } });
+    body.append(
+      h('h3', {}, 'Pengaturan'),
+      h('div', { class: 'settings-group' },
+        h('h4', {}, 'Editor kode'),
+        h('label', { class: 'switch asst-switch settings-row' }, complete, h('span', { class: 'track' }, h('span', { class: 'thumb' })),
+          h('span', {}, h('strong', {}, 'Prediksi kode otomatis (AI)'),
+            h('small', {}, 'Saat berhenti mengetik, AI menebak lanjutan kode dalam teks abu-abu. Tekan Tab untuk menerima, Esc atau lanjut mengetik untuk mengabaikan. Gratis, tidak memakai kredit.')))),
+      h('p', { class: 'settings-note' }, 'Pengaturan disimpan di browser ini.'),
+      h('div', { class: 'modal-buttons' }, h('button', { type: 'button', class: 'primary', onclick: close }, 'Selesai')));
+  }
+
+  function setAutocomplete(on) {
+    settings.complete = on;
+    storage.set('rakit.autocomplete', on);
+    editor?.updateOptions({ inlineSuggest: { enabled: on } });
+  }
+
+  // ---------- Prediksi kode (inline completion) ----------
+  // Setelah user berhenti mengetik sebentar, minta lanjutan kode ke server (/api/ai/complete) dan tampilkan
+  // sebagai teks abu-abu. Permintaan lama dibatalkan saat user lanjut mengetik.
+  const COMPLETE_DELAY = 450;
+  const completeState = { off: false }; // off: server menolak (fitur mati / kuota habis) — berhenti sampai reload
+
+  function registerCompletion() {
+    const wait = (ms, token) => new Promise((resolve) => {
+      const t = setTimeout(() => resolve(true), ms);
+      token.onCancellationRequested(() => { clearTimeout(t); resolve(false); });
+    });
+    monaco.languages.registerInlineCompletionsProvider({ pattern: '**' }, {
+      async provideInlineCompletions(model, position, context, token) {
+        if (!settings.complete || completeState.off || model !== editor.getModel() || !state.active) return { items: [] };
+        // Hanya saat mengetik (bukan saat dipicu manual) dan bukan di tengah kata.
+        const line = model.getLineContent(position.lineNumber);
+        const after = line.slice(position.column - 1);
+        if (/^\w/.test(after)) return { items: [] };
+        if (!(await wait(COMPLETE_DELAY, token))) return { items: [] };
+        const full = model.getFullModelRange();
+        const prefix = model.getValueInRange({ startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column });
+        const suffix = model.getValueInRange({ startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: full.endLineNumber, endColumn: full.endColumn });
+        if (!prefix.trim()) return { items: [] };
+        const controller = new AbortController();
+        token.onCancellationRequested(() => controller.abort());
+        try {
+          const res = await fetch('/api/ai/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Project': state.projectSlug },
+            body: JSON.stringify({ path: state.active, prefix: prefix.slice(-6000), suffix: suffix.slice(0, 2000) }),
+            credentials: 'same-origin',
+            signal: controller.signal,
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            if (res.status === 503 || data.code === 'complete_limit') {
+              completeState.off = true;
+              if (data.code === 'complete_limit') toast(data.error, 'error');
+            }
+            return { items: [] };
+          }
+          if (token.isCancellationRequested || !data.completion) return { items: [] };
+          return { items: [{ insertText: data.completion, range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column) }] };
+        } catch {
+          return { items: [] }; // dibatalkan atau jaringan putus
+        }
+      },
+      freeInlineCompletions() {},
+    });
   }
 
   async function logout() {
@@ -4444,12 +4520,14 @@
       renderWhitespace: 'selection',
       wordWrap: 'off',
       linkedEditing: true, // rename tag pembuka/penutup HTML bersamaan
+      inlineSuggest: { enabled: settings.complete },
       padding: { top: 8 },
     });
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => state.active && save(state.active));
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyS, saveAll);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => toggleAi());
     editor.onDidChangeCursorPosition(updateStatus);
+    registerCompletion();
     applyResponsiveEditor();
 
     await loadTree();

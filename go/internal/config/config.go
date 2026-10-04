@@ -62,6 +62,10 @@ type AI struct {
 	VisionModel, VisionFallbackModel string
 	ImagePromptCredits               int
 	MaxImages                        int
+	// Prediksi kode di editor (internal/ai/complete.go): model cepat (kosong = model gambar, lalu model
+	// utama) dan batas permintaan gratis per akun per hari (0 = fitur mati).
+	CompleteModel      string
+	CompleteDailyLimit int
 }
 
 type CreditPackage struct {
@@ -143,6 +147,8 @@ func (c *Config) loadServices() {
 		VisionModel:         envDefault("AI_VISION_MODEL", "deepseek-v4.1-flash"),
 		VisionFallbackModel: os.Getenv("AI_VISION_FALLBACK_MODEL"),
 		ImagePromptCredits:  max(1, envInt("AI_IMAGE_PROMPT_CREDITS", 2)),
+		CompleteModel:       os.Getenv("AI_COMPLETE_MODEL"),
+		CompleteDailyLimit:  max(0, envIntOr("AI_COMPLETE_DAILY_LIMIT", 500)),
 		MaxImages:           3,
 	}
 	c.AI.Enabled = c.AI.APIKey != "" && c.AI.BaseURL != ""

@@ -5,6 +5,7 @@ package ai
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -73,6 +74,9 @@ type request struct {
 	messages []message
 	tools    bool // sertakan tool mode Builder
 	vision   bool // pakai pasangan model gambar
+	// maxTokens: batas jawaban (0 = AI_MAX_TOKENS); temperature: nil = bawaan provider.
+	maxTokens   int
+	temperature *float64
 }
 
 type streamEvent struct {
@@ -102,13 +106,16 @@ type streamEvent struct {
 func (s *Service) chatCompletion(req request, h hooks) (*reply, error) {
 	body := map[string]any{
 		"model":          req.model,
-		"max_tokens":     s.cfg.AI.MaxTokens,
+		"max_tokens":     cmp.Or(req.maxTokens, s.cfg.AI.MaxTokens),
 		"stream":         true,
 		"stream_options": map[string]bool{"include_usage": true},
 		"messages":       req.messages,
 	}
 	if req.tools {
 		body["tools"] = json.RawMessage(toolsJSON)
+	}
+	if req.temperature != nil {
+		body["temperature"] = *req.temperature
 	}
 	var payload bytes.Buffer
 	enc := json.NewEncoder(&payload)

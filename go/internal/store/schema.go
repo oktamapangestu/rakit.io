@@ -181,6 +181,14 @@ const schema = `
 	  count   INTEGER NOT NULL DEFAULT 0,
 	  PRIMARY KEY (user_id, day)
 	);
+	-- Prediksi kode di editor (internal/ai/complete.go): jumlah permintaan & token per akun per hari (WIB).
+	CREATE TABLE IF NOT EXISTS ai_complete_usage (
+	  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	  day     TEXT NOT NULL,
+	  count   INTEGER NOT NULL DEFAULT 0,
+	  tokens  INTEGER NOT NULL DEFAULT 0,
+	  PRIMARY KEY (user_id, day)
+	);
 	-- Diagram project buatan AI (kode Mermaid + catatan), satu per jenis; lihat internal/ai/diagram.go.
 	CREATE TABLE IF NOT EXISTS project_diagrams (
 	  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
