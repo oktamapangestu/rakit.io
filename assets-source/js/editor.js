@@ -1620,6 +1620,126 @@
     box.scrollTop = box.scrollHeight;
   }
 
+  // ---------- Penjelasan fitur (tombol ⓘ) ----------
+  // Untuk belajar: tiap fitur dijelaskan dengan bahasa sederhana + analogi, cara pakainya di rakit.io,
+  // istilah yang perlu diketahui, dan contoh permintaan ke AI untuk langsung dicoba.
+  const FEATURE_INFO = {
+    code: {
+      icon: '</>', title: 'Editor Kode',
+      what: 'Tempat kamu menulis isi website. Website dibangun dari tiga bahasa: HTML untuk struktur dan isi, CSS untuk tampilan, dan JavaScript untuk perilaku (apa yang terjadi saat tombol diklik, dan sebagainya).',
+      analogy: 'Bayangkan membangun rumah: HTML adalah tembok dan ruangannya, CSS adalah cat dan dekorasinya, JavaScript adalah listrik dan saklarnya.',
+      why: 'Semua website yang kamu buka setiap hari — dari toko online sampai media sosial — dibangun dari tiga bahasa ini. Memahaminya membuatmu bisa mengubah apa pun di websitemu sendiri.',
+      how: ['Klik file di panel kiri untuk membukanya.', 'Ketik perubahan; tersimpan otomatis (Auto-save) dan preview di kanan langsung berubah.', 'Saat berhenti mengetik, AI menebak lanjutan kode dalam teks abu-abu — tekan Tab untuk menerima.', 'Ctrl/⌘ + S untuk menyimpan manual.'],
+      terms: [['Tag', 'penanda HTML, mis. <h1>Judul</h1>'], ['Atribut', 'keterangan tambahan pada tag, mis. href pada <a>'], ['Selector', 'cara CSS memilih elemen, mis. .tombol atau h1'], ['Fungsi', 'kumpulan perintah JavaScript yang bisa dipanggil berulang']],
+      tip: 'Ubah satu hal kecil, lalu lihat hasilnya di preview. Cara ini paling cepat untuk memahami arti setiap baris kode.',
+      tryText: 'Jelaskan isi file index.html baris per baris dengan bahasa yang mudah dipahami pemula.', tryMode: 'plan',
+    },
+    ai: {
+      icon: '✦', title: 'Asisten AI',
+      what: 'Teman belajar yang bisa membuatkan dan mengubah kode untukmu (mode Builder), atau diajak berdiskusi dan merencanakan tanpa mengubah apa pun (mode Plan).',
+      analogy: 'Seperti punya mentor programmer di sebelahmu: kamu ceritakan maumu, dia mengerjakan, lalu kamu bisa bertanya "kenapa begitu?".',
+      why: 'Programmer zaman sekarang juga bekerja bersama AI. Kuncinya adalah tahu cara meminta dengan jelas dan memeriksa hasilnya — keterampilan yang kamu latih di sini.',
+      how: ['Builder: tulis permintaan, AI mengubah file, lalu kamu pilih Simpan atau Batalkan.', 'Plan: diskusi dan susun rencana; tekan "Jalankan rencana ini" kalau sudah cocok.', 'Pilih blok di preview untuk mengubah bagian halaman tertentu saja.', 'Lampirkan gambar (mis. sketsa atau contoh desain) sebagai acuan.'],
+      terms: [['Prompt', 'perintah atau pertanyaan yang kamu kirim ke AI'], ['Builder / Plan', 'mode mengerjakan / mode berdiskusi'], ['Kredit', 'jatah pemakaian AI; tiap prompt memakai kredit']],
+      tip: 'Setelah AI mengubah sesuatu, tanyakan "jelaskan perubahan barusan", lalu buka tab Code untuk melihat kodenya. Dari situ kamu belajar.',
+      tryText: 'Buatkan halaman profil sederhana tentang saya: foto, nama, sedikit cerita, dan daftar hobi.', tryMode: 'build',
+    },
+    data: {
+      icon: '▦', title: 'Database',
+      what: 'Tempat menyimpan data websitemu secara permanen di server, sehingga bisa dibaca dan ditambah dari halaman website — misalnya isi buku tamu, pesanan, atau daftar produk.',
+      analogy: 'Mirip spreadsheet: satu tabel seperti satu sheet, kolom adalah judul kolom (nama, pesan, tanggal), dan setiap baris adalah satu data.',
+      why: 'Tanpa database, data yang diisi pengunjung hilang begitu halaman ditutup, atau hanya tersimpan di browser satu orang. Hampir semua aplikasi — media sosial, toko online, aplikasi bank — bergantung pada database.',
+      how: ['Buat tabel dan kolomnya, pilih tipe data: teks, angka, ya/tidak, tanggal, relasi, atau gambar.', 'Atur akses: siapa yang boleh melihat, menambah, mengubah, dan menghapus data.', 'Dari kode website, baca dan simpan data dengan fetch(\'/api/db/nama_tabel\').', 'Atau minta AI membuatkan form beserta tabelnya sekaligus.'],
+      terms: [['Tabel / kolom / baris', 'wadah data / jenis isian / satu data'], ['API', 'alamat yang dipakai kode untuk meminta atau mengirim data'], ['Relasi', 'kolom yang menunjuk ke baris di tabel lain, mis. pesanan → produk'], ['Akses publik / privat', 'boleh dipakai semua pengunjung / hanya kamu']],
+      tip: 'Biarkan akses "ubah" dan "hapus" tetap privat (hanya kamu), supaya pengunjung tidak bisa merusak data orang lain.',
+      tryText: 'Buatkan buku tamu: form nama dan pesan yang tersimpan di database, lalu daftar ucapan yang sudah masuk tampil di bawahnya.', tryMode: 'build',
+    },
+    diagram: {
+      icon: '◫', title: 'Diagram',
+      what: 'Gambar struktur websitemu yang dibuat AI dari file dan database: siapa memakai fitur apa, bagaimana alurnya, dan bagaimana data saling terhubung.',
+      analogy: 'Seperti denah dan peta sebuah gedung: kamu tidak perlu membuka setiap ruangan untuk memahami bentuk keseluruhannya.',
+      why: 'Perancang sistem memakai diagram (UML, ERD) untuk merencanakan dan menjelaskan aplikasi — di dunia kerja maupun tugas kuliah. Diagram membantumu melihat gambaran besar sebelum menambah fitur.',
+      how: ['Pilih jenis diagram di deretan tab.', 'Tekan Update diagram supaya AI menggambar dari file & database terbaru (memakai kredit).', 'Tekan ⓘ di toolbar diagram untuk cara membaca jenis yang sedang dibuka.', 'Zoom, geser, salin kode Mermaid, atau unduh sebagai SVG.'],
+      terms: [['UML', 'kumpulan jenis diagram standar untuk merancang perangkat lunak'], ['ERD', 'diagram struktur database: tabel dan hubungannya'], ['Mermaid', 'bahasa teks untuk menggambar diagram']],
+      tip: 'Bandingkan diagram dengan websitemu: kalau ada yang terasa aneh di diagram, biasanya ada yang perlu dirapikan di kodenya.',
+    },
+    fn: {
+      icon: 'ϟ', title: 'Fungsi serverless',
+      what: 'Kode JavaScript yang berjalan di server, bukan di browser pengunjung. Halaman websitemu memanggilnya lewat alamat /api/fn/nama-fungsi lalu menerima hasilnya.',
+      analogy: 'Kode di halaman website itu seperti etalase toko — semua orang bisa melihat isinya. Fungsi adalah dapur di belakang: pengunjung hanya menerima hidangannya, tidak bisa melihat resep dan bahannya.',
+      why: 'Ada hal yang tidak boleh terlihat atau diubah pengunjung: kunci API rahasia, perhitungan harga, atau pengiriman notifikasi. Di dunia kerja, ini disebut kode backend.',
+      how: ['Tekan + Fungsi baru, tulis kodenya, lalu Coba langsung dari editor.', 'Simpan kunci rahasia di Rahasia (env) dan baca di kode lewat env.NAMA.', 'Panggil dari halaman: fetch(\'/api/fn/nama-fungsi\').', 'Atur Jadwal supaya fungsi berjalan otomatis (mis. laporan harian).'],
+      terms: [['Server / backend', 'komputer dan kode di sisi penyedia, bukan di perangkat pengunjung'], ['Endpoint', 'alamat yang bisa dipanggil, mis. /api/fn/kirim-pesan'], ['Env (rahasia)', 'nilai rahasia yang hanya bisa dibaca fungsi'], ['Cron', 'jadwal untuk menjalankan sesuatu secara otomatis']],
+      tip: 'Jangan pernah menulis kunci API di file .html atau .js halaman — siapa pun bisa membacanya. Simpan di Rahasia (env) dan pakai lewat fungsi.',
+      tryText: 'Buatkan fungsi serverless yang mengirim notifikasi ke Telegram setiap ada pesan baru dari form kontak.', tryMode: 'build',
+    },
+    history: {
+      icon: '↺', title: 'Riwayat versi',
+      what: '"Foto" seluruh file project-mu pada satu waktu. Kamu bisa melihat perbedaannya dan kembali ke versi mana pun.',
+      analogy: 'Seperti save point di game: kalau langkah berikutnya gagal, kamu tinggal kembali ke titik simpan terakhir.',
+      why: 'Dengan riwayat, kamu bebas bereksperimen tanpa takut merusak. Programmer profesional memakai alat bernama Git untuk hal yang sama.',
+      how: ['Versi tersimpan otomatis saat kamu mulai mengedit dan sebelum AI mengubah file.', 'Tekan Simpan versi sekarang sebelum mencoba perubahan besar.', 'Pilih sebuah versi untuk melihat file apa yang berubah, lalu Kembalikan bila perlu.'],
+      terms: [['Versi', 'salinan semua file pada satu waktu'], ['Diff', 'perbedaan antara dua versi'], ['Restore', 'mengembalikan file ke versi tertentu'], ['Git', 'alat riwayat versi yang dipakai programmer di seluruh dunia']],
+      tip: 'Biasakan menyimpan versi dengan nama yang jelas sebelum eksperimen, mis. "sebelum ganti desain".',
+    },
+    files: {
+      icon: '▤', title: 'File & folder',
+      what: 'Semua bagian websitemu tersimpan sebagai file. index.html adalah halaman utama yang dibuka pertama kali; halaman lain, file CSS, JavaScript, dan gambar bisa dirapikan ke dalam folder.',
+      analogy: 'Seperti map dan dokumen di lemari arsip: nama yang rapi membuat semuanya mudah ditemukan, oleh kamu maupun oleh browser.',
+      why: 'Browser menemukan halaman dan gambar dari nama file dan foldernya (disebut path). Salah satu huruf saja, gambar atau halaman tidak akan muncul.',
+      how: ['Buat file atau folder dengan tombol di atas daftar file.', 'Upload gambar, atau seret gambar langsung ke daftar file.', 'Klik ⋯ atau klik kanan pada file untuk ganti nama, hapus, atau salin kode <img>.', 'Halaman baru: buat mis. tentang.html, lalu tautkan dengan <a href="/tentang.html">.'],
+      terms: [['Path', 'alamat file, mis. /images/foto.jpg'], ['Ekstensi', 'akhiran nama file yang menunjukkan jenisnya: .html, .css, .js, .png'], ['index.html', 'halaman yang dibuka saat alamat website diakses']],
+      tip: 'Pakai huruf kecil dan tanda hubung tanpa spasi untuk nama file, mis. tentang-kami.html dan foto-profil.jpg.',
+    },
+    preview: {
+      icon: '◉', title: 'Preview & website online',
+      what: 'Tampilan langsung websitemu seperti yang dilihat pengunjung. Websitemu juga sudah online di alamatmu sendiri dan bisa dibuka siapa saja.',
+      analogy: 'Seperti cermin: setiap perubahan kode langsung terlihat di sini, jadi kamu tahu efek dari setiap baris yang kamu tulis.',
+      why: 'Pengunjung membuka website dari HP, tablet, dan laptop. Website yang baik tampil rapi di semua ukuran layar — ini disebut desain responsif.',
+      how: ['Ganti ukuran Desktop / Tablet / HP di bawah preview untuk mengecek tampilan.', 'Pilih blok: klik bagian halaman lalu minta AI mengubah bagian itu saja.', 'Lihat situs membuka websitemu yang sudah online di tab baru.', 'Mode publikasi (menu avatar): langsung tayang setiap simpan, atau manual lewat versi dev.'],
+      terms: [['Responsif', 'tampilan menyesuaikan ukuran layar'], ['Domain', 'alamat website, mis. namamu.rakit.io'], ['Dev / prod', 'versi untuk mencoba / versi yang dilihat pengunjung']],
+      tip: 'Selalu cek tampilan HP — sebagian besar pengunjung membuka website dari ponsel.',
+      tryText: 'Periksa apakah halaman ini sudah rapi di layar HP, lalu perbaiki bagian yang belum responsif.', tryMode: 'build',
+    },
+  };
+
+  // Isi kotak AI dengan contoh permintaan (tidak langsung dikirim, supaya bisa diubah dulu).
+  function askAi(text, mode = 'build') {
+    setMode('ai');
+    setAiMode(mode);
+    $('#aiInput').value = text;
+    autoGrow();
+    updateAiComposer();
+    autoFocus($('#aiInput'));
+  }
+
+  function showFeatureInfo(key) {
+    const info = FEATURE_INFO[key];
+    if (!info) return;
+    const { body, close } = openPanel('db-modal wide feature-info');
+    body.append(
+      h('div', { class: 'fi-head' }, h('span', { class: 'fi-icon', 'aria-hidden': 'true' }, info.icon),
+        h('div', {}, h('span', { class: 'fi-kicker' }, 'Kenali fitur'), h('h3', {}, info.title))),
+      h('p', { class: 'fi-what' }, info.what),
+      h('div', { class: 'fi-analogy' }, h('strong', {}, 'Analogi '), info.analogy),
+      h('h4', {}, 'Kenapa penting?'), h('p', {}, info.why),
+      h('h4', {}, 'Cara pakai di rakit.io'), h('ol', { class: 'fi-steps' }, info.how.map((step) => h('li', {}, step))),
+      h('h4', {}, 'Istilah yang perlu kamu tahu'),
+      h('dl', { class: 'fi-terms' }, info.terms.map(([term, desc]) => [h('dt', {}, term), h('dd', {}, desc)])),
+      h('div', { class: 'fi-tip' }, h('strong', {}, 'Tips belajar: '), info.tip),
+      info.tryText ? h('div', { class: 'fi-try' }, h('span', {}, 'Coba minta ke AI:'), h('code', {}, info.tryText)) : null,
+      h('div', { class: 'modal-buttons' },
+        info.tryText ? h('button', { type: 'button', onclick: () => { close(); askAi(info.tryText, info.tryMode); } }, 'Coba sekarang') : null,
+        h('button', { type: 'button', class: 'primary', onclick: close }, 'Mengerti')));
+    body.querySelector('.modal-buttons .primary').focus();
+  }
+
+  function bindFeatureInfo() {
+    $('#modeInfo').onclick = () => showFeatureInfo($('#editorArea').dataset.mode);
+    $('#filesInfo').onclick = () => showFeatureInfo('files');
+    $('#previewInfo').onclick = () => showFeatureInfo('preview');
+  }
+
   // Area editor punya dua mode: 'code' (Monaco) dan 'ai' (chat asisten).
   function setMode(mode) {
     // Mis. "buka tabel" dari hasil AI: tampilannya hanya ada di Coding, jadi pindah ke sana.
@@ -1628,6 +1748,7 @@
       toast('Pindah ke mode Coding');
     }
     $('#editorArea').dataset.mode = mode;
+    $('#modeInfo').title = `Apa itu ${FEATURE_INFO[mode]?.title ?? 'fitur ini'}?`;
     $('#codeView').hidden = mode !== 'code';
     $('#aiPanel').hidden = mode !== 'ai';
     $('#dataView').hidden = mode !== 'data';
@@ -4587,6 +4708,7 @@
     bindEvents();
     bindAiEvents();
     bindDiagramEvents();
+    bindFeatureInfo();
     loadCredits();
 
     monaco = await loadMonaco();
