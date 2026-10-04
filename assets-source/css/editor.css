@@ -1779,6 +1779,16 @@ button.credit-badge:disabled { cursor: default; }
 .diagram-update svg { width: 13px; height: 13px; fill: currentColor; }
 .diagram-update:hover:not(:disabled) { background: #c2410c; }
 .diagram-update:disabled { opacity: 0.5; cursor: default; }
+.diagram-info h4 { margin: 14px 0 4px; color: var(--white); font-size: 12.5px; }
+.diagram-info p { margin: 0; color: var(--text); font-size: 13px; line-height: 1.55; }
+.diagram-info dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; }
+.diagram-info dt { color: #fcd34d; font-weight: 600; }
+.diagram-info dd { margin: 0; color: var(--muted); }
+@media (max-width: 480px) {
+  .diagram-info dl { grid-template-columns: 1fr; gap: 0; }
+  .diagram-info dd { margin-bottom: 8px; }
+}
+.diagram-info .diagram-info-note { margin-top: 16px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); color: var(--faint); font-size: 12px; }
 .diagram-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; }
 
 .diagram-body { flex: 1; display: flex; min-height: 0; border-top: 1px solid var(--line); }
