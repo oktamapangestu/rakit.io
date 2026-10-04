@@ -30,6 +30,9 @@
   --shadow: rgb(26 19 32 / 0.14);
   --page-glow-1: rgb(255 202 84 / 0.16);
   --page-glow-2: rgb(79 159 175 / 0.08);
+  --file-html: #c2410c;
+  --file-css: #2f6fd0;
+  --file-js: #9a6a00;
   --radius: 14px;
   --ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", "SF Mono", Menlo, "Cascadia Code", Consolas, monospace;
@@ -46,7 +49,7 @@
   --line-2: #2a3244;
   --text: #d8dde8;
   --muted: #7c869b;
-  --faint: #4b5468;
+  --faint: #67718a;
   --white: #f5f7fb;
   --accent: #16a34a;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -66,8 +69,11 @@
   --hover: color-mix(in srgb, var(--text) 3%, transparent);
   --overlay: rgb(5 7 12 / 0.6);
   --shadow: rgb(0 0 0 / 0.4);
-  --page-glow-1: color-mix(in srgb, var(--accent) 8%, transparent);
-  --page-glow-2: color-mix(in srgb, var(--accent) 8%, transparent);
+  --page-glow-1: rgb(16 185 129 / 0.08);
+  --page-glow-2: rgb(132 204 22 / 0.08);
+  --file-html: #fb923c;
+  --file-css: #60a5fa;
+  --file-js: #facc15;
   color-scheme: dark;
 }
 
@@ -404,9 +410,9 @@ a.chip-btn svg { width: 14px; height: 14px; }
   font: 700 8.5px var(--mono);
   flex-shrink: 0;
 }
-.ficon.html { color: #fb923c; background: rgb(251 146 60 / 0.12); }
-.ficon.css { color: #60a5fa; background: color-mix(in srgb, var(--info) 12%, transparent); }
-.ficon.js { color: #facc15; background: rgb(250 204 21 / 0.12); }
+.ficon.html { color: var(--file-html); background: color-mix(in srgb, var(--file-html) 12%, transparent); }
+.ficon.css { color: var(--file-css); background: color-mix(in srgb, var(--file-css) 12%, transparent); }
+.ficon.js { color: var(--file-js); background: color-mix(in srgb, var(--file-js) 12%, transparent); }
 .ficon.dir { color: var(--accent-text); }
 .ficon.dir svg { width: 16px; height: 16px; }
 .ficon.img { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
@@ -1158,7 +1164,7 @@ button.credit-badge:disabled { cursor: default; }
   background:
     radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 35%, transparent), transparent 55%),
     radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent) 40%, transparent), transparent 55%),
-    linear-gradient(180deg, #171a33, var(--panel));
+    linear-gradient(180deg, var(--panel-2), var(--panel));
   border-bottom: 1px solid var(--line);
 }
 .promo-orb { position: absolute; border-radius: 50%; filter: blur(40px); opacity: 0.55; pointer-events: none; animation: promo-float 9s ease-in-out infinite alternate; }
@@ -1187,12 +1193,12 @@ button.credit-badge:disabled { cursor: default; }
   line-height: 1.15;
   letter-spacing: -0.03em;
   color: var(--white);
-  background: linear-gradient(90deg, #fff, var(--accent-text) 60%, var(--ok-text));
+  background: linear-gradient(90deg, var(--white), var(--accent-text) 60%, var(--ok-text));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.promo-hero p { max-width: 520px; margin: 0; color: #c7cbe0; font-size: 13.5px; line-height: 1.55; }
+.promo-hero p { max-width: 520px; margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
 .promo-today {
   display: grid;
   gap: 6px;
@@ -1933,15 +1939,15 @@ button.credit-badge:disabled { cursor: default; }
   width: 100%;
   height: 36px;
   margin-bottom: 4px;
-  border: 1px dashed rgb(103 232 249 / 0.45);
+  border: 1px dashed color-mix(in srgb, var(--info) 55%, transparent);
   border-radius: 10px;
-  background: rgb(14 116 144 / 0.14);
-  color: #cffafe;
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info-text);
   font: 600 12.5px var(--ui);
   cursor: pointer;
 }
 .history-save svg { width: 13px; height: 13px; fill: currentColor; }
-.history-save:hover { background: rgb(14 116 144 / 0.28); border-style: solid; }
+.history-save:hover { background: color-mix(in srgb, var(--info) 22%, transparent); border-style: solid; }
 
 .history-view { flex: 1; display: flex; min-height: 0; margin-top: 8px; border-top: 1px solid var(--line); container-type: inline-size; }
 .history-layout { flex: 1; display: grid; grid-template-columns: minmax(240px, 320px) 1fr; min-height: 0; }
@@ -2043,7 +2049,7 @@ button.credit-badge:disabled { cursor: default; }
 .history-badge { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .history-badge.changed { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn-text); }
 .history-badge.missing { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger-text); }
-.history-badge.new { background: color-mix(in srgb, var(--info) 14%, transparent); color: #bfdbfe; }
+.history-badge.new { background: color-mix(in srgb, var(--info) 14%, transparent); color: var(--info-text); }
 .history-badge.same { background: var(--raised); color: var(--muted); }
 .history-file-actions { display: flex; gap: 6px; }
 .history-file-actions button {
@@ -2467,7 +2473,7 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 .mode-option strong { color: var(--white); font-size: 13.5px; }
 .mode-option[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
 /* Tombol dialog yang belum bisa dipakai (mis. menunggu persetujuan) harus terlihat nonaktif. */
-.modal-buttons button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.4); }
+.modal-buttons button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(0.4); }
 
 @media (max-width: 760px) {
   /* Tombol mode di tengah ruang antara logo dan tombol kanan, supaya tidak pernah menimpa tombol. */
