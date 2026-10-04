@@ -3288,6 +3288,10 @@
     };
   }
 
+  // Kepala section tab Fungsi: judul (+ jumlah) di kiri, kontrol di kanan.
+  const fnSectionHead = (title, count, ...tools) => h('div', { class: 'fn-section-head' },
+    h('h4', {}, title, count != null ? h('span', { class: 'fn-count' }, String(count)) : null), ...tools);
+
   function fnLogsSection(d) {
     const TRIGGER = { http: 'Pengunjung', cron: 'Jadwal', test: 'Uji coba' };
     const when = (ms) => {
@@ -3298,7 +3302,7 @@
     const filter = h('select', { onchange: async (e) => { fnState.logFilter = e.target.value; await fnLoadLogs(); renderFn(); } },
       h('option', { value: '' }, 'Semua fungsi'), d.functions.map((f) => h('option', { value: f.name, selected: f.name === fnState.logFilter }, f.name)));
     return h('section', { class: 'fn-section' },
-      h('div', { class: 'fn-section-head' }, h('h4', {}, 'Log eksekusi'), filter,
+      fnSectionHead('Log eksekusi', null, filter,
         h('button', { type: 'button', class: 'icon-btn', title: 'Muat ulang log', onclick: async () => { await fnLoadLogs(); renderFn(); } }, svg(ICON.refresh))),
       fnState.logs.length
         ? h('ul', { class: 'fn-logs' }, fnState.logs.map((l) => {
@@ -3315,7 +3319,7 @@
             open && l.error ? h('p', { class: 'fn-error' }, l.error) : null,
             open && l.logs ? h('pre', { class: 'fn-pre logs' }, l.logs) : null);
         }))
-        : h('p', { class: 'fn-note' }, 'Belum ada eksekusi. Panggilan dari pengunjung, jadwal, dan uji coba akan tercatat di sini (100 terakhir).'));
+        : h('p', { class: 'fn-placeholder' }, 'Belum ada eksekusi. Panggilan dari pengunjung, jadwal, dan uji coba tercatat di sini (100 terakhir).'));
   }
 
   function fnTryPanel(f) {
@@ -3362,12 +3366,12 @@
       }
     };
     return h('section', { class: 'fn-section' },
-      h('h4', {}, 'Rahasia (env)'),
-      h('p', { class: 'fn-note' }, 'Untuk API key & token. Dibaca fungsi lewat env.NAMA; tidak pernah terkirim ke browser pengunjung, dan isinya tidak ditampilkan lagi setelah disimpan.'),
+      fnSectionHead('Rahasia (env)', d.secrets.length || null),
+      h('p', { class: 'fn-note' }, 'Untuk API key & token. Dibaca fungsi lewat ', h('code', {}, 'env.NAMA'), ' — tidak pernah terkirim ke browser pengunjung, dan isinya tidak ditampilkan lagi setelah disimpan.'),
       d.secrets.length ? h('ul', { class: 'fn-secrets' }, d.secrets.map((s) => h('li', {},
         h('code', {}, s.name), h('span', { class: 'fn-dots' }, '••••••••'),
         h('button', { type: 'button', class: 'icon-btn', title: `Hapus ${s.name}`, onclick: () => remove(s) }, svg(ICON.trash))))) : null,
-      h('form', { class: 'fn-secret-form', onsubmit: (e) => { e.preventDefault(); save(); } }, name, value, h('button', { type: 'submit' }, 'Simpan')));
+      h('form', { class: 'fn-secret-form', onsubmit: (e) => { e.preventDefault(); save(); } }, name, value, h('button', { type: 'submit', class: 'fn-btn primary' }, 'Simpan')));
   }
 
   function renderFn() {
@@ -3387,19 +3391,27 @@
         h('button', { type: 'button', class: 'fn-btn', onclick: async () => { setMode('code'); expandTo(f.path); await openFile(f.path); } }, 'Buka kode'),
         h('button', { type: 'button', class: 'fn-btn primary', onclick: () => { fnState.open = fnState.open === f.name ? null : f.name; fnState.result = null; renderFn(); } }, fnState.open === f.name ? 'Tutup' : 'Coba')),
       fnState.open === f.name ? fnTryPanel(f) : null));
+    const used = usage.limit ? Math.min(1, usage.today / usage.limit) : 0;
     $('#fnView').replaceChildren(h('div', { class: 'fn-wrap' },
       h('div', { class: 'fn-head' },
         h('div', {}, h('h3', {}, 'Fungsi serverless'),
           h('p', {}, 'Kode backend yang berjalan di server: simpan API key dengan aman, olah data, kirim notifikasi, atau panggil layanan lain.')),
         h('button', { type: 'button', class: 'fn-new', onclick: fnCreate }, '+ Fungsi baru')),
       h('div', { class: 'fn-usage' },
-        h('span', {}, `${usage.today.toLocaleString('id-ID')} / ${usage.limit.toLocaleString('id-ID')} eksekusi hari ini`),
-        h('span', {}, `paket ${usage.plan}`), h('span', {}, `maks. ${d.limits.timeoutSeconds} dtk · ${d.limits.memoryMb} MB per eksekusi`)),
+        h('div', { class: 'fn-usage-top' },
+          h('span', { class: 'fn-usage-count' }, h('strong', {}, usage.today.toLocaleString('id-ID')), ` / ${usage.limit.toLocaleString('id-ID')} eksekusi hari ini`),
+          h('span', { class: 'fn-usage-meta' },
+            h('span', { class: 'fn-chip' }, `Paket ${usage.plan}`),
+            h('span', { class: 'fn-chip', title: 'Batas per eksekusi' }, `maks. ${d.limits.timeoutSeconds} dtk`),
+            h('span', { class: 'fn-chip', title: 'Batas memori per eksekusi' }, `${d.limits.memoryMb} MB`))),
+        h('div', { class: `fn-meter${used >= 0.9 ? ' full' : ''}`, role: 'progressbar', 'aria-label': 'Eksekusi hari ini', 'aria-valuemin': '0', 'aria-valuemax': String(usage.limit), 'aria-valuenow': String(usage.today) },
+          h('span', { style: `width: ${(used * 100).toFixed(1)}%` }))),
       h('section', { class: 'fn-section' },
-        h('h4', {}, `Fungsi (${d.functions.length})`),
+        fnSectionHead('Fungsi', d.functions.length),
         list.length ? list : h('div', { class: 'fn-empty' },
-          h('p', {}, 'Belum ada fungsi. Fungsi disimpan di folder functions/ dan langsung bisa dipanggil dari halaman website-mu.'),
-          h('button', { type: 'button', class: 'fn-new', onclick: fnCreate }, 'Buat fungsi pertama'))),
+          h('span', { class: 'fn-icon' }, svg('M9.3 1 3 9.2h4.2L6.3 15l6.6-8.4H8.7z')),
+          h('p', {}, 'Belum ada fungsi. Fungsi disimpan di folder ', h('code', {}, 'functions/'), ' dan langsung bisa dipanggil dari halaman website-mu.'),
+          h('button', { type: 'button', class: 'fn-btn primary', onclick: fnCreate }, 'Buat fungsi pertama'))),
       fnSecrets(d),
       fnLogsSection(d),
       h('details', { class: 'fn-help' },
