@@ -897,7 +897,7 @@
       { label: 'Mode publikasi', hint: isManual() ? 'manual' : 'langsung', run: openPublishMode },
       { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
       { label: 'Pengaturan', run: openSettings },
-      { label: 'Asisten AI website', hint: 'baru', run: openAssistant },
+      SHOW_ASSISTANT && { label: 'Asisten AI website', hint: 'baru', run: openAssistant },
       ai.credits?.topupEnabled && { label: 'Langganan & kredit AI', hint: ai.credits.plan?.name, run: () => openTopup('plans') },
       state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
       '-',
@@ -3886,6 +3886,9 @@
   }
 
   // ---------- Asisten AI untuk website pengguna ----------
+  // Disembunyikan sementara dari editor (menu & daftar keuntungan paket). Server, widget di website yang sudah
+  // mengaktifkannya, dan dashboard owner tetap berjalan; ubah ke true untuk menampilkannya lagi.
+  const SHOW_ASSISTANT = false;
   const WIDGET_TAG = '<script src="/api/ai/widget.js" defer></script>';
   const INSTRUCTION_EXAMPLE = [
     'Kamu adalah customer service Toko Kue Bu Sri.',
@@ -4150,7 +4153,7 @@
         [`Gambar hingga ${mb(plan.storage.imageSize)} per file`, times(plan.storage.imageSize, freeStore?.imageSize)],
         [`${plan.storage.entries.toLocaleString('id-ID')} file & folder`, times(plan.storage.entries, freeStore?.entries)],
         [`Riwayat versi ${plan.history.days} hari`, times(plan.history.days, data.free?.history?.days)],
-        ...(plan.assistant ? [[`Saldo asisten AI website ${rupiah(plan.assistant)}/30 hari`, null]] : []),
+        ...(SHOW_ASSISTANT && plan.assistant ? [[`Saldo asisten AI website ${rupiah(plan.assistant)}/30 hari`, null]] : []),
       ];
       const cards = data.plans.map((plan, i) => h('div', { class: `promo-card ${plan.id}`, style: `--delay:${120 + i * 90}ms` },
         RIBBON[plan.id] ? h('span', { class: 'promo-ribbon' }, RIBBON[plan.id]) : null,
@@ -4196,7 +4199,7 @@
         `Database ${mb(plan.storage.dbBytes)} per project`,
         `Upload gambar hingga ${mb(plan.storage.imageSize)} per file`,
         `Riwayat versi ${plan.history.days} hari`,
-        plan.assistant ? `Saldo asisten AI website ${rupiah(plan.assistant)} / 30 hari` : null,
+        SHOW_ASSISTANT && plan.assistant ? `Saldo asisten AI website ${rupiah(plan.assistant)} / 30 hari` : null,
         `Maks. ${plan.storage.entries.toLocaleString('id-ID')} file & folder`,
       ];
       const cards = data.plans.map((plan) => {
