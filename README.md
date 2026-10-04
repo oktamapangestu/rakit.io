@@ -38,7 +38,7 @@ src/
   admin.js     dashboard pemilik: statistik platform (khusus ADMIN_EMAILS)
   projects.js  project/workspace per subdomain: buat, pilih (header X-Project), hapus
   google.js    login & daftar dengan Google (OAuth 2.0 + PKCE)
-  diagrams.js  bahan diagram otomatis: ERD, peta halaman, alur data
+  diagrams.js  bahan diagram (analisis file & database); diagram buatan AI hanya di server Go
   aiqueue.js   antrean & batas concurrency adaptif untuk panggilan ke provider AI
   aiapply.js   menerapkan & membatalkan perubahan Builder di server (dengan snapshot)
   db.js        skema SQLite
@@ -286,30 +286,32 @@ pendaftar terbaru, serta ukuran penyimpanan. Periode bisa dipilih 7/30/90 hari (
 Hanya akun dengan email di `ADMIN_EMAILS` (dipisah koma) yang bisa membukanya; link-nya muncul di
 menu avatar editor. Pengguna lain diarahkan kembali ke editor, dan API `/api/admin/*` menolak dengan 403.
 
-## Diagram otomatis
+## Diagram buatan AI
 
-Tab **Diagram** di editor (di samping Data) menggambar diagram dari file & database project aktif, tanpa AI:
+Tab **Diagram** di editor (di samping Data) menampilkan diagram project aktif yang **digambar AI** (kode Mermaid)
+dari file & database project. Hanya ada di server Go (`go/internal/ai/diagram.go`). Jenisnya:
 
-- **Use Case** — aktor (Pengunjung, Pemilik) dan apa yang bisa mereka lakukan: membuka halaman, melihat/mengirim
-  data (mengikuti akses publik tabel), mengelola data.
-- **Activity** — alur pengunjung: buka beranda → pilih halaman → baca/kirim data di halaman itu, termasuk
-  cabang berhasil/gagal saat mengirim form. Langkah yang akan ditolak server ditandai merah.
-- **Sequence** — urutan pesan Pengunjung → Halaman → API database → Tabel, dengan metode HTTP (GET/POST/PATCH/
-  DELETE) dan jawaban (200/201, 403 akses privat, 404 tabel belum ada).
-- **Class** — tiap tabel jadi class; kolom jadi atribut (`-` = privat, `?` = tidak wajib); relasi jadi asosiasi.
-- **State** — siklus hidup data per tabel (ditambah → tersimpan → diubah/dihapus) beserta siapa yang boleh,
-  plus kolom ya/tidak dan kolom status.
-- **ERD** — tabel, kolom, tipe, wajib/privat. Relasi dari kolom bertipe Relasi, sisanya ditebak dari nama kolom
-  (`produk_id` → tabel `produk`). Menandai tabel yang bisa diubah/dihapus siapa pun.
-- **Peta halaman** — halaman HTML, link antar halaman, dan file CSS/JS yang dimuat. Menandai **link rusak**,
-  file yang hilang, dan halaman yang tidak ditautkan dari mana pun.
-- **Alur data** — halaman → script → tabel beserta operasinya. Menandai request yang **pasti ditolak**
-  (akses tabel masih "Hanya kamu") dan tabel yang belum ada.
+- **Use Case** — aktor dan apa yang bisa mereka lakukan di website.
+- **Activity** — alur proses utama pengunjung, dengan cabang keputusan.
+- **Sequence** — urutan interaksi Pengunjung → Halaman/script → API (`/api/db`, `/api/fn`) → database/layanan luar.
+- **Class** — tabel dan modul/objek JavaScript beserta atribut, method, dan relasinya.
+- **State** — perubahan status objek terpenting (mis. pesanan, kiriman form, tampilan halaman).
+- **ERD** — tabel, kolom, tipe, wajib/privat, dan relasi.
+- **Peta halaman** — halaman HTML, link antar halaman, file CSS/JS yang dimuat; link rusak & file hilang ditandai.
+- **Alur data** — halaman/script/fungsi → tabel beserta operasinya; request yang akan ditolak server ditandai.
 
-Pemakaian database dihitung per halaman **termasuk file .js yang dimuat halaman itu**. Setiap temuan punya tombol
-aksi (Atur akses, Buat tabel, Minta AI perbaiki); panel **Temuan** bisa dilipat (tombol di toolbar, beserta
-jumlahnya). Diagram digambar dengan Mermaid (dimuat dari CDN hanya saat tab dibuka); kodenya bisa disalin dan
-hasilnya diunduh sebagai SVG. Pemakaian `/api/db/...` dideteksi dari kode, jadi URL yang dibuat dinamis bisa terlewat.
+Diagram disimpan per project & jenis (tabel `project_diagrams`) dan **tidak berubah sendiri**: tombol
+**Update diagram** membuat ulang diagram yang sedang dibuka dari file & database terbaru (biaya sama dengan satu
+prompt AI, `AI_CREDITS_PER_PROMPT`; kredit dikembalikan bila gagal). Di toolbar tertulis kapan diagram itu terakhir
+diperbarui. Selain isi project, AI juga menerima analisis otomatis tanpa AI (`GET /api/diagrams`: halaman, link,
+aset, form, tabel, relasi, pemakaian `/api/db` per file beserta status aksesnya) supaya hasilnya lebih tepat.
+
+AI juga menulis catatan singkat di panel **Temuan** (mis. tabel yang bisa dihapus siapa pun, link rusak). Bila
+Mermaid gagal menggambar kode dari AI, tombol **Perbaiki dengan AI** mengirim pesan error-nya ke AI — gratis,
+maks. 2 kali per diagram sampai di-Update lagi. Mermaid dimuat dari CDN hanya saat tab dibuka; kodenya bisa
+disalin dan hasilnya diunduh sebagai SVG.
+
+API: `GET /api/diagrams/saved` (semua diagram tersimpan), `POST /api/diagrams/generate` `{ kind, renderError? }`.
 
 **Zoom & geser kanvas:**
 

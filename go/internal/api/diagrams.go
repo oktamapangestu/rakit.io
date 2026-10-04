@@ -1,17 +1,21 @@
 package api
 
 import (
+	"context"
 	"path"
 	"regexp"
 	"strings"
 
+	"rakit.io/server/internal/ai"
 	"rakit.io/server/internal/files"
+	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/store"
 	"rakit.io/server/internal/userdb"
 )
 
-// Bahan untuk diagram otomatis project aktif: ERD, peta halaman, dan alur data.
-// Semua dihitung dari file & database project (tanpa AI), lalu digambar di editor.
+// Diagram project aktif. Bahan (ERD, peta halaman, alur data) dihitung dari file & database project
+// tanpa AI, lalu dikirim ke AI yang menggambar diagramnya (internal/ai/diagram.go).
 
 const maxDiagramFiles = 300
 
@@ -225,14 +229,51 @@ func (h *Handler) diagrams(q *request) error {
 	if err != nil {
 		return err
 	}
-	if !q.is("GET") {
-		return errNotFound
+	switch {
+	case q.is("GET"):
+		facts, err := h.diagramFacts(q.r.Context(), project)
+		if err != nil {
+			return err
+		}
+		return q.json(200, facts)
+
+	// Diagram buatan AI: yang tersimpan, dan buat ulang / perbaiki satu jenis.
+	case q.is("GET", "saved"):
+		out, err := h.svc.AI.Diagrams(project)
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
+
+	case q.is("POST", "generate"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		kind := jsconv.String(q.body["kind"])
+		if !ai.ValidDiagramKind(kind) {
+			return httpx.Errorf(400, "Jenis diagram tidak dikenal")
+		}
+		renderError, _ := q.body["renderError"].(string)
+		facts, err := h.diagramFacts(q.r.Context(), project)
+		if err != nil {
+			return err
+		}
+		out, err := h.svc.AI.GenerateDiagram(q.r.Context(), q.user, project, kind, facts, strings.TrimSpace(renderError))
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
 	}
+	return errNotFound
+}
+
+// diagramFacts: analisis otomatis file & database project (tanpa AI) — bahan untuk AI pembuat diagram.
+func (h *Handler) diagramFacts(ctx context.Context, project *store.Project) (map[string]any, error) {
 	slug := project.Slug
 	root := h.cfg.SiteRoot(slug)
 	entries, err := files.ListTree(root)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var paths []string
 	for _, e := range entries {
@@ -249,8 +290,8 @@ func (h *Handler) diagrams(q *request) error {
 
 	tables := []*userdb.TableInfo{}
 	if h.userdb.HasDatabase(slug) {
-		if tables, err = h.userdb.ListTables(q.r.Context(), slug); err != nil {
-			return err
+		if tables, err = h.userdb.ListTables(ctx, slug); err != nil {
+			return nil, err
 		}
 	}
 	tableMap := map[string]*userdb.TableInfo{}
@@ -367,7 +408,7 @@ func (h *Handler) diagrams(q *request) error {
 	for _, t := range tables {
 		tableViews = append(tableViews, map[string]any{"name": t.Name, "columns": t.Columns, "rules": t.Rules, "rowCount": t.RowCount})
 	}
-	return q.json(200, map[string]any{
+	return map[string]any{
 		"project":   map[string]string{"slug": slug, "name": project.Name},
 		"pages":     pages,
 		"links":     links,
@@ -379,5 +420,5 @@ func (h *Handler) diagrams(q *request) error {
 		"tables":    tableViews,
 		"relations": inferRelations(tables),
 		"calls":     calls,
-	})
+	}, nil
 }

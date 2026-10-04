@@ -181,6 +181,16 @@ const schema = `
 	  count   INTEGER NOT NULL DEFAULT 0,
 	  PRIMARY KEY (user_id, day)
 	);
+	-- Diagram project buatan AI (kode Mermaid + catatan), satu per jenis; lihat internal/ai/diagram.go.
+	CREATE TABLE IF NOT EXISTS project_diagrams (
+	  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+	  kind       TEXT NOT NULL,
+	  code       TEXT NOT NULL,
+	  notes      TEXT NOT NULL DEFAULT '[]', -- JSON [{ level, text }]
+	  fixes      INTEGER NOT NULL DEFAULT 0, -- perbaikan gratis yang sudah dipakai sejak dibuat
+	  updated_at INTEGER NOT NULL,
+	  PRIMARY KEY (project_id, kind)
+	);
 	-- Log eksekusi (100 terakhir per project) dan jadwal (cron, WIB) fungsi.
 	CREATE TABLE IF NOT EXISTS fn_logs (
 	  id         INTEGER PRIMARY KEY AUTOINCREMENT,

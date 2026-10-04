@@ -2755,21 +2755,23 @@
     render();
   }
 
-  // ---------- Diagram (ERD, peta halaman, alur data) ----------
-  // Dibuat otomatis dari file & database project, digambar dengan Mermaid (dimuat hanya saat tab dibuka).
+  // ---------- Diagram (UML, ERD, peta halaman, alur data) ----------
+  // Dibuat AI (kode Mermaid) dari file & database project dan disimpan di server per jenis; dibuat ulang hanya
+  // saat user menekan "Update diagram". Digambar dengan Mermaid (dimuat hanya saat tab dibuka).
   const MERMAID_URL = 'https://cdn.jsdelivr.net/npm/mermaid@12.0.0/dist/mermaid.esm.min.mjs';
+  // saved: { jenis: { code, notes, updatedAt, canFix } } dari server; busy: jenis yang sedang dibuat AI.
   // view: posisi & skala kanvas (x, y dalam px layar; z = zoom); w/h = ukuran asli SVG; touched = user sudah zoom/geser.
   const diagram = {
-    kind: storage.get('rakit.diagram', 'erd'), data: null, code: '', mermaid: null, seq: 0,
+    kind: storage.get('rakit.diagram', 'erd'), saved: null, busy: null, code: '', mermaid: null, seq: 0,
     view: { x: 0, y: 0, z: 1, w: 0, h: 0, touched: false },
   };
   const ZOOM_MIN = 0.1;
   const ZOOM_MAX = 5;
-  const OP_LABEL = { list: 'baca daftar', view: 'baca', create: 'tambah', update: 'ubah', delete: 'hapus' };
-  const OP_RULE = { list: 'Lihat daftar', view: 'Lihat satu baris', create: 'Tambah', update: 'Ubah', delete: 'Hapus' };
-
-  // Teks aman untuk label Mermaid (judul halaman bisa berisi karakter apa saja).
-  const mmText = (text) => String(text).replace(/["`<>{}[\]|#;\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+  const DIAGRAM_NAMES = {
+    usecase: 'Use Case', activity: 'Activity', sequence: 'Sequence', class: 'Class', state: 'State',
+    erd: 'ERD', site: 'Peta halaman', flow: 'Alur data',
+  };
+  const diagramTime = (ms) => new Date(ms).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   async function loadMermaid() {
     if (diagram.mermaid) return diagram.mermaid;
@@ -2801,389 +2803,6 @@
     return mermaid;
   }
 
-  const askAi = (text) => {
-    setMode('ai');
-    setAiMode('build');
-    $('#aiInput').value = text;
-    autoGrow();
-    updateAiComposer();
-    autoFocus($('#aiInput'));
-  };
-  const openTableAccess = (name) => { dbState.active = name; setMode('data'); setTimeout(() => openTableSettings(name), 300); };
-
-  function erdDiagram(d) {
-    if (!d.tables.length) {
-      return { empty: ['Belum ada tabel', 'Buat tabel di tab Data, atau minta AI membuat form yang menyimpan data.'], findings: [] };
-    }
-    const lines = ['erDiagram'];
-    for (const t of d.tables) {
-      lines.push(`  ${t.name} {`, '    number id PK', '    date created_at');
-      for (const c of t.columns) {
-        const fk = d.relations.some((r) => r.from === t.name && r.column === c.name) ? ' FK' : '';
-        const notes = [c.required && 'wajib', c.private && 'privat'].filter(Boolean).join(', ');
-        lines.push(`    ${c.type} ${c.name}${fk}${notes ? ` "${notes}"` : ''}`);
-      }
-      lines.push('  }');
-    }
-    for (const r of d.relations) lines.push(`  ${r.to} ||--o{ ${r.from} : "${r.column}"`);
-
-    const findings = [];
-    for (const t of d.tables) {
-      const open = Object.entries(t.rules).filter(([, v]) => v === 'public').map(([op]) => OP_LABEL[op]);
-      const risky = ['update', 'delete'].filter((op) => t.rules[op] === 'public').map((op) => OP_LABEL[op]);
-      if (risky.length) {
-        findings.push({ level: 'warn', text: `Siapa pun bisa ${risky.join(' & ')} data di tabel "${t.name}". Pastikan ini memang disengaja.`, actions: [['Atur akses', () => openTableAccess(t.name)]] });
-      }
-      findings.push({ level: 'info', text: `${t.name}: ${t.rowCount} baris · ${open.length ? `publik: ${open.join(', ')}` : 'privat (hanya kamu)'}` });
-    }
-    if (d.relations.length) findings.push({ level: 'info', text: 'Garis relasi mengikuti kolom bertipe Relasi; sisanya ditebak dari nama kolom (mis. produk_id → produk).' });
-    return { code: lines.join('\n'), findings };
-  }
-
-  // ---------- Diagram UML (use case, activity, sequence, class, state) ----------
-  // Semua digambar dengan Mermaid dari file & database project. Tanpa AI, sama seperti ERD/peta halaman.
-
-  // Aktor yang masuk akal untuk project: pengunjung (selalu ada), pemilik, dan "AI" bila dipakai.
-  const useCaseFindings = (d) => {
-    const findings = [];
-    const risky = d.tables.filter((t) => t.rules?.update === 'public' || t.rules?.delete === 'public');
-    for (const t of risky) findings.push({ level: 'warn', text: `Tabel "${t.name}" membuka akses ubah/hapus ke publik.`, actions: [['Atur akses', () => openTableAccess(t.name)]] });
-    if (!d.pages.length) findings.push({ level: 'info', text: 'Belum ada halaman — buat .html agar use case muncul lebih lengkap.' });
-    return findings;
-  };
-
-  function useCaseDiagram(d) {
-    if (!d.pages.length && !d.tables.length) {
-      return { empty: ['Belum ada sistem', 'Buat halaman atau tabel agar diagram use case bisa dibuat.'], findings: [] };
-    }
-    const ids = new Map();
-    const id = (key) => { if (!ids.has(key)) ids.set(key, `n${ids.size}`); return ids.get(key); };
-    const lines = ['flowchart LR'];
-
-    // Aktor (kiri)
-    lines.push(`  ${id('actor:visitor')}(["👤 Pengunjung"]):::actor`);
-    lines.push(`  ${id('actor:owner')}(["👤 Pemilik"]):::owner`);
-
-    // Use case dari halaman: tiap halaman = satu use case "membuka <judul>".
-    for (const p of d.pages) {
-      const label = p.title || p.path;
-      lines.push(`  ${id(`uc:page:${p.path}`)}(["Membuka ${mmText(label)}"]):::page`);
-      lines.push(`  ${id('actor:visitor')} --> ${id(`uc:page:${p.path}`)}`);
-    }
-
-    // Use case dari tabel: baca (publik) vs kelola (pemilik).
-    for (const t of d.tables) {
-      const pub = ['list', 'view'].filter((op) => t.rules?.[op] === 'public');
-      const writable = ['create', 'update', 'delete'].filter((op) => t.rules?.[op] === 'public');
-      if (pub.length) {
-        lines.push(`  ${id(`uc:read:${t.name}`)}(["Lihat ${mmText(t.name)}"]):::read`);
-        lines.push(`  ${id('actor:visitor')} --> ${id(`uc:read:${t.name}`)}`);
-      }
-      if (writable.length) {
-        lines.push(`  ${id(`uc:write:${t.name}`)}(["Kirim ${mmText(t.name)}"]):::write`);
-        lines.push(`  ${id('actor:visitor')} --> ${id(`uc:write:${t.name}`)}`);
-      }
-      lines.push(`  ${id(`uc:manage:${t.name}`)}(["Kelola ${mmText(t.name)}"]):::manage`);
-      lines.push(`  ${id('actor:owner')} --> ${id(`uc:manage:${t.name}`)}`);
-    }
-
-    lines.push(
-      '  classDef actor fill:#14301f,stroke:#4ade80,stroke-width:2px,color:#f5f7fb',
-      '  classDef owner fill:#1b2a3d,stroke:#60a5fa,stroke-width:2px,color:#dbeafe',
-      '  classDef page fill:#1b2130,stroke:#16a34a,color:#f5f7fb',
-      '  classDef read fill:#11251a,stroke:#34d399,color:#d1fae5',
-      '  classDef write fill:#2a2410,stroke:#fbbf24,color:#fef3c7',
-      '  classDef manage fill:#1b2130,stroke:#7c869b,color:#d8dde8',
-    );
-    return { code: lines.join('\n'), findings: useCaseFindings(d) };
-  }
-
-  // Pemakaian database oleh sebuah halaman: dari kode di halaman itu sendiri DAN dari file .js yang dimuatnya.
-  function pageCallsFor(d, pagePath) {
-    const scripts = new Set(d.assets.filter((a) => a.from === pagePath && a.kind === 'js').map((a) => a.to));
-    return d.calls.filter((c) => c.file === pagePath || scripts.has(c.file));
-  }
-  const HTTP_METHOD = { list: 'GET', view: 'GET', create: 'POST', update: 'PATCH', delete: 'DELETE' };
-  const homePage = (d) => d.pages.find((p) => p.path === 'index.html') ?? d.pages[0];
-  const pageLabel = (p) => mmText(p.title || p.path);
-
-  // Activity: apa yang dilakukan pengunjung — buka beranda, pilih halaman, lalu baca/kirim data di halaman itu.
-  function activityDiagram(d) {
-    if (!d.pages.length) return { empty: ['Belum ada alur', 'Buat halaman (.html) untuk melihat alur aktivitas pengunjung.'], findings: [] };
-    const home = homePage(d);
-    const others = d.pages.filter((p) => p !== home && p.path !== '404.html').slice(0, 8);
-    const lines = ['flowchart TD', '  mulai(["Mulai"]):::start', `  p0["Buka ${pageLabel(home)}"]:::act`, '  mulai --> p0'];
-    const pageNode = new Map([[home.path, 'p0']]);
-    if (others.length) {
-      lines.push('  pilih{"Mau ke halaman mana?"}:::decide', '  p0 --> pilih');
-      others.forEach((p, i) => {
-        pageNode.set(p.path, `p${i + 1}`);
-        lines.push(`  p${i + 1}["Buka ${pageLabel(p)}${p.orphan ? ' (tidak ditautkan)' : ''}"]:::${p.orphan ? 'warn' : 'act'}`, `  pilih --> p${i + 1}`);
-      });
-    }
-    lines.push('  selesai(["Selesai"]):::stop');
-    const findings = [];
-    let n = 0;
-    for (const [path, node] of pageNode) {
-      const calls = pageCallsFor(d, path);
-      if (!calls.length) {
-        lines.push(`  ${node} --> selesai`);
-        continue;
-      }
-      const seen = new Set();
-      for (const c of calls) {
-        const key = `${c.op}:${c.table}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const bad = c.status !== 'ok';
-        const note = c.status === 'owner_only' ? ' — ditolak, akses privat' : c.status === 'missing' ? ' — tabel belum ada' : '';
-        const i = n++;
-        if (c.op === 'create') {
-          lines.push(
-            `  f${i}["Isi form"]:::act`, `  k${i}["Kirim ke tabel ${mmText(c.table)}${note}"]:::${bad ? 'bad' : 'api'}`,
-            `  c${i}{"Berhasil?"}:::decide`, `  ok${i}["Tampilkan pesan berhasil"]:::act`, `  e${i}["Tampilkan pesan error"]:::bad`,
-            `  ${node} --> f${i} --> k${i} --> c${i}`, `  c${i} -->|ya| ok${i} --> selesai`, `  c${i} -->|tidak| e${i} --> f${i}`,
-          );
-        } else {
-          const verb = { list: 'Tampilkan daftar', view: 'Tampilkan detail', update: 'Ubah data', delete: 'Hapus data' }[c.op];
-          lines.push(`  a${i}["${verb} ${mmText(c.table)}${note}"]:::${bad ? 'bad' : 'api'}`, `  ${node} --> a${i} --> selesai`);
-        }
-      }
-    }
-    lines.push(
-      '  classDef start fill:#11251a,stroke:#34d399,stroke-width:2px,color:#d1fae5',
-      '  classDef stop fill:#14301f,stroke:#4ade80,stroke-width:2px,color:#f5f7fb',
-      '  classDef act fill:#1b2130,stroke:#16a34a,color:#f5f7fb',
-      '  classDef api fill:#1b2a3d,stroke:#60a5fa,color:#dbeafe',
-      '  classDef decide fill:#2a2410,stroke:#fbbf24,color:#fef3c7',
-      '  classDef warn fill:#1b2130,stroke:#7c869b,stroke-dasharray:4 3,color:#d8dde8',
-      '  classDef bad fill:#3b1219,stroke:#f87171,color:#fecaca',
-    );
-    if (d.pages.length - 1 > others.length) findings.push({ level: 'info', text: `Hanya 8 halaman pertama yang digambar (dari ${d.pages.length}).` });
-    findings.push({ level: 'info', text: 'Kotak kuning = pilihan pengunjung. Kotak merah = langkah yang akan gagal. Dibaca dari kode halaman & script-nya.' });
-    return { code: lines.join('\n'), findings };
-  }
-
-  // Sequence: urutan pesan Pengunjung → Halaman → API → Tabel saat halaman membaca/mengirim data.
-  function sequenceDiagram(d) {
-    const pages = d.pages.map((p) => ({ page: p, calls: pageCallsFor(d, p.path) })).filter((x) => x.calls.length).slice(0, 4);
-    if (!pages.length) {
-      return { empty: ['Belum ada interaksi data', "Diagram ini muncul setelah halaman atau script-nya memakai fetch('/api/db/...')."], findings: [] };
-    }
-    const tables = [...new Set(pages.flatMap((x) => x.calls.map((c) => c.table)))].slice(0, 5);
-    const tableId = new Map(tables.map((t, i) => [t, `T${i + 1}`]));
-    const lines = ['sequenceDiagram', '  autonumber', '  actor U as Pengunjung'];
-    pages.forEach((x, i) => lines.push(`  participant P${i + 1} as ${pageLabel(x.page)}`));
-    lines.push('  participant API as API database');
-    for (const t of tables) lines.push(`  participant ${tableId.get(t)} as Tabel ${mmText(t)}`);
-
-    const findings = [];
-    pages.forEach((x, i) => {
-      const P = `P${i + 1}`;
-      lines.push(`  U->>${P}: Buka halaman`);
-      for (const c of x.calls.slice(0, 5)) {
-        const T = tableId.get(c.table);
-        lines.push(`  ${P}->>API: ${HTTP_METHOD[c.op]} /api/db/${mmText(c.table)}`);
-        if (c.status === 'owner_only') {
-          lines.push(`  API-->>${P}: 403 ditolak (akses ${OP_LABEL[c.op]} masih privat)`);
-          findings.push({ level: 'error', text: `${c.file} ${OP_LABEL[c.op]} tabel "${c.table}", tapi aksesnya masih privat. Pengunjung akan mendapat error 403.`, actions: [['Atur akses', () => openTableAccess(c.table)]] });
-        } else if (c.status === 'missing' || !T) {
-          lines.push(`  API-->>${P}: 404 tabel belum ada`);
-          findings.push({ level: 'error', text: `${c.file} memakai tabel "${c.table}" yang belum ada.`, actions: [['Buat tabel', () => { setMode('data'); setTimeout(() => openCreateTable(c.table), 300); }]] });
-        } else {
-          lines.push(`  API->>${T}: ${OP_LABEL[c.op]}`, `  ${T}-->>API: data`, `  API-->>${P}: ${c.op === 'create' ? '201 tersimpan' : '200 OK'}`);
-        }
-      }
-      lines.push(`  ${P}-->>U: Tampilkan hasil`);
-    });
-    if (!findings.length) findings.push({ level: 'ok', text: 'Semua permintaan data diizinkan oleh aturan akses tabel.' });
-    findings.push({ level: 'info', text: 'Dibaca dari kode halaman dan file .js yang dimuatnya. URL yang dibuat dinamis bisa terlewat.' });
-    return { code: lines.join('\n'), findings };
-  }
-
-  // Class: tiap tabel database menjadi class; kolom menjadi atribut; relasi menjadi asosiasi.
-  function classDiagram(d) {
-    if (!d.tables.length) {
-      return { empty: ['Belum ada class', 'Buat tabel di tab Data; tiap tabel akan menjadi satu class.'], findings: [] };
-    }
-    // Mermaid butuh id yang aman: huruf/angka/_; hindari kata kunci; label asli ditaruh di alias.
-    const KEYWORDS = new Set(['class', 'end', 'state', 'direction', 'graph', 'subgraph', 'note', 'click', 'linkStyle', 'style', 'classDef', 'namespace', 'accTitle', 'accDescr', 'participant', 'actor', 'loop', 'alt', 'opt', 'par', 'and', 'rect', 'activate', 'deactivate']);
-    const safeId = (raw) => {
-      let id = String(raw).replace(/[^A-Za-z0-9_]/g, '_');
-      if (!/^[A-Za-z_]/.test(id)) id = `t_${id}`;
-      if (KEYWORDS.has(id.toLowerCase())) id = `${id}_x`;
-      return id;
-    };
-    const attrName = (raw) => String(raw).replace(/[^A-Za-z0-9_]/g, '_').replace(/^([0-9])/, '_$1');
-    const idOf = new Map();
-    for (const t of d.tables) {
-      let id = safeId(t.name);
-      let n = 1;
-      while ([...idOf.values()].includes(id)) id = `${safeId(t.name)}_${n++}`;
-      idOf.set(t.name, id);
-    }
-    const lines = ['classDiagram'];
-    for (const t of d.tables) {
-      const id = idOf.get(t.name);
-      lines.push(`  class ${id}["${mmText(t.name)}"] {`);
-      lines.push('    +number id');
-      lines.push('    +date created_at');
-      for (const c of t.columns) {
-        const vis = c.private ? '-' : '+';
-        const type = c.type === 'reference' ? (d.relations.find((r) => r.from === t.name && r.column === c.name)?.to ?? 'ref') : c.type;
-        lines.push(`    ${vis}${attrName(type)} ${attrName(c.name)}${c.required ? '' : '?'}`);
-      }
-      lines.push('  }');
-    }
-    for (const r of d.relations) {
-      const from = idOf.get(r.from), to = idOf.get(r.to);
-      if (from && to) lines.push(`  ${to} "1" --> "0..*" ${from} : ${attrName(r.column)}`);
-    }
-    const findings = [];
-    for (const t of d.tables) {
-      const priv = t.columns.filter((c) => c.private).length;
-      findings.push({ level: 'info', text: `${t.name}: ${t.columns.length} atribut${priv ? `, ${priv} privat` : ''}` });
-    }
-    return { code: lines.join('\n'), findings };
-  }
-
-  // State: siklus hidup satu baris data di tiap tabel — dibuat, disimpan, diubah, dihapus — dan siapa yang boleh.
-  function stateDiagram(d) {
-    if (!d.tables.length) {
-      return { empty: ['Belum ada state', 'State dibuat dari tabel: siapa yang boleh menambah, mengubah, dan menghapus data.'], findings: [] };
-    }
-    const who = (t, op) => (t.rules?.[op] === 'public' ? 'pengunjung & pemilik' : 'pemilik');
-    const lines = ['stateDiagram-v2'];
-    const findings = [];
-    d.tables.slice(0, 6).forEach((t, i) => {
-      const s = `s${i}`;
-      const boolCol = t.columns.find((c) => c.type === 'boolean');
-      const statusCol = t.columns.find((c) => /status|state|tahap|kondisi/i.test(c.name));
-      lines.push(`  state "Tabel ${mmText(t.name)}" as ${s} {`);
-      lines.push(`    state "Tersimpan" as ${s}_ada`);
-      lines.push(`    [*] --> ${s}_ada : ditambah (${who(t, 'create')})`);
-      lines.push(`    ${s}_ada --> ${s}_ada : diubah (${who(t, 'update')})`);
-      if (boolCol) {
-        lines.push(`    state "${mmText(boolCol.name)} = ya" as ${s}_ya`);
-        lines.push(`    ${s}_ada --> ${s}_ya : tandai ${mmText(boolCol.name)}`, `    ${s}_ya --> ${s}_ada : batalkan`);
-      }
-      if (statusCol) {
-        lines.push(`    state "${mmText(statusCol.name)} berganti" as ${s}_st`);
-        lines.push(`    ${s}_ada --> ${s}_st : ubah ${mmText(statusCol.name)}`, `    ${s}_st --> ${s}_ada`);
-        findings.push({ level: 'info', text: `"${t.name}" punya kolom ${statusCol.name}, jadi datanya bisa berpindah status.` });
-      }
-      lines.push(`    ${s}_ada --> [*] : dihapus (${who(t, 'delete')})`);
-      lines.push('  }');
-      if (t.rules?.delete === 'public') findings.push({ level: 'warn', text: `Data "${t.name}" boleh dihapus siapa pun (akses Hapus publik).`, actions: [['Atur akses', () => openTableAccess(t.name)]] });
-    });
-    if (d.tables.length > 6) findings.push({ level: 'info', text: `Hanya 6 tabel pertama yang digambar (dari ${d.tables.length}).` });
-    findings.push({ level: 'info', text: 'Pemilik selalu bisa menambah, mengubah, dan menghapus data. "Pengunjung" berarti aksesnya dibuka publik.' });
-    return { code: lines.join('\n'), findings };
-  }
-
-  function siteDiagram(d) {
-    if (!d.pages.length) return { empty: ['Belum ada halaman', 'Buat file .html untuk melihat peta halamanmu.'], findings: [] };
-    const ids = new Map();
-    const id = (key) => { if (!ids.has(key)) ids.set(key, `n${ids.size}`); return ids.get(key); };
-    const lines = ['flowchart LR'];
-    for (const p of d.pages) {
-      lines.push(`  ${id(p.path)}["${mmText(p.path)}${p.title ? `\\n${mmText(p.title)}` : ''}"]:::${p.path === 'index.html' ? 'home' : p.orphan ? 'orphan' : 'page'}`);
-    }
-    for (const l of d.links) {
-      if (l.broken) lines.push(`  ${id(`x:${l.to}`)}["${mmText(l.to)}\\ntidak ada"]:::broken`, `  ${id(l.from)} -. rusak .-> ${id(`x:${l.to}`)}`);
-      else lines.push(`  ${id(l.from)} --> ${id(l.to)}`);
-    }
-    for (const a of d.assets) {
-      lines.push(`  ${id(`a:${a.to}`)}["${mmText(a.to)}${a.missing ? '\\ntidak ada' : ''}"]:::${a.missing ? 'broken' : 'asset'}`);
-      lines.push(`  ${id(a.from)} -.- ${id(`a:${a.to}`)}`);
-    }
-    lines.push(
-      '  classDef home fill:#14301f,stroke:#4ade80,stroke-width:2px,color:#f5f7fb',
-      '  classDef page fill:#1b2130,stroke:#16a34a,color:#f5f7fb',
-      '  classDef orphan fill:#1b2130,stroke:#7c869b,stroke-dasharray:4 3,color:#d8dde8',
-      '  classDef asset fill:#11151f,stroke:#3a4560,color:#8b93a7',
-      '  classDef broken fill:#3b1219,stroke:#f87171,color:#fecaca',
-    );
-
-    const findings = [];
-    for (const l of d.links.filter((x) => x.broken)) {
-      findings.push({ level: 'error', text: `Link rusak: ${l.from} → ${l.to} (halaman tidak ada)`, actions: [['Minta AI perbaiki', () => askAi(`Perbaiki link rusak di ${l.from} yang mengarah ke ${l.to}. Buat halamannya atau arahkan ke halaman yang benar.`)]] });
-    }
-    for (const a of d.assets.filter((x) => x.missing)) {
-      findings.push({ level: 'error', text: `${a.from} memuat ${a.to}, tapi file itu tidak ada`, actions: [['Minta AI perbaiki', () => askAi(`${a.from} memuat ${a.to} yang tidak ada. Perbaiki atau buat file tersebut.`)]] });
-    }
-    for (const p of d.pages.filter((x) => x.orphan)) findings.push({ level: 'warn', text: `${p.path} tidak ditautkan dari halaman mana pun, jadi pengunjung sulit menemukannya.` });
-    if (d.external) findings.push({ level: 'info', text: `${d.external} link ke website luar (tidak digambar).` });
-    if (!findings.length) findings.push({ level: 'ok', text: 'Semua link dan file CSS/JS ditemukan.' });
-    return { code: lines.join('\n'), findings };
-  }
-
-  function flowDiagram(d) {
-    if (!d.calls.length) {
-      return { empty: ['Belum ada kode yang memakai database', "Diagram ini muncul setelah halaman atau script memakai fetch('/api/db/...')."], findings: [] };
-    }
-    const ids = new Map();
-    const id = (key) => { if (!ids.has(key)) ids.set(key, `n${ids.size}`); return ids.get(key); };
-    const lines = ['flowchart LR'];
-    const edgeStyles = [];
-    let edge = 0;
-    const tables = new Set(d.tables.map((t) => t.name));
-    const files = [...new Set(d.calls.map((c) => c.file))];
-    // Halaman yang memuat script pemakai database, supaya terlihat halaman mana yang terdampak.
-    for (const a of d.assets.filter((x) => x.kind === 'js' && files.includes(x.to))) {
-      lines.push(`  ${id(a.from)}["${mmText(a.from)}"]:::page`, `  ${id(a.from)} -. memuat .-> ${id(a.to)}`);
-      edgeStyles.push(`  linkStyle ${edge++} stroke:#3a4560`);
-    }
-    for (const f of files) lines.push(`  ${id(f)}["${mmText(f)}"]:::${f.endsWith('.js') ? 'script' : 'page'}`);
-    for (const t of new Set(d.calls.map((c) => c.table))) {
-      lines.push(`  ${id(`t:${t}`)}[("${mmText(t)}${tables.has(t) ? '' : '\\nbelum ada'}")]:::${tables.has(t) ? 'table' : 'broken'}`);
-    }
-    for (const c of d.calls) {
-      lines.push(`  ${id(c.file)} -->|${OP_LABEL[c.op]}| ${id(`t:${c.table}`)}`);
-      if (c.status !== 'ok') edgeStyles.push(`  linkStyle ${edge} stroke:#f87171,stroke-width:2px`);
-      edge++;
-    }
-    lines.push(
-      ...edgeStyles,
-      '  classDef page fill:#1b2130,stroke:#16a34a,color:#f5f7fb',
-      '  classDef script fill:#2b2410,stroke:#facc15,color:#f5f7fb',
-      '  classDef table fill:#0f2a22,stroke:#10b981,color:#f5f7fb',
-      '  classDef broken fill:#3b1219,stroke:#f87171,color:#fecaca',
-    );
-
-    const findings = [];
-    for (const c of d.calls.filter((x) => x.status === 'owner_only')) {
-      findings.push({
-        level: 'error',
-        text: `${c.file} mencoba ${OP_LABEL[c.op]} data di tabel "${c.table}", tapi akses "${OP_RULE[c.op]}" masih Hanya kamu. Pengunjung akan mendapat error 403.`,
-        actions: [['Atur akses', () => openTableAccess(c.table)]],
-      });
-    }
-    for (const c of d.calls.filter((x) => x.status === 'missing')) {
-      findings.push({
-        level: 'error',
-        text: `${c.file} memakai tabel "${c.table}" yang belum ada.`,
-        actions: [['Buat tabel', () => { setMode('data'); setTimeout(() => openCreateTable(c.table), 300); }],
-          ['Minta AI perbaiki', () => askAi(`${c.file} memakai tabel database "${c.table}" yang belum ada. Buat tabelnya dengan kolom yang sesuai kode.`)]],
-      });
-    }
-    const ok = d.calls.filter((x) => x.status === 'ok').length;
-    if (ok) findings.push({ level: 'ok', text: `${ok} pemakaian database sudah sesuai aturan akses.` });
-    findings.push({ level: 'info', text: 'Garis merah = request yang akan ditolak server. Dideteksi dari kode, jadi URL yang dibuat dinamis bisa terlewat.' });
-    return { code: lines.join('\n'), findings };
-  }
-
-  const DIAGRAMS = {
-    erd: erdDiagram,
-    usecase: useCaseDiagram,
-    activity: activityDiagram,
-    sequence: sequenceDiagram,
-    class: classDiagram,
-    state: stateDiagram,
-    site: siteDiagram,
-    flow: flowDiagram,
-  };
-
   function renderFindings(findings) {
     const icon = { error: '✕', warn: '!', info: 'i', ok: '✓' };
     const problems = findings.filter((f) => f.level === 'error' || f.level === 'warn').length;
@@ -3195,8 +2814,7 @@
       h('h4', {}, 'Temuan'),
       findings.length ? h('ul', {}, findings.map((f) => h('li', { class: f.level },
         h('span', { class: 'f-icon' }, icon[f.level]),
-        h('div', {}, h('p', {}, f.text),
-          f.actions ? h('div', { class: 'f-actions' }, f.actions.map(([label, run]) => h('button', { type: 'button', onclick: run }, label))) : null))))
+        h('div', {}, h('p', {}, f.text)))))
         : h('p', { class: 'f-empty' }, 'Tidak ada catatan.'));
   }
 
@@ -3376,26 +2994,50 @@
     if (el && !$('#diagramCanvas').contains(el)) el.remove();
   });
 
+  // Tombol Update & keterangan waktu diagram yang sedang dibuka.
+  function renderDiagramMeta() {
+    const saved = diagram.saved?.[diagram.kind];
+    const label = $('#diagramUpdated');
+    label.textContent = diagram.busy === diagram.kind ? 'AI sedang membuat…' : saved ? `Diperbarui ${diagramTime(saved.updatedAt)}` : 'Belum dibuat';
+    label.title = saved ? new Date(saved.updatedAt).toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' }) : '';
+    const btn = $('#diagramUpdate');
+    btn.disabled = Boolean(diagram.busy) || !diagram.saved;
+    btn.title = `Buat ulang diagram ${DIAGRAM_NAMES[diagram.kind]} dengan AI dari file & database terbaru (${ai.credits?.costPerPrompt ?? 1} kredit)`;
+  }
+
+  const diagramMessage = (title, text, ...actions) => h('div', { class: 'db-empty' },
+    h('div', { class: 'db-empty-icon diagram-empty-icon' }, svg(ICON.table)), h('h3', {}, title), h('p', {}, text),
+    actions.length ? h('div', { class: 'diagram-actions' }, actions) : null);
+  const diagramButton = (label, onclick, primary) => h('button', { type: 'button', class: `fn-btn${primary ? ' primary' : ''}`, onclick }, label);
+
   async function renderDiagram() {
-    if (!DIAGRAMS[diagram.kind]) diagram.kind = 'erd'; // nilai lama di localStorage yang sudah tidak ada
+    if (!DIAGRAM_NAMES[diagram.kind]) diagram.kind = 'erd'; // nilai lama di localStorage yang sudah tidak ada
     document.querySelectorAll('[data-diagram]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.diagram === diagram.kind)));
     const canvas = $('#diagramCanvas');
-    if (!diagram.data) return;
+    if (!diagram.saved) return;
+    renderDiagramMeta();
     const seq = ++diagram.seq; // hanya render terakhir yang boleh tampil (tab bisa diganti cepat)
-    const { code = '', empty, findings } = DIAGRAMS[diagram.kind](diagram.data);
-    diagram.code = code;
-    renderFindings(findings);
-    if (empty) {
-      diagram.view.w = 0;
-      canvas.replaceChildren(h('div', { class: 'db-empty' },
-        h('div', { class: 'db-empty-icon diagram-empty-icon' }, svg(ICON.table)), h('h3', {}, empty[0]), h('p', {}, empty[1])));
+    const name = DIAGRAM_NAMES[diagram.kind];
+    const saved = diagram.saved[diagram.kind];
+    diagram.code = saved?.code ?? '';
+    renderFindings(saved?.notes ?? []);
+    diagram.view.w = 0;
+    if (diagram.busy === diagram.kind) {
+      canvas.replaceChildren(h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')),
+        `AI sedang membaca project dan menggambar diagram ${name}… (bisa sampai 1–2 menit)`));
+      return;
+    }
+    if (!saved) {
+      canvas.replaceChildren(diagramMessage(`Belum ada diagram ${name}`,
+        `AI akan membaca file & database project lalu menggambarnya. Memakai ${ai.credits?.costPerPrompt ?? 1} kredit AI.`,
+        diagramButton('Buat diagram dengan AI', () => generateDiagram(), true)));
       return;
     }
     canvas.replaceChildren(h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Menggambar diagram…'));
     const id = `diagram-${seq}`;
     try {
       const mermaid = await loadMermaid();
-      const { svg: markup } = await mermaid.render(id, code);
+      const { svg: markup } = await mermaid.render(id, saved.code);
       if (seq !== diagram.seq) return;
       // Parse di dokumen terpisah lalu pindahkan elemen SVG-nya (tanpa innerHTML). Parser HTML dipakai karena
       // label Mermaid berisi HTML (mis. <br>) yang tidak valid sebagai XML murni.
@@ -3417,25 +3059,52 @@
     } catch (err) {
       if (seq !== diagram.seq) return;
       console.error(err);
-      diagram.view.w = 0;
-      canvas.replaceChildren(h('div', { class: 'db-empty' }, h('h3', {}, 'Diagram gagal digambar'),
-        h('p', {}, 'Coba muat ulang. Kalau masih gagal, salin kode Mermaid-nya dan laporkan ke kami.'),
-        h('p', { class: 'diagram-error' }, String(err.message || err).slice(0, 300))));
+      const message = String(err.message || err).slice(0, 1000);
+      // Kode buatan AI kadang salah tulis: minta AI memperbaikinya (gratis, beberapa kali per diagram).
+      canvas.replaceChildren(diagramMessage('Diagram gagal digambar',
+        saved.canFix ? 'Kode diagram dari AI ada yang salah. Minta AI memperbaikinya (gratis), atau buat ulang.' : 'Kode diagram dari AI ada yang salah. Coba buat ulang dengan Update diagram.',
+        saved.canFix ? diagramButton('Perbaiki dengan AI', () => generateDiagram(message), true) : null,
+        diagramButton('Update diagram', () => generateDiagram(), !saved.canFix)));
+      canvas.querySelector('.db-empty').append(h('p', { class: 'diagram-error' }, message.slice(0, 300)));
     } finally {
       cleanupMermaid(id);
     }
   }
 
   async function diagramLoad() {
-    $('#diagramCanvas').replaceChildren(h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Membaca file & database…'));
+    if (diagram.saved) return renderDiagram(); // sudah dimuat; diagram hanya berubah lewat Update
+    $('#diagramCanvas').replaceChildren(h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Memuat diagram…'));
     try {
-      await saveAll(); // diagram dibaca dari server, jadi simpan perubahan dulu
-      diagram.data = await api('GET', '/api/diagrams');
+      diagram.saved = (await api('GET', '/api/diagrams/saved')).diagrams;
     } catch (err) {
-      $('#diagramCanvas').replaceChildren(h('div', { class: 'db-empty' }, h('h3', {}, 'Gagal memuat diagram'), h('p', {}, err.message)));
+      $('#diagramCanvas').replaceChildren(h('div', { class: 'db-empty' }, h('h3', {}, 'Gagal memuat diagram'), h('p', {}, err.message),
+        h('div', { class: 'diagram-actions' }, diagramButton('Coba lagi', diagramLoad, true))));
       return;
     }
     renderDiagram();
+  }
+
+  // Buat ulang diagram jenis yang sedang dibuka dengan AI. renderError: perbaiki kode yang gagal digambar (gratis).
+  async function generateDiagram(renderError) {
+    if (diagram.busy) return;
+    const kind = diagram.kind;
+    diagram.busy = kind;
+    renderDiagram();
+    try {
+      await saveAll(); // AI membaca file dari server, jadi simpan perubahan dulu
+      const res = await api('POST', '/api/diagrams/generate', { kind, ...(renderError ? { renderError } : {}) });
+      diagram.saved[kind] = res.diagram;
+      ai.credits = res.credits;
+      renderCredits();
+      toast(renderError ? `Diagram ${DIAGRAM_NAMES[kind]} diperbaiki` : `Diagram ${DIAGRAM_NAMES[kind]} diperbarui`);
+    } catch (err) {
+      toast(err.message, 'error');
+      if (err.code === 'no_credits') loadCredits();
+    } finally {
+      diagram.busy = null;
+      if ($('#editorArea').dataset.mode === 'diagram' && diagram.kind === kind) renderDiagram();
+      else renderDiagramMeta();
+    }
   }
 
   function downloadDiagram() {
@@ -3461,7 +3130,7 @@
     $('#diagramZoomIn').onclick = () => zoomAtCenter(1.25);
     $('#diagramZoomOut').onclick = () => zoomAtCenter(1 / 1.25);
     $('#diagramZoomFit').onclick = fitDiagram;
-    $('#diagramRefresh').onclick = diagramLoad;
+    $('#diagramUpdate').onclick = () => generateDiagram();
     $('#diagramCopy').onclick = () => (diagram.code ? copyText(diagram.code, 'Kode Mermaid disalin') : toast('Belum ada diagram', 'error'));
     $('#diagramDownload').onclick = downloadDiagram;
     $('#diagramFindingsToggle').onclick = () => setFindingsOpen($('#diagramFindings').hidden);
