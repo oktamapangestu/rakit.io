@@ -109,7 +109,8 @@ test('aset statis: cache panjang immutable, tipe benar, dan revalidasi 304', asy
   assert.equal((await page(stack.client(), '/css/landing.css')).headers.get('content-type'), 'text/css; charset=utf-8');
   assert.equal((await page(stack.client(), '/logo.svg')).headers.get('content-type'), 'image/svg+xml');
 
-  const cached = await stack.app('/js/auth.js', { headers: { 'If-None-Match': js.headers.get('etag') } });
+  // Seperti browser: revalidasi dengan Accept-Encoding yang sama (ETag berbeda per encoding di server Go).
+  const cached = await stack.app('/js/auth.js', { headers: { 'If-None-Match': js.headers.get('etag'), 'Accept-Encoding': 'gzip, deflate' } });
   assert.equal(cached.status, 304);
   assert.equal(cached.body, '');
   const since = await stack.app('/js/auth.js', { headers: { 'If-Modified-Since': js.headers.get('last-modified') } });
@@ -157,4 +158,35 @@ test('database lama: akun tanpa project mendapat project bernama username saat s
   assert.equal(thread.ok, 1);
   // Sesi yang sudah ada tetap berlaku setelah restart.
   assert.equal((await user.get('/api/me')).status, 200);
+});
+
+test('aset & halaman dikirim ter-gzip bila browser mendukungnya (server Go)', { skip: !process.env.RAKIT_SERVER_CMD?.includes('go/bin/rakit') && 'fitur khusus server Go' }, async () => {
+  const { default: http } = await import('node:http');
+  const { gunzipSync } = await import('node:zlib');
+  const { port } = new URL(stack.origin);
+  const get = (path, headers = {}) => new Promise((resolve, reject) => {
+    http.get({ host: '127.0.0.1', port, path, headers: { Host: `localhost:${port}`, ...headers } }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
+    }).on('error', reject);
+  });
+  const original = fs.readFileSync(`${PUBLIC}js/editor.js`);
+  const gz = await get('/js/editor.js', { 'Accept-Encoding': 'gzip, deflate, br' });
+  assert.equal(gz.status, 200);
+  assert.equal(gz.headers['content-encoding'], 'gzip');
+  assert.match(gz.headers.vary, /Accept-Encoding/);
+  assert.ok(gz.body.length < original.length / 2, 'jauh lebih kecil');
+  assert.deepEqual(gunzipSync(gz.body), original);
+  assert.equal((await get('/js/editor.js', { 'Accept-Encoding': 'gzip', 'If-None-Match': gz.headers.etag })).status, 304);
+
+  const plain = await get('/js/editor.js');
+  assert.equal(plain.headers['content-encoding'], undefined);
+  assert.deepEqual(plain.body, original);
+  assert.notEqual(plain.headers.etag, gz.headers.etag, 'ETag berbeda per encoding');
+  assert.equal((await get('/js/editor.js', { 'Accept-Encoding': 'gzip;q=0' })).headers['content-encoding'], undefined);
+
+  const home = await get('/', { 'Accept-Encoding': 'gzip' });
+  assert.equal(home.headers['content-encoding'], 'gzip');
+  assert.match(gunzipSync(home.body).toString(), /<title>rakit\.io/);
 });

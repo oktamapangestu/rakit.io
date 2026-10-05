@@ -4,6 +4,7 @@ package app
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
@@ -27,6 +28,7 @@ type Handler struct {
 
 	mu       sync.Mutex
 	versions map[string]assetVersion // path relatif aset -> hash isi
+	gz       map[string][]byte       // kunci (path + versi) -> isi ter-gzip, supaya tiap versi cukup dikompres sekali
 }
 
 type assetVersion struct {
@@ -79,6 +81,58 @@ func (h *Handler) withAssetVersions(html []byte) []byte {
 	})
 }
 
+// Teks (HTML, JS, CSS, SVG, JSON) dikirim ter-gzip bila browser mendukungnya: editor.js & editor.css
+// mengecil ±70%. Berkas kecil tidak sepadan dikompres.
+const gzipMin = 1024
+
+func compressible(ctype string) bool {
+	return strings.HasPrefix(ctype, "text/") || strings.Contains(ctype, "javascript") || strings.Contains(ctype, "json") || strings.Contains(ctype, "svg")
+}
+
+func acceptsGzip(r *http.Request) bool {
+	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		if name, params, _ := strings.Cut(strings.TrimSpace(part), ";"); strings.EqualFold(strings.TrimSpace(name), "gzip") {
+			q := strings.ReplaceAll(params, " ", "")
+			return q != "q=0" && q != "q=0.0" // "gzip;q=0" = ditolak
+		}
+	}
+	return false
+}
+
+// gzipped mengembalikan data ter-gzip dari cache (kunci harus berubah bila isi berubah).
+func (h *Handler) gzipped(key string, data []byte) []byte {
+	h.mu.Lock()
+	out, ok := h.gz[key]
+	h.mu.Unlock()
+	if ok {
+		return out
+	}
+	var buf bytes.Buffer
+	zw, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	zw.Write(data)
+	zw.Close()
+	out = buf.Bytes()
+	h.mu.Lock()
+	if h.gz == nil || len(h.gz) > 256 { // versi lama tidak dipakai lagi: buang semuanya sesekali
+		h.gz = map[string][]byte{}
+	}
+	h.gz[key] = out
+	h.mu.Unlock()
+	return out
+}
+
+// serveBytes: kirim isi (ter-gzip bila bisa) dengan ETag yang berbeda per encoding.
+func (h *Handler) serveBytes(w http.ResponseWriter, r *http.Request, key, etag string, mod time.Time, data []byte) {
+	w.Header().Add("Vary", "Accept-Encoding")
+	if len(data) >= gzipMin && compressible(w.Header().Get("Content-Type")) && acceptsGzip(r) {
+		data = h.gzipped(key, data)
+		w.Header().Set("Content-Encoding", "gzip")
+		etag = strings.TrimSuffix(etag, `"`) + `-gz"`
+	}
+	w.Header().Set("ETag", etag)
+	http.ServeContent(w, r, "", mod, bytes.NewReader(data))
+}
+
 func securityHeaders(w http.ResponseWriter) {
 	h := w.Header()
 	h.Set("X-Frame-Options", "DENY")
@@ -97,8 +151,7 @@ func (h *Handler) sendHTML(w http.ResponseWriter, r *http.Request, file, cacheCo
 	etag := `W/"` + hex.EncodeToString(sum[:])[:27] + `"`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", cacheControl)
-	w.Header().Set("ETag", etag)
-	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(html))
+	h.serveBytes(w, r, file+"@"+etag, etag, time.Time{}, html)
 }
 
 func redirect(w http.ResponseWriter, r *http.Request, to string) {
@@ -130,12 +183,6 @@ func (h *Handler) serveStatic(w http.ResponseWriter, r *http.Request) bool {
 	if err != nil || !info.Mode().IsRegular() {
 		return false
 	}
-	f, err := os.Open(abs)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-
 	ext := strings.ToLower(path.Ext(p))
 	ctype := contentTypes[ext]
 	if ctype == "" {
@@ -152,7 +199,22 @@ func (h *Handler) serveStatic(w http.ResponseWriter, r *http.Request) bool {
 	} else {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}
-	w.Header().Set("ETag", fmt.Sprintf(`W/"%x-%x"`, info.Size(), info.ModTime().UnixMilli()))
+	etag := fmt.Sprintf(`W/"%x-%x"`, info.Size(), info.ModTime().UnixMilli())
+	if compressible(ctype) && info.Size() >= gzipMin && acceptsGzip(r) {
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			return false
+		}
+		h.serveBytes(w, r, p+"@"+etag, etag, info.ModTime(), data)
+		return true
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	w.Header().Add("Vary", "Accept-Encoding")
+	w.Header().Set("ETag", etag)
 	http.ServeContent(w, r, "", info.ModTime(), f)
 	return true
 }

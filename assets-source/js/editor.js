@@ -251,6 +251,11 @@
   }
 
   async function openFile(path) {
+    try {
+      await editorReady; // Monaco dimuat paralel saat editor dibuka; file baru bisa dibuka setelah siap
+    } catch {
+      return toast('Editor kode gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.', 'error');
+    }
     if (!state.models.has(path)) {
       try {
         const { content } = await api('GET', `/api/files/content?path=${encodeURIComponent(path)}`);
@@ -273,7 +278,7 @@
       editor.setModel(state.models.get(path));
       const vs = state.viewStates.get(path);
       if (vs) editor.restoreViewState(vs);
-      autoFocus(editor);
+      if ($('#editorArea').dataset.mode === 'code') autoFocus(editor); // jangan rebut fokus dari kotak AI dsb.
       expandTo(path);
       if (extOf(path) === 'html' && state.previewPath !== path) {
         state.previewPath = path;
@@ -2311,7 +2316,12 @@
 
   // `before` = isi file sebelum perubahan AI ('' untuk file baru).
   // caption: keterangan opsional di bawah judul (mis. kiri = versi lama, kanan = sekarang).
-  function showDiff(change, before, caption) {
+  async function showDiff(change, before, caption) {
+    try {
+      await editorReady;
+    } catch {
+      return toast('Editor kode gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.', 'error');
+    }
     const root = $('#modal');
     const body = h('div', { class: 'diff-body' });
     let diffEditor;
@@ -4691,47 +4701,28 @@
 
 
   // ---------- Init ----------
+  // Monaco (±900 KB dari CDN) dimuat paralel dan tidak menahan bagian lain editor: daftar file, preview, dan
+  // percakapan AI langsung tampil. Yang butuh Monaco (openFile, showDiff) menunggu editorReady.
+  let editorReady;
+
+  // loader.js (AMD) disisipkan dari sini, bukan lewat <script> di HTML, supaya editor.js tidak menunggunya.
+  // Filenya sudah mulai diunduh sejak awal lewat <link rel="preload"> di editor.html.
   function loadMonaco() {
     return new Promise((resolve, reject) => {
-      window.require.config({ paths: { vs: `${window.MONACO_BASE}/vs` } });
-      window.require(['vs/editor/editor.main'], () => resolve(window.monaco), reject);
+      const start = () => {
+        window.require.config({ paths: { vs: `${window.MONACO_BASE}/vs` } });
+        window.require(['vs/editor/editor.main'], () => resolve(window.monaco), reject);
+      };
+      if (window.require?.config) return start();
+      const script = document.createElement('script');
+      script.src = `${window.MONACO_BASE}/vs/loader.js`;
+      script.onload = start;
+      script.onerror = () => reject(new Error('Gagal memuat Monaco'));
+      document.head.append(script);
     });
   }
 
-  async function init() {
-    // Project aktif: dari URL (?project=), atau yang terakhir dibuka, atau project pertama.
-    state.projectSlug = new URLSearchParams(location.search).get('project') || storage.get('rakit.project', null);
-    let me;
-    try {
-      me = await api('GET', '/api/me');
-    } catch {
-      state.projectSlug = null; // project tidak ada / bukan milik akun ini
-      me = await api('GET', '/api/me');
-    }
-    state.me = me.user;
-    state.project = me.project;
-    state.projects = me.projects;
-    state.maxProjects = me.maxProjects;
-    state.projectSlug = me.project.slug;
-    storage.set('rakit.project', state.projectSlug);
-    history.replaceState(null, '', projectUrl(state.projectSlug));
-    renderProjectInfo();
-    refreshPublish();
-    $('#avatarBtn').textContent = state.me.username[0];
-    $('#statusUser').textContent = 'HTML · CSS · JS';
-
-    $('#toggleSidebar').classList.add('active');
-    $('#togglePreview').classList.add('active');
-    if (storage.get('rakit.previewHidden', false) && !isSimple()) togglePreview();
-    setLayout(isSimple() ? 'simple' : 'coding');
-    setDevice(storage.get('rakit.device', 'desktop'));
-    initSplitters();
-    bindEvents();
-    bindAiEvents();
-    bindDiagramEvents();
-    bindFeatureInfo();
-    loadCredits();
-
+  async function setupEditor() {
     monaco = await loadMonaco();
     defineTheme();
     editor = monaco.editor.create($('#editor'), {
@@ -4768,16 +4759,62 @@
     editor.onDidChangeCursorPosition(updateStatus);
     registerCompletion();
     applyResponsiveEditor();
+  }
 
-    await loadTree();
-    reloadPreview();
+  // File awal (index.html, style.css, script.js) dibuka begitu Monaco siap; index.html jadi tab aktif.
+  async function openStartFiles() {
     const first = ['index.html', 'style.css', 'script.js'].filter((p) => state.entries.some((e) => e.path === p));
     for (const path of first) await openFile(path);
     if (first.length) activate(first[0]);
     else activate(null);
+  }
+
+  async function init() {
+    editorReady = setupEditor();
+    editorReady.catch((err) => {
+      console.error(err);
+      toast('Editor kode gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.', 'error');
+    });
+    // Project aktif: dari URL (?project=), atau yang terakhir dibuka, atau project pertama.
+    state.projectSlug = new URLSearchParams(location.search).get('project') || storage.get('rakit.project', null);
+    let me;
+    try {
+      me = await api('GET', '/api/me');
+    } catch {
+      state.projectSlug = null; // project tidak ada / bukan milik akun ini
+      me = await api('GET', '/api/me');
+    }
+    state.me = me.user;
+    state.project = me.project;
+    state.projects = me.projects;
+    state.maxProjects = me.maxProjects;
+    state.projectSlug = me.project.slug;
+    storage.set('rakit.project', state.projectSlug);
+    history.replaceState(null, '', projectUrl(state.projectSlug));
+    renderProjectInfo();
+    refreshPublish();
+    $('#avatarBtn').textContent = state.me.username[0];
+    $('#statusUser').textContent = 'HTML · CSS · JS';
+
+    $('#toggleSidebar').classList.add('active');
+    $('#togglePreview').classList.add('active');
+    if (storage.get('rakit.previewHidden', false) && !isSimple()) togglePreview();
+    setLayout(isSimple() ? 'simple' : 'coding');
+    setDevice(storage.get('rakit.device', 'desktop'));
+    initSplitters();
+    bindEvents();
+    bindAiEvents();
+    bindDiagramEvents();
+    bindFeatureInfo();
+    const credits = loadCredits();
+
+    await loadTree();
+    reloadPreview();
     // Editor dibuka di mode AI, kecuali user sudah pindah tab selama editor masih dimuat (mis. ke Diagram).
     if ($('#editorArea').dataset.mode === 'ai') setMode('ai');
+    openStartFiles().catch(() => { /* pesannya sudah ditampilkan openFile */ });
     // Tampilkan lagi percakapan terakhir (dan sambung ke job yang masih berjalan, bila ada).
+    await credits;
     if (!ai.credits) await loadCredits();
     await initAiHistory();
     maybeShowPlansIntro();

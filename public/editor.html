@@ -7,7 +7,13 @@
   <link rel="icon" type="image/svg+xml" href="/logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Silkscreen&display=swap">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <!-- Monaco (editor kode) diunduh sejak awal, paralel dengan file lain; dijalankan oleh editor.js. -->
+  <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js">
+  <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/editor/editor.main.js">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/editor/editor.main.css">
+  <!-- Font tidak menahan tampilan pertama (pakai font sistem dulu, lalu berganti saat font selesai diunduh). -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Silkscreen&display=swap" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="/css/editor.css">
   <script>
     // Tema (terang/gelap) dipasang sebelum halaman tergambar, supaya tidak berkedip.
@@ -398,7 +404,6 @@
       },
     };
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
-  <script src="/js/editor.js"></script>
+  <script src="/js/editor.js" defer></script>
 </body>
 </html>
