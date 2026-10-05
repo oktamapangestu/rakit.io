@@ -8,10 +8,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <!-- Monaco (editor kode) diunduh sejak awal, paralel dengan file lain; dijalankan oleh editor.js. -->
+  <!-- Monaco (editor kode) diunduh sejak awal, paralel dengan file lain; dijalankan oleh editor.js.
+       JANGAN preload editor.main.css: loader Monaco mengira stylesheet-nya sudah terpasang bila ada <link> dengan
+       alamat yang sama, lalu tidak memasangnya (nomor baris & widget editor jadi berantakan). -->
   <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js">
   <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/editor/editor.main.js">
-  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/editor/editor.main.css">
   <!-- Font tidak menahan tampilan pertama (pakai font sistem dulu, lalu berganti saat font selesai diunduh). -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Silkscreen&display=swap" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="/css/editor.css">
