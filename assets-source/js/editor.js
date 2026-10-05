@@ -4759,6 +4759,12 @@
     editor.onDidChangeCursorPosition(updateStatus);
     registerCompletion();
     applyResponsiveEditor();
+    // Font editor (JetBrains Mono) dimuat tanpa menahan halaman, jadi bisa selesai SETELAH Monaco mengukur lebar
+    // huruf dengan font cadangan (mis. Consolas di Windows, jauh lebih sempit). Tanpa ukur ulang, kursor, klik,
+    // dan seleksi meleset dari teksnya.
+    const remeasure = () => monaco.editor.remeasureFonts();
+    document.fonts?.ready.then(remeasure);
+    document.fonts?.addEventListener('loadingdone', remeasure);
   }
 
   // File awal (index.html, style.css, script.js) dibuka begitu Monaco siap; index.html jadi tab aktif.
