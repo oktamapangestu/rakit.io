@@ -2576,7 +2576,14 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 .fn-error { margin: 0 0 6px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger-text); font: 12px var(--mono); }
 .fn-label { margin: 8px 0 4px; color: var(--muted); font: 600 11px var(--ui); text-transform: uppercase; letter-spacing: 0.06em; }
 .fn-pre { margin: 0; max-height: 280px; overflow: auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: 12px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; }
-.fn-pre.logs { color: var(--warn-text); }
+.fn-pre.logs { color: var(--text); }
+.log-line { display: block; padding: 0 4px; border-radius: 4px; }
+.log-line.info { color: var(--info-text); }
+.log-line.warn { color: var(--warn-text); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.log-line.error { color: var(--danger-text); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.log-line.debug { color: var(--muted); }
+.log-level { display: inline-block; min-width: 42px; margin-right: 6px; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
+@media (max-width: 560px) { .fn-log-peek, .fn-log-count { display: none; } }
 
 .fn-secrets { margin: 0 0 8px; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 10px; }
 .fn-secrets li { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px; border-top: 1px solid var(--line); }
@@ -2636,10 +2643,15 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 .fn-logs li:first-child { border-top: 0; }
 .fn-logs li.open { background: var(--panel-2); }
 .fn-logs li > .fn-error, .fn-logs li > .fn-pre { margin: 0 10px 10px; }
+.fn-logs li > .fn-label { margin: 2px 10px 4px; }
 .fn-log-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; background: none; color: var(--text); font: 12px var(--ui); text-align: left; cursor: pointer; }
 .fn-log-row:hover { background: color-mix(in srgb, var(--text) 2%, transparent); }
 .fn-log-time { width: 118px; flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
-.fn-log-row code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); }
+.fn-log-row code { flex-shrink: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); }
+.fn-log-peek { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 11.5px var(--mono); }
+.fn-log-peek .peek-error { color: var(--danger-text); }
+.fn-log-count { flex-shrink: 0; padding: 1px 6px; border-radius: 6px; background: var(--raised); color: var(--muted); font: 600 10.5px var(--mono); }
+.fn-log-empty { margin: 0 10px 10px; }
 .fn-chip { padding: 1px 7px; border-radius: 6px; background: var(--raised); color: var(--muted); font-size: 11px; font-weight: 600; }
 .fn-chip.cron { background: color-mix(in srgb, var(--info) 20%, transparent); color: var(--info-text); }
 .fn-chip.test { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }

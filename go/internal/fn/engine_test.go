@@ -139,3 +139,31 @@ func TestSandbox(t *testing.T) {
 		t.Fatalf("setelahnya: %v %v", got, err)
 	}
 }
+
+func TestConsoleLengkap(t *testing.T) {
+	_, logs, err := exec(t, 5*time.Second, `export default () => {
+  console.log('teks', 1, null, undefined, { a: 1, b: [1, 2] });
+  const c = { x: 1 }; c.diri = c; console.log(c);
+  console.info('i'); console.warn('w'); console.debug({ f() {}, u: undefined });
+  console.error(new Error('boom'));
+  console.assert(1 === 2, 'harus sama');
+  return 1 }`, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"teks 1 null undefined {\"a\":1,\"b\":[1,2]}\n",
+		"{\"x\":1,\"diri\":\"[Circular]\"}\n",
+		"[info] i\n[warn] w\n",
+		"[debug] {\"f\":\"[Function f]\",\"u\":\"[undefined]\"}\n",
+		"[error] Error: boom\n    at default (functions/uji.js:5:",
+		"[error] Assertion gagal: harus sama\n",
+	} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("log tidak berisi %q:\n%s", want, logs)
+		}
+	}
+	if strings.Contains(logs, "prelude.js") || strings.Contains(logs, "run.js") {
+		t.Errorf("stack internal ikut tampil:\n%s", logs)
+	}
+}

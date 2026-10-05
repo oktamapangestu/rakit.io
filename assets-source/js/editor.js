@@ -3592,6 +3592,21 @@
   const fnSectionHead = (title, count, ...tools) => h('div', { class: 'fn-section-head' },
     h('h4', {}, title, count != null ? h('span', { class: 'fn-count' }, String(count)) : null), ...tools);
 
+  // Keluaran console fungsi: baris berawalan "[warn] ", "[error] " dst. (lihat go/internal/fn/prelude.js) memulai
+  // entri berlevel; baris lanjutan (mis. JSON bertingkat) ikut level entri sebelumnya.
+  const LOG_LEVEL_RE = /^\[(info|warn|error|debug)\] /;
+  function consoleView(text) {
+    let level = 'log';
+    return h('pre', { class: 'fn-pre logs' }, text.replace(/\n$/, '').split('\n').map((line) => {
+      const m = LOG_LEVEL_RE.exec(line);
+      if (m) level = m[1];
+      else if (!/^\s/.test(line) && !/^[}\]]/.test(line)) level = 'log';
+      return h('span', { class: `log-line ${level}` }, m ? [h('b', { class: 'log-level' }, m[1]), line.slice(m[0].length)] : line || ' ');
+    }));
+  }
+  const logPeek = (text) => text.split('\n').find((l) => l.trim())?.replace(LOG_LEVEL_RE, '').slice(0, 120) ?? '';
+  const logLines = (text) => text.replace(/\n$/, '').split('\n').length;
+
   function fnLogsSection(d) {
     const TRIGGER = { http: 'Pengunjung', cron: 'Jadwal', test: 'Uji coba' };
     const when = (ms) => {
@@ -3611,13 +3626,17 @@
             h('button', { type: 'button', class: 'fn-log-row', onclick: () => { fnState.openLog = open ? null : l.id; renderFn(); } },
               h('span', { class: 'fn-log-time' }, when(l.createdAt)),
               h('code', {}, l.name),
+              h('span', { class: 'fn-log-peek', title: l.logs ? 'Keluaran console' : '' },
+                l.error ? h('span', { class: 'peek-error' }, l.error) : l.logs ? logPeek(l.logs) : ''),
+              l.logs ? h('span', { class: 'fn-log-count', title: 'Jumlah baris console' }, `${logLines(l.logs)} baris`) : null,
               h('span', { class: `fn-chip ${l.trigger}` }, TRIGGER[l.trigger] ?? l.trigger),
               l.dev ? h('span', { class: 'env-badge' }, 'DEV') : null,
               h('span', { class: `fn-status s${String(l.status)[0]}` }, l.status),
               h('span', { class: 'fn-log-ms' }, `${l.ms} ms`),
-              (l.error || l.logs) ? h('span', { class: 'fn-log-more' }, open ? '▴' : '▾') : null),
+              h('span', { class: 'fn-log-more' }, open ? '▴' : '▾')),
             open && l.error ? h('p', { class: 'fn-error' }, l.error) : null,
-            open && l.logs ? h('pre', { class: 'fn-pre logs' }, l.logs) : null);
+            open && l.logs ? [h('div', { class: 'fn-label' }, 'console'), consoleView(l.logs)] : null,
+            open && !l.logs && !l.error ? h('p', { class: 'fn-note fn-log-empty' }, 'Tidak ada keluaran console. Tambahkan console.log(...) di kode fungsi untuk melihat isinya di sini.') : null);
         }))
         : h('p', { class: 'fn-placeholder' }, 'Belum ada eksekusi. Panggilan dari pengunjung, jadwal, dan uji coba tercatat di sini (100 terakhir).'));
   }
@@ -3640,7 +3659,7 @@
           h('span', { class: `fn-status s${String(r.status)[0]}` }, r.status), h('span', {}, `${r.ms} ms`), r.headers?.['content-type'] ? h('code', {}, r.headers['content-type']) : null) : null,
         r.error ? h('p', { class: 'fn-error' }, r.error) : null,
         shown ? h('pre', { class: 'fn-pre' }, shown) : null,
-        r.logs ? [h('div', { class: 'fn-label' }, 'console.log'), h('pre', { class: 'fn-pre logs' }, r.logs)] : null) : null);
+        r.logs ? [h('div', { class: 'fn-label' }, 'console'), consoleView(r.logs)] : null) : null);
   }
 
   function fnSecrets(d) {

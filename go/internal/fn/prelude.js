@@ -53,6 +53,73 @@
     });
   }
 
+  // console lengkap untuk debugging: QuickJS hanya punya console.log yang mencetak objek sebagai
+  // "[object Object]". Objek dicetak sebagai JSON, Error beserta stack-nya; level selain log diberi awalan
+  // "[warn] " dsb. supaya editor bisa mewarnainya. Semua keluaran ditangkap Go (lihat limitedLog).
+  const write = globalThis.console.log.bind(globalThis.console);
+  const describe = (v) => {
+    if (typeof v === 'function') return `[Function ${v.name || 'anonim'}]`;
+    if (typeof v === 'bigint') return `${v}n`;
+    if (typeof v === 'symbol') return v.toString();
+    return undefined;
+  };
+  const toJSONish = (value) => {
+    const seen = new WeakSet();
+    return JSON.stringify(value, function (key, v) {
+      if (v === undefined) return '[undefined]';
+      const d = describe(v);
+      if (d) return d;
+      if (v instanceof Error) return { name: v.name, message: v.message };
+      if (v instanceof Map) return Object.fromEntries(v);
+      if (v instanceof Set) return [...v];
+      if (v && typeof v === 'object') {
+        if (seen.has(v)) return '[Circular]';
+        seen.add(v);
+      }
+      return v;
+    });
+  };
+  const show = (v) => {
+    if (typeof v === 'string') return v;
+    if (v === undefined || v === null || typeof v !== 'object') return describe(v) ?? String(v);
+    if (v instanceof Error) {
+      // Baris stack dari lingkungan rakit (prelude/run) tidak berguna bagi pengguna.
+      const stack = String(v.stack ?? '').split('\n').filter((l) => l.trim() && !/\((prelude|run)\.js:/.test(l)).join('\n');
+      return stack ? `${v.name}: ${v.message}\n${stack}` : `${v.name}: ${v.message}`;
+    }
+    if (v instanceof Date) return isNaN(v) ? 'Invalid Date' : v.toISOString();
+    try {
+      const compact = toJSONish(v);
+      return compact.length > 80 ? JSON.stringify(JSON.parse(compact), null, 2) : compact;
+    } catch {
+      return String(v);
+    }
+  };
+  const emit = (level, args) => {
+    const text = args.map(show).join(' ');
+    write(level ? `[${level}] ${text}` : text);
+  };
+  const timers = new Map();
+  const counts = new Map();
+  globalThis.console = Object.freeze({
+    log: (...a) => emit('', a),
+    info: (...a) => emit('info', a),
+    warn: (...a) => emit('warn', a),
+    error: (...a) => emit('error', a),
+    debug: (...a) => emit('debug', a),
+    trace: (...a) => emit('debug', a),
+    dir: (v) => emit('', [v]),
+    table: (v) => emit('', [v]),
+    assert: (ok, ...a) => { if (!ok) emit('error', ['Assertion gagal:', ...a]); },
+    time: (label = 'default') => { timers.set(label, Date.now()); },
+    timeEnd: (label = 'default') => {
+      if (!timers.has(label)) return emit('warn', [`Timer "${label}" belum dimulai`]);
+      emit('', [`${label}: ${Date.now() - timers.get(label)} ms`]);
+      timers.delete(label);
+    },
+    count: (label = 'default') => { counts.set(label, (counts.get(label) ?? 0) + 1); emit('', [`${label}: ${counts.get(label)}`]); },
+  });
+
   const env = Object.freeze(JSON.parse(globalThis.__env));
   delete globalThis.__env;
 

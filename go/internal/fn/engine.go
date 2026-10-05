@@ -27,7 +27,7 @@ const (
 	memoryPages = 1024     // 64 MiB memori WebAssembly per eksekusi
 	jsMemory    = 48 << 20 // batas heap QuickJS
 	jsStack     = 512 << 10
-	maxLogBytes = 8 << 10
+	maxLogBytes = 16 << 10
 )
 
 // Request: request HTTP yang diteruskan ke fungsi.
