@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -25,7 +26,7 @@ const (
 	diagramTimeout      = 280 * time.Second // di bawah proxy_read_timeout nginx (300 detik)
 	maxDiagramFacts     = 30_000
 	maxDiagramCode      = 60_000
-	maxDiagramNotes     = 8
+	maxDiagramNotes     = 4
 	maxFreeDiagramFixes = 2
 )
 
@@ -34,56 +35,66 @@ type diagramKind struct {
 	ask    string
 }
 
+// Tiap jenis punya batas ukuran: diagram untuk pemula harus bisa dipahami sekilas, bukan peta lengkap kode.
 var diagramKinds = map[string]diagramKind{
-	"usecase": {[]string{"flowchart"}, "a USE CASE diagram: actors (visitor, owner/admin, external services the code calls) on the left, " +
-		"the use cases they can perform inside a `subgraph` for the system boundary. Use `flowchart LR`; actors as `A([\"👤 Name\"])`, use cases as `U1([\"Name\"])`."},
-	"activity": {[]string{"flowchart"}, "an ACTIVITY diagram of the main process(es) a visitor goes through (e.g. open page → fill form → submit → data saved → result shown), " +
-		"with start `S((\" \"))`/end `E(((\" \")))` nodes, decisions as `D{\"Question?\"}` and labeled branches. Use `flowchart TD`."},
-	"sequence": {[]string{"sequenceDiagram"}, "a SEQUENCE diagram of the most important interaction(s): visitor, browser page/script, the rakit.io API (/api/db, /api/fn) " +
-		"and the database or external services, in order. Use `sequenceDiagram` with `autonumber`; use `alt`/`opt` for failures or conditions where it matters."},
-	"class": {[]string{"classDiagram"}, "a CLASS diagram: one class per database table (attributes with types; include `id` and `created_at`) and per important " +
-		"JavaScript module/object/function group (methods), with associations between them."},
-	"state": {[]string{"stateDiagram-v2", "stateDiagram"}, "a STATE diagram of the most important object whose status changes (e.g. an order, a form submission, " +
-		"a booking, or the page UI: loading → loaded → error). Use `stateDiagram-v2` with `[*]` start/end."},
-	"erd": {[]string{"erDiagram"}, "an ERD of the database tables: every table with all its columns (types, PK/FK, \"wajib\"/\"privat\" as comment), plus " +
-		"relationships with correct cardinality. Every table always has `number id PK` and `date created_at`."},
-	"site": {[]string{"flowchart"}, "a SITE MAP: every HTML page (label = page title + file name), the links between pages, and the CSS/JS files each page loads " +
-		"(draw assets with a different shape, e.g. `C[/\"style.css\"/]`). Mark broken links/missing files clearly (dashed edge `-.->` and a label). Use `flowchart LR`."},
-	"flow": {[]string{"flowchart"}, "a DATA FLOW diagram: which pages/scripts/functions read or write which database tables and external services, with the " +
-		"operation on each edge (baca/tambah/ubah/hapus). Requests the server will reject (table missing or access not public) get a dashed edge and \"ditolak\" in the label. Use `flowchart LR`."},
+	"usecase": {[]string{"flowchart", "graph"}, `a USE CASE diagram.
+Size: 2-3 actors, at most 6 use cases. Actors: "Pengunjung", "Pemilik" (the owner manages data and content in the rakit.io editor), plus an external service only if the code really calls one.
+Each use case is one goal a person has ("Melihat menu kue", "Memesan kue"), not a step or UI detail. Merge overlapping goals. No include/extend arrows.
+Layout: flowchart LR; actors as P(["👤 Pengunjung"]) outside, use cases as U1(["Memesan kue"]) inside one subgraph named after the website.`},
+	"activity": {[]string{"flowchart", "graph"}, `an ACTIVITY diagram of the ONE most important process a visitor goes through (e.g. placing an order or sending the form).
+Size: at most 10 steps and at most 2 decisions. Steps are what the person or the website does, in plain words ("Mengisi form pesanan", "Data pesanan tersimpan") — no file names, URLs, function names or HTTP methods. No loops back unless the process really repeats.
+Layout: flowchart TD, start S(("Mulai")), end E(("Selesai")), decisions D{"Data lengkap?"} with labeled branches.`},
+	"sequence": {[]string{"sequenceDiagram"}, `a SEQUENCE diagram of the ONE most important interaction (usually the main form or data request).
+Size: at most 4 participants and at most 8 messages. Participants: the visitor (actor), the page, the rakit.io API, and the database or an external service. Messages in plain Indonesian; a short path like /api/db/pesanan is fine.
+Use autonumber; at most one alt block for the failure case.`},
+	"class": {[]string{"classDiagram", "classDiagram-v2"}, `a CLASS diagram.
+Size: at most 6 classes. One class per database table with all its columns as attributes (+tipe nama; include +number id and +date created_at). Add a class for a JavaScript file only when it has real functions; list those functions as methods, at most 4.
+Relations only where they really exist (a reference column, or a script that reads/writes a table), with a short label.`},
+	"state": {[]string{"stateDiagram-v2", "stateDiagram"}, `a STATE diagram of the ONE object whose status changes the most (e.g. an order: Baru → Diproses → Selesai, or a form: Diisi → Dikirim → Berhasil/Gagal).
+Size: at most 6 states, every state reachable, with [*] start and end. Only states the code or data really supports; if a status column exists, use its values.`},
+	"erd": {[]string{"erDiagram"}, `an ERD of the database tables: every table with all its columns (types, PK/FK, "wajib"/"privat" as comment), plus relationships with correct cardinality from reference columns.
+Every table always has "number id PK" and "date created_at". Nothing that is not a table.`},
+	"site": {[]string{"flowchart", "graph"}, `a SITE MAP.
+Size: every HTML page (label = page title, then the file name on a second line), the links between pages, and the CSS/JS files each page loads, drawn once each with a different shape, e.g. C[/"style.css"/].
+Draw a link between two pages once (no duplicate arrows in both directions — use A <--> B). Mark broken links/missing files with a dashed edge -.-> labeled "rusak". Use flowchart LR.`},
+	"flow": {[]string{"flowchart", "graph"}, `a DATA FLOW diagram: which pages (and functions/ files) read or write which database tables or external services.
+Size: at most 12 edges. Only pages, scripts and functions that really call /api/db or /api/fn (see "calls" in the analysis) — leave out pages that do not use data. Merge a page with the script it loads into one node ("Halaman Pesan (pesan.js)"). Edge label = the operation in Indonesian (baca / tambah / ubah / hapus).
+Only requests the analysis marks as "missing" or "owner_only" get a dashed edge labeled "ditolak". Use flowchart LR, pages on the left, tables on the right.`},
 }
 
 // ValidDiagramKind: jenis diagram yang dikenal.
 func ValidDiagramKind(kind string) bool { _, ok := diagramKinds[kind]; return ok }
 
-const diagramPrompt = `You draw software diagrams of a user's website project on rakit.io (an online editor where beginners build websites;
-pages are static HTML/CSS/JS, data is stored through rakit.io's built-in /api/db/<table> REST API, and functions/<name>.js are
-serverless functions at /api/fn/<name>). You get the project's files, its database tables and an automatic analysis.
+const diagramPrompt = `You draw ONE software diagram of a user's website project on rakit.io (an online editor where beginners learn to build
+websites; pages are static HTML/CSS/JS, data is stored through rakit.io's built-in /api/db/<table> REST API, and functions/<name>.js
+are serverless functions at /api/fn/<name>). You get the project's files, its database tables and an automatic analysis.
 
-Describe the project exactly as it is: only things that exist in the files/tables. Never invent features. Prefer the most
-important ~30 nodes over drawing everything; group related things with subgraph where it helps. All labels are in Indonesian.
+The reader is a beginner. The diagram must be understandable at a glance:
+- SIMPLE beats complete. Stay within the size limits of the requested diagram; leave out minor details rather than crowding it.
+- Only what really exists in the files/tables. Never invent features, pages, actors or tables.
+- All labels in Indonesian, short (at most ~5 words), written for people. Use "Pengunjung" and "Pemilik", never "Visitor"/"User"/"Admin".
+- No styling (no classDef/style) except marking a problem in red.
 
 Answer in exactly this format and nothing else:
 ` + "```mermaid" + `
 <the Mermaid code>
 ` + "```" + `
 - [level] note
-- [level] note
 
-Notes: 0-8 short notes in Indonesian for a beginner about what the diagram reveals (security problems such as tables anyone can
-change/delete, broken links, missing files, requests that will be rejected, unused tables, pages nobody links to). level is
-one of ok, info, warn, error. No other text before or after.
+Notes: 1-4 short notes in Indonesian for a beginner about THIS diagram: what it shows (info/ok), and real problems worth
+fixing (warn/error): tables anyone can change or delete (public update/delete), broken links, missing files, requests that
+will be rejected, unused tables, pages nobody links to. Do NOT warn about normal, intended setups: a public "create" for a form,
+private columns, owner-only reading, or empty tables. level is one of ok, info, warn, error. Never draw the diagram with box-drawing or ASCII characters — only Mermaid code.
 
 If the project has nothing that this kind of diagram can show (e.g. ERD without tables), answer with one line instead:
 NONE: <reason in Indonesian, one sentence, and what the user can build so this diagram becomes meaningful>
 
 Mermaid rules (version 12, rendered with securityLevel strict — invalid syntax breaks the whole diagram):
-- The first line is the diagram type. No %%{init}%% directives, no click, no links, no HTML tags, no Markdown inside labels.
+- The first line is the diagram type. No %%{init}%% directives, no click, no links, no Markdown inside labels; <br/> is the only HTML allowed.
 - Node/participant/class/state/entity ids: ASCII letters, digits and underscore only, starting with a letter. Never use
   reserved words as ids (end, graph, subgraph, flowchart, class, state, style, default, direction).
 - flowchart: put EVERY label in double quotes, e.g. A["Halaman Beranda"], B{"Valid?"}, edge labels as A -->|"simpan"| B.
   Labels must not contain double quotes or backticks; replace them with single quotes. Every subgraph has a matching end.
-  You may style with classDef/class (colors in hex), e.g. classDef warn stroke:#ef4444,color:#fecaca.
 - erDiagram: entity and attribute names use only [A-Za-z0-9_]; attribute type is one word; keys are PK, FK or PK, FK;
   attribute comments in double quotes; relationship label in double quotes, e.g. a ||--o{ b : "punya".
 - sequenceDiagram: participant P as Label (no quotes); message text after the colon must not contain ; or #. Every alt/opt/loop
@@ -140,13 +151,23 @@ func (s *Service) Diagrams(project *store.Project) (any, error) {
 
 var (
 	mermaidBlockRE = regexp.MustCompile("(?s)```[ \\t]*(?:mermaid)?[ \\t]*\\r?\\n(.*?)```")
-	diagramNoteRE  = regexp.MustCompile(`(?m)^[ \t]*[-*][ \t]*\[(ok|info|warn|error)\][ \t]*(.+?)[ \t]*$`)
-	diagramNoneRE  = regexp.MustCompile(`(?m)^[ \t]*NONE:[ \t]*(.+)$`)
+	// Catatan: "- [warn] teks", tapi model kadang menulis "1. **teks**" tanpa level — tetap diterima (level info).
+	diagramNoteRE = regexp.MustCompile(`(?m)^[ \t]*(?:[-*•]|\d+[.)])[ \t]+(?:\[(ok|info|warn|error)\][ \t]*)?(.+?)[ \t]*$`)
+	markdownRE    = regexp.MustCompile("\\*\\*|__|`")
+	diagramNoneRE = regexp.MustCompile(`(?m)^[ \t]*NONE:[ \t]*(.+)$`)
 )
 
 // parseDiagram memisahkan kode Mermaid dan catatan dari jawaban AI.
 func parseDiagram(kind, text string) (string, []DiagramNote, error) {
-	m := mermaidBlockRE.FindStringSubmatch(text)
+	var m []string
+	for _, block := range mermaidBlockRE.FindAllStringSubmatch(text, -1) {
+		if m == nil || strings.HasPrefix(strings.TrimSpace(block[0]), "```mermaid") {
+			m = block
+		}
+		if strings.HasPrefix(strings.TrimSpace(block[0]), "```mermaid") {
+			break
+		}
+	}
 	if m == nil {
 		if none := diagramNoneRE.FindStringSubmatch(text); none != nil {
 			return "", nil, &failure{"ok", "Belum ada yang bisa digambar: " + jsconv.Slice(strings.TrimSpace(none[1]), 300) + " Kredit dikembalikan."}
@@ -154,7 +175,7 @@ func parseDiagram(kind, text string) (string, []DiagramNote, error) {
 		return "", nil, &failure{"bad_output", "AI tidak mengirim kode diagram. Coba lagi. Kredit dikembalikan."}
 	}
 	code := strings.TrimSpace(m[1])
-	first := strings.Fields(strings.SplitN(code, "\n", 2)[0])
+	first := strings.Fields(diagramHeader(code))
 	ok := false
 	for _, h := range diagramKinds[kind].header {
 		ok = ok || (len(first) > 0 && first[0] == h)
@@ -164,10 +185,35 @@ func parseDiagram(kind, text string) (string, []DiagramNote, error) {
 	}
 	notes := []DiagramNote{}
 	rest := strings.Replace(text, m[0], "", 1)
-	for _, n := range diagramNoteRE.FindAllStringSubmatch(rest, maxDiagramNotes) {
-		notes = append(notes, DiagramNote{n[1], jsconv.Slice(n[2], 300)})
+	for _, n := range diagramNoteRE.FindAllStringSubmatch(rest, -1) {
+		text := strings.TrimSpace(markdownRE.ReplaceAllString(n[2], ""))
+		if text == "" || len(notes) == maxDiagramNotes {
+			continue
+		}
+		level := n[1]
+		if level == "" {
+			level = "info"
+		}
+		notes = append(notes, DiagramNote{level, jsconv.Slice(text, 300)})
 	}
 	return code, notes, nil
+}
+
+// diagramHeader: baris pertama yang berisi kode (melewati front matter "---" dan komentar "%%").
+func diagramHeader(code string) string {
+	lines := strings.Split(code, "\n")
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "---" {
+			for i++; i < len(lines) && strings.TrimSpace(lines[i]) != "---"; i++ {
+			}
+			continue
+		}
+		if line != "" && !strings.HasPrefix(line, "%%") {
+			return line
+		}
+	}
+	return ""
 }
 
 // GenerateDiagram membuat (atau, bila renderError diisi, memperbaiki) diagram satu jenis lalu menyimpannya.
@@ -227,8 +273,11 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 			return "", nil, err
 		}
 		rawFacts, _ := json.Marshal(facts)
-		ask := fmt.Sprintf("%s\n\nAutomatic analysis (from the files; dynamic URLs may be missing):\n%s\n\n---\n\nDraw %s",
-			projectContext, jsconv.Slice(string(rawFacts), maxDiagramFacts), spec.ask)
+		ask := fmt.Sprintf("%s\n\nAutomatic analysis (from the files; dynamic URLs may be missing):\n%s\n\n---\n\nDraw %s\n\n"+
+			"Reply with a ```mermaid code block whose first line is %s. After the block, write 1-4 notes in Indonesian, each line exactly like:\n"+
+			"- [info] Satu produk bisa dipesan berkali-kali.\n- [warn] Siapa pun bisa menghapus data di tabel pesanan.\nNo heading, no other text. "+
+			"Use warn only for real problems; a form that lets visitors add data (public create) and private columns are correct and need no warning.",
+			projectContext, jsconv.Slice(string(rawFacts), maxDiagramFacts), spec.ask, spec.header[0])
 		convo := []message{{"role": "system", "content": diagramPrompt}, {"role": "user", "content": ask}}
 		if fixing {
 			convo = append(convo,
@@ -236,19 +285,33 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 				message{"role": "user", "content": "Mermaid could not render that diagram:\n" + jsconv.Slice(renderError, 1000) +
 					"\n\nFix the syntax (keep the content) and answer again in the same format."})
 		}
-		r, err := s.callAI(request{messages: convo}, hooks{ctx: ctx, onModel: func(model string) { usedModel = model }})
-		if err != nil {
-			return "", nil, err
+		// Format salah (mis. digambar dengan karakter ASCII): minta sekali lagi, tanpa kredit tambahan.
+		for attempt := 0; ; attempt++ {
+			r, err := s.callAI(request{messages: convo}, hooks{ctx: ctx, onModel: func(model string) { usedModel = model }})
+			if err != nil {
+				return "", nil, err
+			}
+			inTokens += r.PromptTokens
+			outTokens += r.CompletionTokens
+			if err := checkFinish(r); err != nil {
+				return "", nil, err
+			}
+			if r.FinishReason == "length" {
+				return "", nil, &failure{"bad_output", "Diagram terlalu besar untuk dibuat sekaligus. Kredit dikembalikan."}
+			}
+			if os.Getenv("AI_DEBUG") != "" {
+				log.Printf("----- AI diagram %s (%s) -----\n%s", kind, r.FinishReason, r.Text)
+			}
+			code, notes, err := parseDiagram(kind, r.Text)
+			var f *failure
+			if attempt == 0 && errors.As(err, &f) && f.aiStatus == "bad_output" {
+				convo = append(convo, message{"role": "assistant", "content": r.Text}, message{"role": "user", "content": fmt.Sprintf(
+					"That is not in the required format. Reply again with only a ```mermaid code block whose first line is %s, followed by 1-4 notes.", spec.header[0])})
+				continue
+			}
+			status = "ok"
+			return code, notes, err
 		}
-		inTokens, outTokens = r.PromptTokens, r.CompletionTokens
-		if err := checkFinish(r); err != nil {
-			return "", nil, err
-		}
-		if r.FinishReason == "length" {
-			return "", nil, &failure{"bad_output", "Diagram terlalu besar untuk dibuat sekaligus. Kredit dikembalikan."}
-		}
-		status = "ok"
-		return parseDiagram(kind, r.Text)
 	}()
 	defer func() {
 		s.db.Exec("INSERT INTO ai_requests (user_id, created_at, model, status, input_tokens, output_tokens) VALUES (?, ?, ?, ?, ?, ?)",

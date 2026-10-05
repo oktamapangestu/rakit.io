@@ -91,3 +91,23 @@ test('perbaikan kode yang gagal digambar: gratis, maks. 2 kali sampai di-Update'
   const updated = await generate(user, { kind: 'site' });
   assert.equal(updated.body.diagram.canFix, true, 'Update memberi jatah perbaikan lagi');
 });
+
+test('format salah dicoba ulang sekali tanpa kredit tambahan; catatan bernomor tetap terbaca', { skip }, async () => {
+  const user = await stack.register('ulang');
+  const before = (await user.credits()).remaining;
+  stack.ai.script.push(
+    { text: '┌──────┐\n│ produk │\n└──────┘' },
+    { text: '```mermaid\nflowchart LR\n  A["Beranda"] --> B["Pesan"]\n```\n\n**Catatan:**\n1. **Beranda** menautkan ke halaman Pesan.\n2. [warn] Halaman Tentang tidak ditautkan.' },
+  );
+  const res = await generate(user, { kind: 'site' });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.diagram.code, 'flowchart LR\n  A["Beranda"] --> B["Pesan"]');
+  assert.deepEqual(res.body.diagram.notes, [
+    { level: 'info', text: 'Beranda menautkan ke halaman Pesan.' },
+    { level: 'warn', text: 'Halaman Tentang tidak ditautkan.' },
+  ]);
+  assert.equal(res.body.credits.remaining, before - 1, 'satu kredit untuk dua panggilan');
+  const retry = stack.ai.requests.at(-1).messages;
+  assert.equal(retry.at(-2).role, 'assistant');
+  assert.match(retry.at(-1).content, /first line is flowchart/);
+});

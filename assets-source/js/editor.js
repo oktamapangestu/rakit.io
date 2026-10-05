@@ -1731,7 +1731,8 @@
       h('div', { class: 'modal-buttons' },
         info.tryText ? h('button', { type: 'button', onclick: () => { close(); askAi(info.tryText, info.tryMode); } }, 'Coba sekarang') : null,
         h('button', { type: 'button', class: 'primary', onclick: close }, 'Mengerti')));
-    body.querySelector('.modal-buttons .primary').focus();
+    body.querySelector('.modal-buttons .primary').focus({ preventScroll: true });
+    body.scrollTop = 0;
   }
 
   function bindFeatureInfo() {
@@ -3044,7 +3045,8 @@
       h('dl', {}, info.read.map(([term, desc]) => [h('dt', {}, term), h('dd', {}, desc)])),
       h('p', { class: 'diagram-info-note' }, 'Diagram ini digambar AI dari file & database project. Tekan Update diagram setelah project berubah.'),
       h('div', { class: 'modal-buttons' }, h('button', { type: 'button', class: 'primary', onclick: close }, 'Mengerti')));
-    body.querySelector('button').focus();
+    body.querySelector('button').focus({ preventScroll: true });
+    body.scrollTop = 0;
   }
 
   const diagramTime = (ms) => new Date(ms).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
