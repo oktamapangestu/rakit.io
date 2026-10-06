@@ -2,7 +2,7 @@
 // masa berakhir, dan pengaturan harga dari dashboard owner.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { DAY_MS, startStack } from './helpers/harness.mjs';
+import { DAY_MS, startStack, TINY_PNG } from './helpers/harness.mjs';
 
 let stack;
 let admin;
@@ -105,6 +105,20 @@ test('Unlimited: batas prompt per hari, lalu kredit gratis', async () => {
   }
   assert.deepEqual(seen, [[1, 1], [0, 1], [0, 0]]);
   assert.equal((await user.startPrompt('habis')).status, 402);
+});
+
+test('Unlimited: prompt bergambar tetap dihitung 1 prompt', async () => {
+  const user = await stack.register();
+  await buy(user, 'unlimited');
+  const { started, final } = await user.prompt('ikuti desain', { images: [TINY_PNG], thumbs: [TINY_PNG] });
+  assert.equal(started.status, 201);
+  assert.equal(final.type, 'done');
+  assert.equal(final.credits.plan.quotaUsed, 1);
+  assert.equal(final.credits.freeRemaining, 1, 'kredit gratis tidak ikut terpakai');
+  // Jatah tinggal 1 prompt, kredit gratis hanya 1 (< 2): prompt bergambar tetap boleh memakai jatah itu.
+  const second = await user.prompt('gambar lagi', { images: [TINY_PNG], thumbs: [TINY_PNG] });
+  assert.equal(second.started.status, 201);
+  assert.equal(second.final.credits.plan.quotaRemaining, 0);
 });
 
 test('langganan berakhir: kembali ke kredit gratis', async () => {

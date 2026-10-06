@@ -73,46 +73,76 @@ export function creditInfo(userId) {
   };
 }
 
-// Potong kredit sebelum memanggil AI. Mengembalikan catatan reservasi { source, period, cost }
-// yang bisa disimpan, supaya kredit tetap bisa dikembalikan walau server sempat restart.
+// Potong kredit sebelum memanggil AI, dari sumber berurutan: langganan → bonus → gratis → dibeli. Bila satu
+// sumber tidak cukup, sisanya diambil dari sumber berikutnya, dalam satu transaksi (kredit hanya terpotong bila
+// totalnya cukup). Unlimited menghitung prompt: satu prompt (dengan gambar pun) = 1 dari batas harian.
+// Mengembalikan catatan reservasi { source, period, cost, more?: [{ source, period, cost }] } yang bisa
+// disimpan, supaya kredit tetap bisa dikembalikan walau server sempat restart.
 export function reserveCredits(userId, cost = config.ai.creditsPerPrompt) {
+  if (cost <= 0) return { source: 'free', period: freePeriod(), cost: 0 }; // AI gratis: tidak ada yang dipotong
+  const plan = activePlan(userId);
   const period = freePeriod();
+  const parts = [];
+  let need = cost;
+  // whole: jumlah tetap untuk satu prompt Unlimited (tidak dipecah).
+  const fromUsage = (source, usagePeriod, limit, whole = 0) => {
+    if (need <= 0 || limit <= 0) return;
+    const used = q.usage.get(userId, usagePeriod)?.used ?? 0;
+    let n = Math.min(need, limit - used);
+    if (whole) {
+      if (limit - used < whole) return;
+      n = whole;
+    }
+    if (n <= 0) return;
+    q.addUsage.run(userId, usagePeriod, n);
+    parts.push({ source, period: usagePeriod, cost: n });
+    need = whole ? 0 : need - n;
+  };
 
-  const quota = planQuota(activePlan(userId));
-  if (quota) {
-    q.ensureUsage.run(userId, quota.period);
-    if (q.reserveCredit.run(cost, userId, quota.period, cost, quota.limit).changes === 1) {
-      return { source: 'plan', period: quota.period, cost };
+  db.exec('BEGIN IMMEDIATE');
+  let open = true;
+  try {
+    const quota = planQuota(plan);
+    if (quota) fromUsage('plan', quota.period, quota.limit, plan.id === 'unlimited' ? 1 : 0);
+    // Bonus awal dipakai lebih dulu: masa perkenalan sebelum jatah harian.
+    fromUsage('bonus', BONUS_PERIOD, freeBonusCredits());
+    fromUsage('free', period, freeDailyCredits());
+    if (need > 0) {
+      const n = Math.min(need, q.balance.get(userId)?.balance ?? 0);
+      if (n > 0) {
+        q.spendBalance.run(n, userId, n);
+        parts.push({ source: 'purchased', period, cost: n });
+        need -= n;
+      }
     }
-  }
-  q.ensureUsage.run(userId, period);
-  // Bonus awal dipakai lebih dulu: masa perkenalan 20 kredit sebelum jatah harian 3/hari.
-  const bonusLimit = freeBonusCredits();
-  if (bonusLimit > 0) {
-    q.ensureUsage.run(userId, BONUS_PERIOD);
-    if (q.reserveCredit.run(cost, userId, BONUS_PERIOD, cost, bonusLimit).changes === 1) {
-      return { source: 'bonus', period: BONUS_PERIOD, cost };
+    if (need > 0 || !parts.length) {
+      db.exec('ROLLBACK');
+      open = false;
+      const err = new HttpError(402, cost > config.ai.creditsPerPrompt
+        ? `Prompt dengan gambar butuh ${cost} kredit dan kreditmu belum cukup. Kirim tanpa gambar, atau ${config.billing.enabled ? 'isi ulang kredit' : 'tunggu kredit terisi lagi besok'}.`
+        : config.billing.enabled
+        ? 'Kredit AI kamu habis. Kredit gratis terisi lagi besok pukul 00.00 WIB, atau berlangganan / isi ulang untuk lanjut sekarang.'
+        : 'Kredit AI gratis hari ini sudah habis. Terisi lagi besok pukul 00.00 WIB.');
+      err.code = 'no_credits';
+      throw err;
     }
+    db.exec('COMMIT');
+    open = false;
+  } catch (err) {
+    if (open) db.exec('ROLLBACK');
+    throw err;
   }
-  if (q.reserveCredit.run(cost, userId, period, cost, freeDailyCredits()).changes === 1) {
-    return { source: 'free', period, cost };
-  }
-  if (q.spendBalance.run(cost, userId, cost).changes === 1) {
-    return { source: 'purchased', period, cost };
-  }
-  const err = new HttpError(402, cost > config.ai.creditsPerPrompt
-    ? `Prompt dengan gambar butuh ${cost} kredit dan kreditmu belum cukup. Kirim tanpa gambar, atau ${config.billing.enabled ? 'isi ulang kredit' : 'tunggu kredit terisi lagi besok'}.`
-    : config.billing.enabled
-    ? 'Kredit AI kamu habis. Kredit gratis terisi lagi besok pukul 00.00 WIB, atau berlangganan / isi ulang untuk lanjut sekarang.'
-    : 'Kredit AI gratis hari ini sudah habis. Terisi lagi besok pukul 00.00 WIB.');
-  err.code = 'no_credits';
-  throw err;
+  const [first, ...more] = parts;
+  return more.length ? { ...first, more } : first;
 }
 
 export function refundCredits(userId, reservation) {
-  if (!reservation) return;
-  if (['free', 'plan', 'bonus'].includes(reservation.source)) q.refundCredit.run(reservation.cost, userId, reservation.period);
-  else q.addBalance.run(userId, reservation.cost);
+  if (!reservation?.cost) return;
+  const { more = [], ...first } = reservation;
+  for (const part of [first, ...more]) {
+    if (['free', 'plan', 'bonus'].includes(part.source)) q.refundCredit.run(part.cost, userId, part.period);
+    else q.addBalance.run(userId, part.cost);
+  }
 }
 
 // Tambah saldo / aktifkan langganan sekali per pembayaran; aman dipanggil berulang (webhook at-least-once + polling).

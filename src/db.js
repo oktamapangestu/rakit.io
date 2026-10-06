@@ -190,11 +190,12 @@ export const q = {
   touchUser: db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?'),
   deleteExpiredSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
 
-  ensureUsage: db.prepare('INSERT INTO ai_usage (user_id, period, used) VALUES (?, ?, 0) ON CONFLICT DO NOTHING'),
   usage: db.prepare('SELECT used FROM ai_usage WHERE user_id = ? AND period = ?'),
-  // Hanya berhasil (changes = 1) kalau kredit masih tersisa -> aman dari race condition.
-  reserveCredit: db.prepare('UPDATE ai_usage SET used = used + ? WHERE user_id = ? AND period = ? AND used + ? <= ?'),
   refundCredit: db.prepare('UPDATE ai_usage SET used = MAX(0, used - ?) WHERE user_id = ? AND period = ?'),
+  addUsage: db.prepare(`
+    INSERT INTO ai_usage (user_id, period, used) VALUES (?, ?, ?)
+    ON CONFLICT (user_id, period) DO UPDATE SET used = used + excluded.used
+  `),
   balance: db.prepare('SELECT balance FROM credit_balance WHERE user_id = ?'),
   spendBalance: db.prepare('UPDATE credit_balance SET balance = balance - ? WHERE user_id = ? AND balance >= ?'),
   addBalance: db.prepare(`

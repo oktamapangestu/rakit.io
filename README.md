@@ -172,6 +172,10 @@ otomatis, dan bisa diperpanjang kapan saja. Paket dibuka dari badge kredit AI at
   (Rp per 1 juta token, diisi owner).
 - Urutan pemakaian kredit: kuota langganan → kredit gratis harian → saldo kredit yang dibeli. Jadi pelanggan
   Unlimited yang mencapai batas harian tetap bisa memakai kredit gratis/belinya.
+- Bila satu sumber tidak cukup (mis. prompt bergambar 2 kredit, sisa gratis 1 + dibeli 1), sisanya diambil dari
+  sumber berikutnya dalam satu transaksi; saat gagal/dihentikan, tiap bagian dikembalikan ke sumbernya (kolom
+  `ai_messages.credit`: `{ source, period, cost, more: [...] }`).
+- Batas harian Unlimited menghitung **prompt**: prompt bergambar pun memakai 1 dari jatah hari itu.
 - **Perpanjang** paket yang sama: masa aktif ditambah 30 hari dari tanggal berakhir. **Upgrade** Pro → Unlimited:
   langsung aktif, sisa hari Pro dikonversi ke hari Unlimited sesuai harga. Downgrade ditolak selama paket lebih tinggi aktif.
 - **Bonus storage** berlaku untuk semua project milik pelanggan dan langsung aktif setelah pembayaran. Saat

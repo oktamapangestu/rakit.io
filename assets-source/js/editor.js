@@ -1544,14 +1544,19 @@
     }
   }
 
+  // Unlimited menghitung prompt, bukan kredit: selama jatah hari ini masih ada, prompt apa pun (dengan gambar
+  // pun) cukup memakai 1 dari jatah itu. Setelah habis, kredit biasa yang dipakai.
+  const unlimitedLeft = (c) => c?.plan?.id === 'unlimited' && c.plan.quotaRemaining > 0;
+  const canAfford = (c, cost) => unlimitedLeft(c) || c.remaining >= cost;
+
   function renderCredits() {
     const badge = $('#aiCredits');
     const c = ai.credits;
     renderPlanBadge(c?.plan ?? null);
     if (!c || !c.enabled) return badge.replaceChildren();
-    const empty = c.remaining < c.costPerPrompt;
+    const empty = !canAfford(c, c.costPerPrompt);
     const plan = c.plan;
-    const unlimited = plan?.id === 'unlimited' && plan.quotaRemaining > 0;
+    const unlimited = unlimitedLeft(c);
     badge.textContent = unlimited ? 'Unlimited' : `${c.remaining} kredit`;
     badge.classList.toggle('empty', empty);
     badge.classList.toggle('plan', Boolean(plan));
@@ -1600,7 +1605,7 @@
   function updateAiComposer() {
     const c = ai.credits;
     $('#aiAttach').hidden = !c?.enabled || !c.images;
-    const canSend = c?.enabled && c.remaining >= promptCost() && !ai.busy && !ai.applying;
+    const canSend = c?.enabled && canAfford(c, promptCost()) && !ai.busy && !ai.applying;
     $('#aiSend').disabled = !canSend || !$('#aiInput').value.trim();
     $('#aiInput').disabled = !c?.enabled;
   }

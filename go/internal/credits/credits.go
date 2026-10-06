@@ -9,6 +9,7 @@ package credits
 
 import (
 	"database/sql"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -139,53 +140,123 @@ func (s *Service) Info(userID int64) *Info {
 	return info
 }
 
-// Reservation: catatan pemotongan kredit, disimpan bersama job supaya kredit tetap bisa
-// dikembalikan walau server sempat restart.
-type Reservation struct {
+// Part: kredit yang dipotong dari satu sumber.
+type Part struct {
 	Source string `json:"source"` // plan | bonus | free | purchased
 	Period string `json:"period"`
 	Cost   int    `json:"cost"`
 }
 
-func (s *Service) ensureUsage(userID int64, period string) {
-	s.db.Exec("INSERT INTO ai_usage (user_id, period, used) VALUES (?, ?, 0) ON CONFLICT DO NOTHING", userID, period)
+// Reservation: catatan pemotongan kredit, disimpan bersama job supaya kredit tetap bisa
+// dikembalikan walau server sempat restart. Biaya bisa diambil dari beberapa sumber sekaligus
+// (mis. sisa 1 kredit gratis + 1 kredit dibeli untuk prompt bergambar): bagian pertama di field
+// utama — bentuk JSON lama tetap terbaca — dan sisanya di More.
+type Reservation struct {
+	Part
+	More []Part `json:"more,omitempty"`
 }
 
-// take hanya berhasil kalau kredit masih tersisa -> aman dari race condition.
-func (s *Service) take(userID int64, period string, cost, limit int) bool {
-	res, err := s.db.Exec("UPDATE ai_usage SET used = used + ? WHERE user_id = ? AND period = ? AND used + ? <= ?", cost, userID, period, cost, limit)
-	if err != nil {
-		return false
+// Parts: semua bagian reservasi.
+func (r *Reservation) Parts() []Part {
+	if r == nil || r.Cost <= 0 {
+		return nil
 	}
-	n, _ := res.RowsAffected()
-	return n == 1
+	return append([]Part{r.Part}, r.More...)
 }
 
-// Reserve memotong kredit sebelum memanggil AI.
+// Reserve memotong kredit sebelum memanggil AI, dari sumber berurutan: langganan → bonus → gratis →
+// dibeli. Bila satu sumber tidak cukup, sisanya diambil dari sumber berikutnya; semuanya dalam satu
+// transaksi (BEGIN IMMEDIATE), jadi kredit hanya terpotong bila totalnya cukup.
+// Unlimited menghitung prompt, bukan kredit: satu prompt (dengan gambar pun) = 1 dari batas harian.
 func (s *Service) Reserve(userID int64, cost int) (*Reservation, error) {
-	period := FreePeriod()
-	if q := planQuota(s.plans.Active(userID)); q != nil {
-		s.ensureUsage(userID, q.Key)
-		if s.take(userID, q.Key, cost, q.limit) {
-			return &Reservation{"plan", q.Key, cost}, nil
+	if cost <= 0 { // AI gratis (AI_CREDITS_PER_PROMPT=0): tidak ada yang dipotong
+		return &Reservation{}, nil
+	}
+	// Pengaturan dibaca sebelum transaksi, supaya kunci tulis dipegang sesingkat mungkin.
+	plan := s.plans.Active(userID)
+	bonusLimit, freeLimit, period := s.plans.FreeBonusCredits(), s.plans.FreeDailyCredits(), FreePeriod()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var parts []Part
+	need := cost
+	// fromUsage memotong sebanyak mungkin (maks. need, atau `whole` untuk satu prompt Unlimited) dari
+	// baris ai_usage yang dibatasi limit.
+	fromUsage := func(source, period string, limit, whole int) error {
+		if need <= 0 || limit <= 0 {
+			return nil
+		}
+		var used int
+		if err := tx.QueryRow("SELECT used FROM ai_usage WHERE user_id = ? AND period = ?", userID, period).Scan(&used); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		n := min(need, limit-used)
+		if whole > 0 {
+			if limit-used < whole {
+				return nil
+			}
+			n = whole
+		}
+		if n <= 0 {
+			return nil
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO ai_usage (user_id, period, used) VALUES (?, ?, ?)
+			ON CONFLICT (user_id, period) DO UPDATE SET used = used + excluded.used`, userID, period, n); err != nil {
+			return err
+		}
+		parts = append(parts, Part{source, period, n})
+		if whole > 0 {
+			need = 0
+		} else {
+			need -= n
+		}
+		return nil
+	}
+
+	if plan != nil {
+		q := planQuota(plan)
+		whole := 0
+		if plan.ID == "unlimited" {
+			whole = 1
+		}
+		if err := fromUsage("plan", q.Key, q.limit, whole); err != nil {
+			return nil, err
 		}
 	}
-	s.ensureUsage(userID, period)
 	// Bonus awal dipakai lebih dulu: masa perkenalan sebelum jatah harian.
-	if bonusLimit := s.plans.FreeBonusCredits(); bonusLimit > 0 {
-		s.ensureUsage(userID, BonusPeriod)
-		if s.take(userID, BonusPeriod, cost, bonusLimit) {
-			return &Reservation{"bonus", BonusPeriod, cost}, nil
+	if err := fromUsage("bonus", BonusPeriod, bonusLimit, 0); err != nil {
+		return nil, err
+	}
+	if err := fromUsage("free", period, freeLimit, 0); err != nil {
+		return nil, err
+	}
+	if need > 0 {
+		var balance int
+		if err := tx.QueryRow("SELECT balance FROM credit_balance WHERE user_id = ?", userID).Scan(&balance); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		if n := min(need, balance); n > 0 {
+			if _, err := tx.Exec("UPDATE credit_balance SET balance = balance - ? WHERE user_id = ?", n, userID); err != nil {
+				return nil, err
+			}
+			parts = append(parts, Part{"purchased", period, n})
+			need -= n
 		}
 	}
-	if s.take(userID, period, cost, s.plans.FreeDailyCredits()) {
-		return &Reservation{"free", period, cost}, nil
+	if need > 0 || len(parts) == 0 {
+		return nil, s.noCredits(cost)
 	}
-	if res, err := s.db.Exec("UPDATE credit_balance SET balance = balance - ? WHERE user_id = ? AND balance >= ?", cost, userID, cost); err == nil {
-		if n, _ := res.RowsAffected(); n == 1 {
-			return &Reservation{"purchased", period, cost}, nil
-		}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
+	return &Reservation{Part: parts[0], More: parts[1:]}, nil
+}
+
+func (s *Service) noCredits(cost int) error {
 	billing := s.cfg.Billing.Enabled
 	var message string
 	switch {
@@ -200,18 +271,18 @@ func (s *Service) Reserve(userID int64, cost int) (*Reservation, error) {
 	default:
 		message = "Kredit AI gratis hari ini sudah habis. Terisi lagi besok pukul 00.00 WIB."
 	}
-	return nil, &httpx.Error{Status: 402, Message: message, Code: "no_credits"}
+	return &httpx.Error{Status: 402, Message: message, Code: "no_credits"}
 }
 
+// Refund mengembalikan setiap bagian reservasi ke sumbernya.
 func (s *Service) Refund(userID int64, r *Reservation) {
-	if r == nil {
-		return
-	}
-	switch r.Source {
-	case "free", "plan", "bonus":
-		s.db.Exec("UPDATE ai_usage SET used = MAX(0, used - ?) WHERE user_id = ? AND period = ?", r.Cost, userID, r.Period)
-	default:
-		addBalance(s.db, userID, r.Cost)
+	for _, p := range r.Parts() {
+		switch p.Source {
+		case "free", "plan", "bonus":
+			s.db.Exec("UPDATE ai_usage SET used = MAX(0, used - ?) WHERE user_id = ? AND period = ?", p.Cost, userID, p.Period)
+		default:
+			addBalance(s.db, userID, p.Cost)
+		}
 	}
 }
 

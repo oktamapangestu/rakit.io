@@ -142,6 +142,30 @@ test('prompt dengan gambar memakai 2 kredit; ditolak bila sisa kredit kurang', a
   assert.equal((await user.credits()).remaining, 1);
 });
 
+test('prompt bergambar memakai gabungan sumber bila satu sumber tidak cukup; gagal → tiap sumber dikembalikan', async () => {
+  const user = await stack.register();
+  await user.prompt('pakai 1 bonus'); // bonus 1 + gratis 2
+  stack.ai.script.push({ text: 'Image 1: mockup.' }, { status: 500 });
+  const failed = await user.prompt('gambar gagal', { images: [TINY_PNG], thumbs: [TINY_PNG] });
+  assert.equal(failed.started.status, 201, 'sisa 3 kredit dari dua sumber cukup untuk 2 kredit');
+  assert.equal(failed.started.body.credits.bonusRemaining, 0);
+  assert.equal(failed.started.body.credits.freeRemaining, 1);
+  assert.equal(failed.final.type, 'error');
+  assert.equal(failed.final.credits.bonusRemaining, 1, 'bagian bonus dikembalikan');
+  assert.equal(failed.final.credits.freeRemaining, 2, 'bagian gratis dikembalikan');
+
+  // Gratis tinggal 1 + saldo dibeli 1: total 2 cukup untuk prompt bergambar.
+  await user.prompt('pakai bonus terakhir');
+  await user.prompt('pakai 1 gratis');
+  stack.db().prepare('INSERT INTO credit_balance (user_id, balance) VALUES (?, 1)').run(user.userId);
+  assert.equal((await user.credits()).remaining, 2);
+  stack.ai.script.push({ text: 'Image 1: mockup.' }, { text: 'Rencana.' });
+  const ok = await user.prompt('gambar dari dua sumber', { images: [TINY_PNG], thumbs: [TINY_PNG] });
+  assert.equal(ok.started.status, 201);
+  assert.equal(ok.final.type, 'done');
+  assert.deepEqual([ok.final.credits.freeRemaining, ok.final.credits.purchased, ok.final.credits.remaining], [0, 0, 0]);
+});
+
 test('prompt tidak valid ditolak tanpa memotong kredit', async () => {
   const user = await stack.register();
   assert.equal((await user.startPrompt('   ')).status, 400);
