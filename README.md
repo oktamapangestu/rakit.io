@@ -299,6 +299,35 @@ menampilkannya sebagai teks abu-abu: **Tab** menerima, **Esc** atau lanjut menge
 - Yang dikirim: path file, maks. 6.000 karakter sebelum kursor dan 2.000 sesudahnya.
 - Bisa dimatikan di menu avatar → **Pengaturan** → "Prediksi kode otomatis (AI)" (disimpan per browser).
 
+## Baca Alur Kode
+
+Tombol **Baca Alur Kode** di atas editor kode (file .html, .css, .js) membuka panel di samping editor. AI membaca file itu
+beserta file yang terhubung, lalu menjelaskan alurnya **berurutan seperti kode berjalan**, bukan urut baris. Hanya di server Go
+(`go/internal/ai/explain.go`).
+
+- **Langkah demi langkah**: tiap langkah punya judul, jenis (mulai, keputusan, perulangan, menunggu aksi, permintaan, …),
+  baris yang terlibat, penjelasan, contoh dengan nilai nyata, dan istilah penting (klik untuk melihat artinya).
+- **Interaktif**: klik langkah → barisnya disorot di editor (nomor langkah muncul di awal barisnya); klik baris di editor →
+  langkahnya dibuka. Tombol ‹ › dan ▶ (putar otomatis tiap 6 detik), atau tombol panah saat panel difokus.
+- **Rujukan ke file lain**: langkah bisa merujuk elemen HTML, halaman, fungsi `/api/fn/…`, atau class CSS di file lain; klik untuk
+  membuka file itu di baris yang dirujuk, lalu **← Kembali** ke langkah semula. Panel mengikuti file aktif, jadi alur file
+  rujukan bisa langsung dibaca juga.
+- **Diagram alur** digambar dari langkah-langkahnya (Mermaid, dibuat di browser, bukan oleh AI); klik kotaknya untuk pindah langkah.
+- **Catatan** (bug, perlu dicek, saran) dan **kecepatan kode**; tulisan "baris 12" di penjelasan bisa diklik.
+- **Tanya AI** tentang langkah yang sedang dibuka (jawaban singkat, mengingat 6 tanya-jawab terakhir).
+- Isi yang dijelaskan adalah isi editor (perubahan yang belum disimpan ikut). Hasil disimpan per file beserta hash isinya
+  (tabel `code_explanations`): membuka ulang file yang sama tidak bertanya ke AI; bila file berubah, panel memberi tanda dan
+  tombol **Perbarui**.
+- Gratis (tidak memakai kredit), dibatasi `AI_EXPLAIN_DAILY_LIMIT` permintaan per akun per hari (default 30, termasuk tanya
+  lanjutan; `0` = fitur mati); satu permintaan berjalan per akun. Pemakaian & token di tabel `ai_explain_usage`. Memakai model
+  utama lewat antrean AI (dengan model cadangan).
+- Yang dikirim ke AI: daftar file project, file yang dijelaskan (bernomor baris, maks. 120 KB), hingga 6 file terkait (yang
+  disebut file ini atau yang menyebut file ini, termasuk `functions/<nama>.js` ↔ `/api/fn/<nama>`), dan skema tabel bila file
+  memakai `/api/db`.
+
+API: `GET /api/ai/explain?path=` (tersimpan + sisa kuota), `POST /api/ai/explain` `{ path, content, force? }`,
+`POST /api/ai/explain/ask` `{ path, content, step, question, history }`.
+
 ## Diagram buatan AI
 
 Tab **Diagram** di editor (di samping Data) menampilkan diagram project aktif yang **digambar AI** (kode Mermaid)

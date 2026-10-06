@@ -66,6 +66,8 @@ type AI struct {
 	// utama) dan batas permintaan gratis per akun per hari (0 = fitur mati).
 	CompleteModel      string
 	CompleteDailyLimit int
+	// Baca Alur Kode (internal/ai/explain.go): gratis, dibatasi permintaan per akun per hari (0 = fitur mati).
+	ExplainDailyLimit int
 }
 
 type CreditPackage struct {
@@ -149,6 +151,7 @@ func (c *Config) loadServices() {
 		ImagePromptCredits:  max(1, envInt("AI_IMAGE_PROMPT_CREDITS", 2)),
 		CompleteModel:       os.Getenv("AI_COMPLETE_MODEL"),
 		CompleteDailyLimit:  max(0, envIntOr("AI_COMPLETE_DAILY_LIMIT", 500)),
+		ExplainDailyLimit:   max(0, envIntOr("AI_EXPLAIN_DAILY_LIMIT", 30)),
 		MaxImages:           3,
 	}
 	c.AI.Enabled = c.AI.APIKey != "" && c.AI.BaseURL != ""

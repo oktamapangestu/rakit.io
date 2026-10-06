@@ -38,6 +38,7 @@
     gear: 'M9.1 1l.4 1.9 1 .4 1.6-1.1 1.6 1.6-1.1 1.6.4 1 1.9.4v2.3l-1.9.4-.4 1 1.1 1.6-1.6 1.6-1.6-1.1-1 .4-.4 1.9H6.9l-.4-1.9-1-.4-1.6 1.1-1.6-1.6 1.1-1.6-.4-1L1 9.1V6.9l1.9-.4.4-1-1.1-1.6 1.6-1.6 1.6 1.1 1-.4L6.9 1zM8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5',
     image: 'M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 2zM2 3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v7.3l-3-3-2.5 2.5-3-3L2 11.8zM10.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3',
     folderOpen: 'M1.5 14h11l.5-.4 2.6-6.9-.5-.7H14V4.5l-.5-.5H7.7l-.9-.9-.3-.1H1.5l-.5.5v10zM2 3h4.3l.8.8.4.2H13v2H4l-.5.3L2 10.4zm10.1 10H2.2l2.2-6h9.9z',
+    flow: 'M2 1.5h5l.5.5v3l-.5.5H5v2h3.5V7l.5-.5h5l.5.5v3l-.5.5H9l-.5-.5v-.5H5v2.5h2l.5.5v2l-.5.5H2l-.5-.5v-2l.5-.5h2v-6H2l-.5-.5V2zm.5 1v2h4v-2zm7 5v2h4v-2zm-7 5v1h4v-1z',
   };
 
   const storage = {
@@ -294,6 +295,7 @@
     renderBreadcrumbs();
     updateStatus();
     updateAiComposer();
+    flowFollow();
   }
 
   function renderTabs() {
@@ -370,6 +372,7 @@
   // ---------- Simpan ----------
   function onContentChange(path) {
     renderTabs();
+    flowContentChanged(path);
     const row = $(`#tree .row[data-path="${CSS.escape(path)}"]`);
     row?.classList.toggle('dirty', isDirty(path));
     if (isDirty(path)) setSaveStatus('Belum disimpan', 'dirty');
@@ -3448,6 +3451,585 @@
     bindCanvasGestures();
   }
 
+  // ---------- Baca Alur Kode ----------
+  // Panel di samping editor kode: AI menjelaskan alur file yang sedang dibuka langkah demi langkah. Klik langkah →
+  // barisnya disorot di editor; klik baris di editor → langkahnya dibuka. Rujukan ke file lain membuka file itu
+  // (dengan tombol kembali). Gratis dengan batas harian; hasil disimpan server per file + hash isi.
+  const flow = {
+    open: false,
+    path: null, // file yang sedang ditampilkan panel
+    saved: null, // { explanation, hash, createdAt } dari server
+    hash: null, // hash isi editor sekarang
+    step: 0, // indeks langkah aktif
+    loading: null, // path yang sedang dijelaskan AI
+    remaining: null,
+    limit: null,
+    back: [], // [{ path, step }] untuk tombol "Kembali"
+    chats: new Map(), // path -> [{ q, a }]
+    asking: false,
+    playTimer: null,
+    seq: 0,
+    pending: null, // { path, step }: langkah yang dibuka setelah penjelasan file itu dimuat (tombol Kembali)
+    decoIds: new Map(), // path -> id dekorasi Monaco di model file itu
+    showChart: storage.get('rakit.flowChart', true),
+  };
+  const FLOW_EXT = ['html', 'css', 'js'];
+  const FLOW_KINDS = {
+    start: 'Mulai', input: 'Masukan', process: 'Proses', decision: 'Keputusan', loop: 'Perulangan',
+    function: 'Fungsi', event: 'Menunggu aksi', request: 'Permintaan', output: 'Hasil', end: 'Selesai',
+  };
+  const FLOW_NOTE = { bug: ['✕', 'Bug'], warn: ['!', 'Perlu dicek'], tip: ['✦', 'Saran'], info: ['i', 'Info'] };
+  const canFlow = (path) => Boolean(path) && FLOW_EXT.includes(extOf(path));
+
+  async function sha256(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  const flowStale = () => Boolean(flow.saved && flow.hash && flow.saved.hash !== flow.hash);
+  const flowSteps = () => flow.saved?.explanation?.steps ?? [];
+  const lineLabel = (lines) => lines.map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`)).join(', ');
+
+  function updateFlowButton() {
+    const btn = $('#flowBtn');
+    btn.hidden = !canFlow(state.active);
+    btn.classList.toggle('active', flow.open);
+    btn.setAttribute('aria-pressed', String(flow.open));
+  }
+
+  function toggleFlow(force = !flow.open) {
+    flow.open = force;
+    $('#flowPanel').hidden = !flow.open;
+    $('#codeView').classList.toggle('with-flow', flow.open);
+    storage.set('rakit.flowOpen', flow.open);
+    stopFlowPlay();
+    if (flow.open) flowFollow(true);
+    else applyFlowHighlight();
+    updateFlowButton();
+  }
+
+  // Panel mengikuti file aktif: muat penjelasan tersimpan (tanpa AI) bila ganti file.
+  async function flowFollow(force = false) {
+    updateFlowButton();
+    if (!flow.open) return;
+    const path = state.active;
+    if (!canFlow(path)) {
+      flow.path = null;
+      flow.saved = null;
+      renderFlow();
+      return;
+    }
+    if (path === flow.path && !force) {
+      applyFlowHighlight();
+      return;
+    }
+    const seq = ++flow.seq;
+    let want = null;
+    if (path !== flow.path) {
+      flow.path = path;
+      flow.saved = null;
+      flow.step = 0;
+      if (flow.pending?.path === path) want = flow.pending.step;
+      flow.pending = null;
+    }
+    flow.hash = await sha256(state.models.get(path)?.getValue() ?? '');
+    renderFlow();
+    try {
+      const out = await api('GET', `/api/ai/explain?path=${encodeURIComponent(path)}`);
+      if (seq !== flow.seq) return;
+      flow.saved = out.saved;
+      flow.remaining = out.remaining;
+      flow.limit = out.limit;
+      if (want != null) flow.step = want;
+      flow.step = Math.min(flow.step, Math.max(0, flowSteps().length - 1));
+    } catch (err) {
+      if (seq !== flow.seq) return;
+      toast(err.message, 'error');
+    }
+    renderFlow();
+  }
+
+  let flowStaleTimer;
+  function flowContentChanged(path) {
+    if (!flow.open || path !== flow.path) return;
+    clearTimeout(flowStaleTimer);
+    flowStaleTimer = setTimeout(async () => {
+      const was = flowStale();
+      flow.hash = await sha256(state.models.get(path)?.getValue() ?? '');
+      if (was !== flowStale()) renderFlow();
+    }, 400);
+  }
+
+  async function explainFlow(force = false) {
+    const path = flow.path;
+    const model = state.models.get(path);
+    if (!model || flow.loading) return;
+    const content = model.getValue();
+    flow.loading = path;
+    stopFlowPlay();
+    renderFlow();
+    try {
+      const out = await api('POST', '/api/ai/explain', { path, content, force });
+      flow.remaining = out.remaining;
+      flow.limit = out.limit;
+      if (flow.path === path) {
+        flow.saved = out.saved;
+        flow.hash = out.saved.hash;
+        flow.step = 0;
+        flow.chats.delete(path);
+      }
+      if (out.cached) toast('Penjelasan untuk isi file ini sudah ada — ditampilkan tanpa memakai jatah.');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      flow.loading = null;
+      if (flow.path === path) renderFlow();
+    }
+  }
+
+  // ---------- Sorotan di editor ----------
+  // Dekorasi dipasang langsung di model file (bukan di editor), supaya tidak tertinggal saat ganti tab.
+  function setFlowDecorations(marks) {
+    for (const [p, ids] of flow.decoIds) {
+      const m = state.models.get(p);
+      if (m && !m.isDisposed()) m.deltaDecorations(ids, []);
+    }
+    flow.decoIds.clear();
+    const model = editor?.getModel();
+    if (model && marks.length) flow.decoIds.set(state.active, model.deltaDecorations([], marks));
+  }
+
+  function flashLines(a, b) {
+    const model = editor.getModel();
+    if (!model) return;
+    const ids = model.deltaDecorations([], [{ range: new monaco.Range(a, 1, b, 1), options: { isWholeLine: true, className: 'flow-flash' } }]);
+    editor.revealLinesInCenterIfOutsideViewport(a, b, monaco.editor.ScrollType.Smooth);
+    setTimeout(() => { if (!model.isDisposed()) model.deltaDecorations(ids, []); }, 2400);
+  }
+
+  function applyFlowHighlight({ reveal = false } = {}) {
+    if (!editor || !monaco) return;
+    const steps = flowSteps();
+    if (!flow.open || !steps.length || state.active !== flow.path) return setFlowDecorations([]);
+    const active = steps[flow.step];
+    const marks = [];
+    steps.forEach((s, i) => {
+      for (const [a, b] of s.lines) {
+        const on = i === flow.step;
+        marks.push({
+          range: new monaco.Range(a, 1, b, 1),
+          options: {
+            isWholeLine: true,
+            className: on ? 'flow-line' : undefined,
+            linesDecorationsClassName: on ? 'flow-gutter active' : 'flow-gutter',
+            overviewRuler: on ? { color: '#d6a01e', position: monaco.editor.OverviewRulerLane.Center } : undefined,
+          },
+        });
+      }
+      const first = s.lines[0];
+      if (first) {
+        marks.push({
+          range: new monaco.Range(first[0], 1, first[0], 1),
+          options: { before: { content: ` ${s.id} `, inlineClassName: i === flow.step ? 'flow-badge active' : 'flow-badge' } },
+        });
+      }
+    });
+    setFlowDecorations(marks);
+    if (reveal && active?.lines.length) {
+      const [a] = active.lines[0];
+      const b = active.lines.at(-1)[1];
+      editor.revealLinesInCenterIfOutsideViewport(a, b, monaco.editor.ScrollType.Smooth);
+    }
+  }
+
+  // Klik baris di editor → langkah yang mencakup baris itu (rentang terkecil) dibuka di panel.
+  function flowSyncFromCursor(e) {
+    if (!flow.open || e.source !== 'mouse' || state.active !== flow.path || flowStale()) return;
+    const line = e.position.lineNumber;
+    let best = -1;
+    let size = Infinity;
+    flowSteps().forEach((s, i) => {
+      for (const [a, b] of s.lines) {
+        if (line >= a && line <= b && b - a < size) {
+          best = i;
+          size = b - a;
+        }
+      }
+    });
+    if (best >= 0 && best !== flow.step) selectFlowStep(best, { reveal: false });
+  }
+
+  function selectFlowStep(i, { reveal = true } = {}) {
+    const steps = flowSteps();
+    if (!steps.length) return;
+    flow.step = Math.max(0, Math.min(steps.length - 1, i));
+    if (state.active !== flow.path) {
+      // Kembali ke file yang dijelaskan (activate → flowFollow memasang sorotan lagi).
+      flow.back = flow.back.filter((b) => b.path !== flow.path);
+      openFile(flow.path).then(() => applyFlowHighlight({ reveal }));
+    } else {
+      applyFlowHighlight({ reveal });
+    }
+    renderFlowSteps();
+    renderFlowPlayer();
+    highlightFlowChart();
+    $(`#flowPanel .flow-step[data-i="${flow.step}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function stopFlowPlay() {
+    clearInterval(flow.playTimer);
+    flow.playTimer = null;
+    $('#flowPanel .flow-play')?.classList.remove('on');
+  }
+
+  function toggleFlowPlay() {
+    if (flow.playTimer) return stopFlowPlay();
+    if (flow.step >= flowSteps().length - 1) selectFlowStep(0);
+    flow.playTimer = setInterval(() => {
+      if (flow.step >= flowSteps().length - 1) return stopFlowPlay();
+      selectFlowStep(flow.step + 1);
+    }, 6000);
+    renderFlowPlayer();
+  }
+
+  // Buka file rujukan; baris yang dirujuk disorot sebentar. Tombol "Kembali" mengembalikan ke langkah ini.
+  async function openFlowRef(ref) {
+    if (!state.entries.some((e) => e.path === ref.path)) return toast(`${ref.path} tidak ada lagi di project`, 'error');
+    stopFlowPlay();
+    if (isImage(ref.path)) return openImage(ref.path);
+    if (ref.path !== flow.path && flow.path) flow.back = [...flow.back, { path: flow.path, step: flow.step }].slice(-20);
+    await openFile(ref.path);
+    if (ref.line && editor && state.active === ref.path) {
+      const total = editor.getModel().getLineCount();
+      const line = Math.min(ref.line, total);
+      editor.setPosition({ lineNumber: line, column: 1 });
+      flashLines(line, line);
+    }
+  }
+
+  async function flowGoBack() {
+    const prev = flow.back.pop();
+    if (!prev) return;
+    if (!state.entries.some((e) => e.path === prev.path)) return renderFlow();
+    if (flow.path === prev.path) return selectFlowStep(prev.step);
+    flow.pending = prev; // flowFollow membuka langkah ini setelah penjelasannya dimuat
+    await openFile(prev.path);
+  }
+
+  // ---------- Diagram alur (Mermaid dari langkah, bukan dari AI — jadi selalu valid) ----------
+  function flowChartCode(steps) {
+    const label = (s) => `${s.id}. ${s.title}`.replace(/["`]/g, "'").replace(/[<>#;{}[\]|]/g, ' ').replace(/\s+/g, ' ').trim();
+    const shape = (s) => {
+      const t = label(s);
+      switch (s.kind) {
+        case 'start': case 'end': return `(["${t}"])`;
+        case 'decision': return `{"${t}"}`;
+        case 'loop': return `{{"${t}"}}`;
+        case 'function': return `[["${t}"]]`;
+        case 'input': case 'output': case 'request': return `[/"${t}"/]`;
+        case 'event': return `>"${t}"]`;
+        default: return `["${t}"]`;
+      }
+    };
+    const lines = ['flowchart TD'];
+    steps.forEach((s) => lines.push(`  S${s.id}${shape(s)}`));
+    steps.forEach((s, i) => {
+      if (s.next.length) {
+        for (const e of s.next) {
+          const text = e.label.replace(/["`|<>#;]/g, ' ').trim();
+          lines.push(text ? `  S${s.id} -->|"${text}"| S${e.to}` : `  S${s.id} --> S${e.to}`);
+        }
+      } else if (i < steps.length - 1 && s.kind !== 'end') {
+        lines.push(`  S${s.id} --> S${steps[i + 1].id}`);
+      }
+    });
+    return lines.join('\n');
+  }
+
+  async function renderFlowChart() {
+    const box = $('#flowPanel .flow-chart-box');
+    const steps = flowSteps();
+    if (!box || !steps.length || !flow.showChart) return;
+    const seq = flow.seq;
+    const id = `flowchart-render-${Date.now()}`;
+    box.replaceChildren(h('div', { class: 'flow-muted' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), ' Menggambar diagram…'));
+    try {
+      const mermaid = await loadMermaid();
+      const { svg: markup } = await mermaid.render(id, flowChartCode(steps));
+      if (seq !== flow.seq || !box.isConnected) return;
+      const svgEl = new DOMParser().parseFromString(markup, 'text/html').querySelector('svg');
+      if (!svgEl) throw new Error('Mermaid tidak menghasilkan SVG');
+      const imported = document.importNode(svgEl, true);
+      const vb = imported.viewBox?.baseVal;
+      Object.assign(imported.style, { width: `${vb?.width || 300}px`, maxWidth: '100%', height: 'auto' });
+      imported.querySelectorAll('g.node').forEach((node) => {
+        const m = node.id.match(/flowchart-S(\d+)-/);
+        if (!m) return;
+        node.dataset.step = m[1];
+        node.style.cursor = 'pointer';
+        node.addEventListener('click', () => selectFlowStep(Number(m[1]) - 1));
+      });
+      box.replaceChildren(imported);
+      highlightFlowChart();
+    } catch (err) {
+      console.error(err);
+      box.replaceChildren(h('div', { class: 'flow-muted' }, 'Diagram alur tidak bisa digambar untuk file ini.'));
+    } finally {
+      ['', 'd', 'i'].forEach((p) => {
+        const el = document.getElementById(`${p}${id}`);
+        if (el && !box.contains(el)) el.remove();
+      });
+    }
+  }
+
+  function highlightFlowChart() {
+    $('#flowPanel .flow-chart-box')?.querySelectorAll('g.node').forEach((node) => {
+      node.classList.toggle('flow-node-active', Number(node.dataset.step) === flow.step + 1);
+    });
+  }
+
+  // ---------- Tampilan panel ----------
+  function flowRefChip(ref, { compact = false } = {}) {
+    return h('button', {
+      type: 'button', class: 'flow-ref', title: ref.note ? `${ref.note} — buka ${ref.path}` : `Buka ${ref.path}`,
+      onclick: () => openFlowRef(ref),
+    },
+    fileIcon({ type: 'file', path: ref.path }),
+    h('span', { class: 'flow-ref-path' }, `${ref.path}${ref.line ? `:${ref.line}` : ''}`),
+    !compact && ref.note ? h('span', { class: 'flow-ref-note' }, ref.note) : null);
+  }
+
+  // "baris 12" / "baris 12–20" di jawaban AI → bisa diklik untuk menyorot baris itu.
+  function linkifyLines(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const parts = node.textContent.split(/(baris\s+\d+(?:\s*[-–]\s*\d+)?)/gi);
+      if (parts.length < 2) continue;
+      node.replaceWith(...parts.map((part) => {
+        const m = part.match(/^baris\s+(\d+)(?:\s*[-–]\s*(\d+))?$/i);
+        if (!m) return part;
+        return h('button', { type: 'button', class: 'flow-line-link', onclick: () => flashFlowLines(Number(m[1]), Number(m[2] || m[1])) }, part);
+      }));
+    }
+    return root;
+  }
+
+  async function flashFlowLines(a, b) {
+    if (state.active !== flow.path) await openFile(flow.path);
+    const total = editor.getModel()?.getLineCount() ?? 0;
+    if (!total) return;
+    a = Math.min(Math.max(1, a), total);
+    b = Math.min(Math.max(a, b), total);
+    flashLines(a, b);
+  }
+
+  function renderFlowPlayer() {
+    const bar = $('#flowPanel .flow-player');
+    const steps = flowSteps();
+    if (!bar || !steps.length) return;
+    const s = steps[flow.step];
+    bar.replaceChildren(
+      h('button', { type: 'button', class: 'icon-btn', title: 'Langkah sebelumnya (←)', disabled: flow.step === 0, onclick: () => { stopFlowPlay(); selectFlowStep(flow.step - 1); } }, '‹'),
+      h('div', { class: 'flow-player-label' },
+        h('strong', {}, `Langkah ${flow.step + 1} dari ${steps.length}`),
+        h('span', {}, s.title)),
+      h('button', { type: 'button', class: `flow-play${flow.playTimer ? ' on' : ''}`, title: flow.playTimer ? 'Berhenti' : 'Putar otomatis (pindah tiap 6 detik)', onclick: toggleFlowPlay },
+        flow.playTimer ? '❚❚' : '▶'),
+      h('button', { type: 'button', class: 'icon-btn', title: 'Langkah berikutnya (→)', disabled: flow.step === steps.length - 1, onclick: () => { stopFlowPlay(); selectFlowStep(flow.step + 1); } }, '›'),
+      h('div', { class: 'flow-progress' }, h('i', { style: `width:${((flow.step + 1) / steps.length) * 100}%` })),
+    );
+  }
+
+  function renderFlowSteps() {
+    const list = $('#flowPanel .flow-steps');
+    if (!list) return;
+    const steps = flowSteps();
+    const byId = new Map(steps.map((s) => [s.id, s]));
+    list.replaceChildren(...steps.map((s, i) => {
+      const on = i === flow.step;
+      const branches = s.next.filter((e) => e.label || e.to !== s.id + 1);
+      return h('li', { class: `flow-step kind-${s.kind}${on ? ' active' : ''}`, dataset: { i: String(i) } },
+        h('button', { type: 'button', class: 'flow-step-head', 'aria-expanded': String(on), onclick: () => { stopFlowPlay(); selectFlowStep(i); } },
+          h('span', { class: 'flow-num' }, String(s.id)),
+          h('span', { class: 'flow-step-title' }, s.title),
+          s.lines.length ? h('span', { class: 'flow-lines', title: 'Baris di file ini' }, `baris ${lineLabel(s.lines)}`) : null),
+        on ? h('div', { class: 'flow-step-body' },
+          h('span', { class: 'flow-kind' }, FLOW_KINDS[s.kind] ?? s.kind),
+          linkifyLines(renderMarkdown(s.explain || '')),
+          s.example ? h('div', { class: 'flow-example' }, h('b', {}, 'Contoh'), linkifyLines(renderMarkdown(s.example))) : null,
+          s.terms.length ? h('div', { class: 'flow-terms' }, s.terms.map((t) => h('details', { class: 'flow-term' },
+            h('summary', {}, t.term), h('p', {}, t.meaning)))) : null,
+          s.refs.length ? h('div', { class: 'flow-refs' }, h('span', { class: 'flow-sub' }, 'Terhubung ke'), s.refs.map((r) => flowRefChip(r))) : null,
+          branches.length ? h('div', { class: 'flow-next' }, h('span', { class: 'flow-sub' }, 'Lalu'),
+            branches.map((e) => {
+              const target = byId.get(e.to);
+              return target ? h('button', { type: 'button', class: 'flow-branch', onclick: () => { stopFlowPlay(); selectFlowStep(steps.indexOf(target)); } },
+                e.label ? h('em', {}, e.label) : null, `→ ${target.id}. ${target.title}`) : null;
+            })) : null) : null);
+    }));
+  }
+
+  function renderFlowAsk() {
+    const box = $('#flowPanel .flow-chat');
+    if (!box) return;
+    const chat = flow.chats.get(flow.path) ?? [];
+    box.replaceChildren(...chat.map((c) => h('div', { class: 'flow-qa' },
+      h('p', { class: 'flow-q' }, c.q),
+      c.a ? linkifyLines(renderMarkdown(c.a)) : h('div', { class: 'flow-muted' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), ' AI sedang menjawab…'))));
+    box.lastElementChild?.scrollIntoView({ block: 'nearest' });
+  }
+
+  async function askFlow(input) {
+    const question = input.value.trim();
+    const path = flow.path;
+    const model = state.models.get(path);
+    if (!question || !model || flow.asking) return;
+    const chat = flow.chats.get(path) ?? [];
+    flow.chats.set(path, chat);
+    const history = chat.filter((c) => c.a).slice(-6);
+    const entry = { q: question, a: '' };
+    chat.push(entry);
+    input.value = '';
+    flow.asking = true;
+    renderFlowAsk();
+    try {
+      const out = await api('POST', '/api/ai/explain/ask', {
+        path, content: model.getValue(), step: flowStale() ? 0 : flow.step + 1, question, history,
+      });
+      entry.a = out.answer;
+      flow.remaining = out.remaining;
+    } catch (err) {
+      chat.splice(chat.indexOf(entry), 1);
+      input.value = question;
+      toast(err.message, 'error');
+    } finally {
+      flow.asking = false;
+      if (flow.path === path) {
+        renderFlowAsk();
+        renderFlowQuota();
+      }
+    }
+  }
+
+  function renderFlowQuota() {
+    const el = $('#flowPanel .flow-quota');
+    if (el && flow.limit) el.textContent = `Gratis · sisa ${flow.remaining} dari ${flow.limit} hari ini`;
+  }
+
+  function flowLoadingView(name) {
+    return h('div', { class: 'flow-empty' },
+      h('div', { class: 'flow-skeleton' }, [1, 2, 3, 4].map(() => h('i'))),
+      h('p', {}, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), ` AI sedang membaca alur ${name}…`),
+      h('p', { class: 'flow-muted' }, 'Biasanya 20–60 detik. Kamu boleh lanjut membaca kode sambil menunggu.'));
+  }
+
+  function renderFlow() {
+    const panel = $('#flowPanel');
+    if (!flow.open) return;
+    stopFlowPlay();
+    const path = flow.path;
+    const ex = flow.saved?.explanation;
+    const back = flow.back.at(-1);
+    const head = h('div', { class: 'flow-head' },
+      h('span', { class: 'flow-title' }, svg(ICON.flow), 'Baca Alur Kode'),
+      h('span', { class: 'flow-file' }, path ? baseName(path) : ''),
+      ex ? h('button', { type: 'button', class: 'icon-btn', title: 'Jelaskan ulang dengan AI', disabled: Boolean(flow.loading), onclick: () => explainFlow(true) }, svg(ICON.refresh)) : null,
+      h('button', { type: 'button', class: 'icon-btn', title: 'Perlebar panel', onclick: () => panel.classList.toggle('wide') }, '⤢'),
+      h('button', { type: 'button', class: 'icon-btn', title: 'Tutup', onclick: () => toggleFlow(false) }, svg(ICON.close)));
+    const backBar = back ? h('button', { type: 'button', class: 'flow-back', onclick: flowGoBack }, `← Kembali ke ${baseName(back.path)} · langkah ${back.step + 1}`) : null;
+
+    if (!path) {
+      panel.replaceChildren(head, backBar, h('div', { class: 'flow-empty' },
+        h('p', {}, 'Buka file .html, .css, atau .js untuk membaca alurnya.')));
+      return applyFlowHighlight();
+    }
+    if (flow.loading === path) {
+      panel.replaceChildren(head, backBar, flowLoadingView(baseName(path)));
+      return applyFlowHighlight();
+    }
+    if (!ex) {
+      panel.replaceChildren(head, backBar, h('div', { class: 'flow-empty' },
+        h('div', { class: 'flow-hero' }, svg(ICON.flow)),
+        h('h3', {}, `Pahami alur ${baseName(path)}`),
+        h('p', {}, 'AI membaca file ini dan menjelaskannya langkah demi langkah, berurutan seperti kode berjalan: baris mana yang terlibat, contoh nilainya, istilah penting, dan hubungannya dengan file lain di project.'),
+        h('button', { type: 'button', class: 'flow-go', disabled: flow.remaining === 0, onclick: () => explainFlow() }, svg(ICON.flow), 'Baca alur file ini'),
+        h('p', { class: 'flow-quota flow-muted' })));
+      renderFlowQuota();
+      return applyFlowHighlight();
+    }
+
+    const steps = ex.steps;
+    const notes = ex.notes ?? [];
+    panel.replaceChildren(
+      head,
+      backBar,
+      h('div', { class: 'flow-scroll' },
+        flowStale() ? h('div', { class: 'flow-stale' },
+          h('span', {}, 'File sudah berubah sejak penjelasan ini dibuat — baris yang disorot bisa bergeser.'),
+          h('button', { type: 'button', onclick: () => explainFlow() }, 'Perbarui')) : null,
+        h('section', { class: 'flow-summary' }, linkifyLines(renderMarkdown(ex.summary || ''))),
+        h('div', { class: 'flow-player' }),
+        h('ol', { class: 'flow-steps' }),
+        h('details', {
+          class: 'flow-section', open: flow.showChart,
+          ontoggle: (e) => { flow.showChart = e.target.open; storage.set('rakit.flowChart', flow.showChart); if (flow.showChart) renderFlowChart(); },
+        }, h('summary', {}, 'Diagram alur'), h('div', { class: 'flow-chart-box' }), h('p', { class: 'flow-muted' }, 'Klik kotak di diagram untuk membuka langkahnya.')),
+        ex.related?.length ? h('details', { class: 'flow-section', open: true },
+          h('summary', {}, `Terhubung dengan file lain (${ex.related.length})`),
+          h('div', { class: 'flow-related' }, ex.related.map((r) => flowRefChip(r)))) : null,
+        ex.complexity ? h('details', { class: 'flow-section' },
+          h('summary', {}, 'Seberapa cepat kodenya?'), linkifyLines(renderMarkdown(ex.complexity))) : null,
+        notes.length ? h('details', { class: 'flow-section', open: notes.some((n) => n.level === 'bug' || n.level === 'warn') },
+          h('summary', {}, `Catatan (${notes.length})`),
+          h('ul', { class: 'flow-notes' }, notes.map((n) => {
+            const [icon, label] = FLOW_NOTE[n.level] ?? FLOW_NOTE.info;
+            return h('li', { class: `flow-note ${n.level}` },
+              h('span', { class: 'flow-note-icon', title: label }, icon),
+              h('div', {}, linkifyLines(renderMarkdown(n.text)),
+                n.line ? h('button', { type: 'button', class: 'flow-line-link', onclick: () => flashFlowLines(n.line, n.line) }, `baris ${n.line}`) : null));
+          }))) : null,
+        h('section', { class: 'flow-ask-wrap' },
+          h('span', { class: 'flow-sub' }, 'Masih bingung? Tanya AI'),
+          h('div', { class: 'flow-chat' })),
+        h('p', { class: 'flow-meta flow-muted' },
+          `Dibuat ${new Date(flow.saved.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })} · `,
+          h('span', { class: 'flow-quota' }))),
+      h('form', {
+        class: 'flow-ask',
+        onsubmit: (e) => { e.preventDefault(); askFlow(e.target.elements.q); },
+      },
+      h('textarea', {
+        name: 'q', rows: 1, maxlength: 1000, placeholder: `Tanya tentang langkah ${flow.step + 1}… (Enter kirim)`,
+        onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); askFlow(e.target); } },
+      }),
+      h('button', { type: 'submit', class: 'ai-send', title: 'Kirim' }, svg('M1 1.5 15 8 1 14.5l2-6.5 6-.5v-1l-6-.5z'))),
+    );
+    if (!steps.length) return;
+    renderFlowPlayer();
+    renderFlowSteps();
+    renderFlowAsk();
+    renderFlowQuota();
+    renderFlowChart();
+    applyFlowHighlight({ reveal: true });
+  }
+
+  function bindFlowEvents() {
+    $('#flowBtn').addEventListener('click', () => toggleFlow());
+    // ← / → di panel (bukan saat mengetik pertanyaan) untuk pindah langkah; Esc menutup panel.
+    $('#flowPanel').addEventListener('keydown', (e) => {
+      if (e.target.closest('textarea, input')) return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); stopFlowPlay(); selectFlowStep(flow.step + 1); }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); stopFlowPlay(); selectFlowStep(flow.step - 1); }
+      if (e.key === 'Escape') toggleFlow(false);
+    });
+    editorReady.then(() => {
+      editor.onDidChangeCursorPosition(flowSyncFromCursor);
+      if (storage.get('rakit.flowOpen', false)) toggleFlow(true);
+    }).catch(() => { /* pesan sudah ditampilkan */ });
+  }
+
   // ---------- Riwayat versi ----------
   // Bahasa dibuat sederhana untuk pemula: "versi" = potret semua file project pada satu waktu.
   // ---------- Fungsi serverless ----------
@@ -4811,6 +5393,7 @@
     bindEvents();
     bindAiEvents();
     bindDiagramEvents();
+    bindFlowEvents();
     bindFeatureInfo();
     const credits = loadCredits();
 

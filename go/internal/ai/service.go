@@ -68,6 +68,8 @@ type Service struct {
 	mu      sync.Mutex
 	jobs    map[int64]*job // id pesan AI -> job
 	running map[int64]bool // user yang sedang punya job, pelindung dari klik ganda
+	// explaining: user yang sedang menunggu Baca Alur Kode (lihat explain.go).
+	explaining map[int64]bool
 }
 
 func New(cfg *config.Config, db *store.Store, c *credits.Service, p *plans.Plans, udb *userdb.DB, v *versions.Service, m *aimodels.Service, q *aiqueue.Queue) *Service {
@@ -78,6 +80,7 @@ func New(cfg *config.Config, db *store.Store, c *credits.Service, p *plans.Plans
 		planPrompt:  strings.ReplaceAll(planPromptTemplate, "{{BASE_DOMAIN}}", cfg.BaseDomain),
 		jobs:        map[int64]*job{},
 		running:     map[int64]bool{},
+		explaining:  map[int64]bool{},
 	}
 	return s
 }

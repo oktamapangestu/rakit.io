@@ -2661,3 +2661,129 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
   .fn-log-time { width: auto; }
   .fn-log-ms { display: none; }
 }
+
+/* ---------- Baca Alur Kode (panel di samping editor kode) ---------- */
+.code-bar { display: flex; align-items: center; gap: 8px; min-height: 30px; padding-right: 10px; flex-shrink: 0; }
+.code-bar .breadcrumbs { flex: 1; min-width: 0; overflow: hidden; }
+.code-bar:has(.breadcrumbs:empty):has(.flow-btn[hidden]) { display: none; }
+.flow-btn { display: inline-flex; align-items: center; gap: 6px; height: 24px; margin-left: auto; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--panel); color: var(--muted); font: 600 11.5px var(--ui); white-space: nowrap; cursor: pointer; }
+.flow-btn svg { width: 13px; height: 13px; fill: currentColor; }
+.flow-btn:hover { color: var(--white); border-color: var(--accent-line); background: var(--accent-soft); }
+.flow-btn.active { color: var(--on-accent); background: var(--grad); border-color: transparent; }
+
+.code-body { position: relative; flex: 1; display: flex; min-height: 0; }
+.code-body .editor-wrap { min-width: 0; }
+.flow-panel { position: relative; display: flex; flex-direction: column; width: min(400px, 45%); min-width: 300px; border-left: 1px solid var(--line); background: var(--panel); font-size: 13px; outline: none; }
+.flow-panel.wide { width: min(640px, 60%); }
+.flow-head { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.flow-title { display: inline-flex; align-items: center; gap: 6px; color: var(--white); font-weight: 700; white-space: nowrap; }
+.flow-title svg { width: 14px; height: 14px; fill: var(--accent-text); }
+.flow-file { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font: 11.5px var(--mono); }
+.flow-back { margin: 8px 12px 0; padding: 6px 10px; border: 1px dashed var(--line-2); border-radius: 8px; background: none; color: var(--accent-text); font: 600 12px var(--ui); text-align: left; cursor: pointer; }
+.flow-back:hover { background: var(--hover); }
+.flow-scroll { flex: 1; overflow-y: auto; padding: 12px 14px 16px; }
+.flow-muted { color: var(--faint); font-size: 12px; }
+
+.flow-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; flex: 1; padding: 24px; text-align: center; color: var(--muted); }
+.flow-empty h3 { margin: 4px 0 0; color: var(--white); font-size: 16px; }
+.flow-empty p { margin: 0; max-width: 320px; line-height: 1.55; }
+.flow-hero { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--accent-soft); }
+.flow-hero svg { width: 28px; height: 28px; fill: var(--accent-text); }
+.flow-go { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--grad); color: var(--on-accent); font: 700 13px var(--ui); cursor: pointer; }
+.flow-go svg { width: 14px; height: 14px; fill: currentColor; }
+.flow-go:disabled { opacity: 0.5; cursor: default; }
+.flow-skeleton { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 300px; }
+.flow-skeleton i { height: 34px; border-radius: 10px; background: linear-gradient(90deg, var(--panel-2), var(--raised), var(--panel-2)); background-size: 200% 100%; animation: flow-shimmer 1.4s infinite linear; }
+.flow-skeleton i:nth-child(2) { width: 85%; }
+.flow-skeleton i:nth-child(3) { width: 92%; }
+.flow-skeleton i:nth-child(4) { width: 70%; }
+@keyframes flow-shimmer { to { background-position: -200% 0; } }
+
+.flow-stale { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px 10px; border: 1px solid var(--warn); border-radius: 10px; background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn-text); font-size: 12px; }
+.flow-stale button { flex-shrink: 0; padding: 4px 10px; border: 0; border-radius: 7px; background: var(--warn); color: #fff; font: 600 12px var(--ui); cursor: pointer; }
+.flow-summary { padding: 10px 12px; border-radius: 10px; background: var(--panel-2); line-height: 1.55; }
+
+.flow-player { position: sticky; top: -12px; z-index: 1; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 12px -14px 8px; padding: 8px 14px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.flow-player .icon-btn { font-size: 20px; line-height: 1; }
+.flow-player-label { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.flow-player-label strong { color: var(--white); font-size: 12px; }
+.flow-player-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+.flow-play { width: 28px; height: 28px; border: 1px solid var(--line-2); border-radius: 50%; background: var(--panel); color: var(--accent-text); font-size: 11px; cursor: pointer; }
+.flow-play.on, .flow-play:hover { background: var(--accent-soft); border-color: var(--accent-line); }
+.flow-progress { flex-basis: 100%; height: 3px; margin-top: 4px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.flow-progress i { display: block; height: 100%; background: var(--grad); transition: width 0.3s ease; }
+
+.flow-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.flow-step { position: relative; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.flow-step.active { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+.flow-step-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; background: none; color: var(--text); font: 600 12.5px var(--ui); text-align: left; cursor: pointer; }
+.flow-step-head:hover { background: var(--hover); border-radius: 10px; }
+.flow-num { display: grid; place-items: center; flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--raised); color: var(--white); font: 700 11px var(--mono); }
+.flow-step.active .flow-num { background: var(--grad); color: var(--on-accent); }
+.flow-step.kind-decision .flow-num { border-radius: 4px; transform: rotate(45deg); }
+.flow-step.kind-decision .flow-num { font-size: 0; }
+.flow-step.kind-decision .flow-num::after { content: "?"; font-size: 11px; transform: rotate(-45deg); }
+.flow-step-title { flex: 1; min-width: 0; }
+.flow-lines { flex-shrink: 0; padding: 1px 6px; border-radius: 6px; background: var(--panel-2); color: var(--faint); font: 10.5px var(--mono); }
+.flow-step-body { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px 40px; line-height: 1.55; }
+.flow-kind { align-self: flex-start; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.flow-example { padding: 8px 10px; border-left: 3px solid var(--info); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--info) 8%, transparent); }
+.flow-example b { display: block; margin-bottom: 2px; color: var(--info-text); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.flow-terms { display: flex; flex-wrap: wrap; gap: 6px; }
+.flow-term { border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel-2); }
+.flow-term summary { padding: 2px 8px; color: var(--white); font: 600 11.5px var(--mono); cursor: pointer; list-style: none; }
+.flow-term summary::-webkit-details-marker { display: none; }
+.flow-term summary::before { content: "? "; color: var(--accent-text); }
+.flow-term p { margin: 0; padding: 0 8px 6px; color: var(--muted); font-size: 12px; max-width: 280px; }
+.flow-sub { display: block; margin-bottom: 4px; color: var(--faint); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.flow-refs, .flow-related, .flow-next { display: flex; flex-wrap: wrap; gap: 6px; }
+.flow-refs .flow-sub, .flow-next .flow-sub { flex-basis: 100%; margin: 0; }
+.flow-ref { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 8px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel); color: var(--text); font: 12px var(--ui); text-align: left; cursor: pointer; }
+.flow-ref:hover { border-color: var(--accent-line); background: var(--accent-soft); }
+.flow-ref svg { width: 14px; height: 14px; flex-shrink: 0; }
+.flow-ref-path { font: 600 11.5px var(--mono); color: var(--white); white-space: nowrap; }
+.flow-ref-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.flow-related .flow-ref { width: 100%; }
+.flow-branch { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px dashed var(--line-2); border-radius: 8px; background: none; color: var(--text); font: 12px var(--ui); cursor: pointer; }
+.flow-branch em { padding: 0 6px; border-radius: 6px; background: var(--raised); color: var(--white); font-style: normal; font-weight: 700; }
+.flow-branch:hover { border-color: var(--accent-line); }
+.flow-line-link { padding: 0 3px; border: 0; border-radius: 4px; background: var(--accent-soft); color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer; }
+.flow-line-link:hover { text-decoration: underline; }
+
+.flow-section { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.flow-section > summary { padding: 8px 12px; color: var(--white); font-weight: 600; cursor: pointer; }
+.flow-section > :not(summary) { margin: 0 12px 10px; }
+.flow-chart-box { display: flex; justify-content: center; overflow-x: auto; padding: 6px 0; }
+.flow-chart-box svg { width: auto; height: auto; }
+.flow-chart-box g.node.flow-node-active :is(rect, polygon, path, circle) { stroke: var(--danger) !important; stroke-width: 3px !important; }
+.flow-notes { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.flow-note { display: flex; gap: 8px; line-height: 1.5; }
+.flow-note-icon { display: grid; place-items: center; flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--info); color: #fff; font: 700 10px var(--ui); }
+.flow-note.bug .flow-note-icon { background: var(--danger); }
+.flow-note.warn .flow-note-icon { background: var(--warn); }
+.flow-note.tip .flow-note-icon { background: var(--ok); }
+.flow-ask-wrap { margin-top: 14px; }
+.flow-chat { display: flex; flex-direction: column; gap: 10px; }
+.flow-qa { display: flex; flex-direction: column; gap: 6px; line-height: 1.55; }
+.flow-q { align-self: flex-end; max-width: 90%; margin: 0; padding: 6px 10px; border-radius: 10px 10px 2px 10px; background: var(--accent-soft); color: var(--white); }
+.flow-meta { margin: 14px 0 0; }
+.flow-ask { display: flex; align-items: flex-end; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); flex-shrink: 0; }
+.flow-ask textarea { flex: 1; min-height: 34px; max-height: 120px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--bg); color: var(--text); font: 13px var(--ui); resize: none; field-sizing: content; }
+.flow-ask textarea:focus { outline: none; border-color: var(--accent-line); }
+
+/* Sorotan di Monaco */
+.monaco-editor .flow-line { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.monaco-editor .flow-flash { background: color-mix(in srgb, var(--info) 22%, transparent); animation: flow-flash 2.4s ease-out forwards; }
+@keyframes flow-flash { 60% { opacity: 1; } to { opacity: 0; } }
+.monaco-editor .flow-gutter { margin-left: 3px; width: 3px !important; border-radius: 2px; background: var(--line-2); }
+.monaco-editor .flow-gutter.active { background: var(--accent); width: 4px !important; }
+.monaco-editor .flow-badge { margin-right: 6px; padding: 0 2px; border-radius: 5px; background: var(--raised); color: var(--muted); font-size: 10.5px; font-weight: 700; }
+.monaco-editor .flow-badge.active { background: var(--accent); color: var(--on-accent); }
+
+@media (max-width: 980px) {
+  .flow-panel, .flow-panel.wide { position: absolute; inset: 0; z-index: 5; width: auto; min-width: 0; border-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-skeleton i, .monaco-editor .flow-flash { animation: none; }
+  .flow-progress i { transition: none; }
+}

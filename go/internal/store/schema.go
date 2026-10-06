@@ -189,6 +189,23 @@ const schema = `
 	  tokens  INTEGER NOT NULL DEFAULT 0,
 	  PRIMARY KEY (user_id, day)
 	);
+	-- Baca Alur Kode (internal/ai/explain.go): penjelasan terakhir per file + hash isi file yang dijelaskan,
+	-- dan pemakaian gratis per akun per hari (WIB).
+	CREATE TABLE IF NOT EXISTS code_explanations (
+	  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+	  path       TEXT NOT NULL,
+	  hash       TEXT NOT NULL, -- SHA-256 hex isi file
+	  result     TEXT NOT NULL, -- JSON Explanation
+	  created_at INTEGER NOT NULL,
+	  PRIMARY KEY (project_id, path)
+	);
+	CREATE TABLE IF NOT EXISTS ai_explain_usage (
+	  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	  day     TEXT NOT NULL,
+	  count   INTEGER NOT NULL DEFAULT 0,
+	  tokens  INTEGER NOT NULL DEFAULT 0,
+	  PRIMARY KEY (user_id, day)
+	);
 	-- Diagram project buatan AI (kode Mermaid + catatan), satu per jenis; lihat internal/ai/diagram.go.
 	CREATE TABLE IF NOT EXISTS project_diagrams (
 	  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

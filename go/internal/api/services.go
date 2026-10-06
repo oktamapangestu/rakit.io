@@ -56,6 +56,32 @@ func (h *Handler) ai(q *request) error {
 		}
 		return q.json(200, out)
 
+	// Baca Alur Kode: penjelasan tersimpan, buat penjelasan, dan tanya lanjutan (gratis, kuota harian).
+	case q.is("GET", "explain"), q.is("POST", "explain"), q.is("POST", "explain", "ask"):
+		project, err := h.loadProject(q)
+		if err != nil {
+			return err
+		}
+		var out any
+		switch {
+		case q.is("GET", "explain"):
+			p, _ := q.param("path")
+			out, err = svc.SavedExplanation(q.user, project, p)
+		default:
+			if err = q.load(); err != nil {
+				return err
+			}
+			if q.is("POST", "explain") {
+				out, err = svc.Explain(q.r.Context(), q.user, project, q.body)
+			} else {
+				out, err = svc.AskExplain(q.r.Context(), q.user, project, q.body)
+			}
+		}
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
+
 	case q.is("GET", "jobs", ":", "events"):
 		return svc.Events(q.w, q.r, q.user, q.rest[1])
 
