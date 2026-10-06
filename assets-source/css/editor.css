@@ -2771,6 +2771,10 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 .flow-ask textarea { flex: 1; min-height: 34px; max-height: 120px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--bg); color: var(--text); font: 13px var(--ui); resize: none; field-sizing: content; }
 .flow-ask textarea:focus { outline: none; border-color: var(--accent-line); }
 
+/* Jalur scrollbar vertikal Monaco transparan: baris panjang terlihat "bocor" di sebelah minimap saat editor sempit
+   (mis. panel Baca Alur Kode terbuka). Beri latar editor. */
+.monaco-editor .scrollbar.vertical { background: var(--vscode-editor-background); }
+
 /* Sorotan di Monaco */
 .monaco-editor .flow-line { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .monaco-editor .flow-flash { background: color-mix(in srgb, var(--info) 22%, transparent); animation: flow-flash 2.4s ease-out forwards; }

@@ -3939,18 +3939,20 @@
       h('button', { type: 'button', class: 'icon-btn', title: 'Perlebar panel', onclick: () => panel.classList.toggle('wide') }, '⤢'),
       h('button', { type: 'button', class: 'icon-btn', title: 'Tutup', onclick: () => toggleFlow(false) }, svg(ICON.close)));
     const backBar = back ? h('button', { type: 'button', class: 'flow-back', onclick: flowGoBack }, `← Kembali ke ${baseName(back.path)} · langkah ${back.step + 1}`) : null;
+    // replaceChildren() bawaan browser menulis null sebagai teks "null" (backBar kosong), jadi disaring dulu.
+    const show = (...nodes) => panel.replaceChildren(...nodes.filter(Boolean));
 
     if (!path) {
-      panel.replaceChildren(head, backBar, h('div', { class: 'flow-empty' },
+      show(head, backBar, h('div', { class: 'flow-empty' },
         h('p', {}, 'Buka file .html, .css, atau .js untuk membaca alurnya.')));
       return applyFlowHighlight();
     }
     if (flow.loading === path) {
-      panel.replaceChildren(head, backBar, flowLoadingView(baseName(path)));
+      show(head, backBar, flowLoadingView(baseName(path)));
       return applyFlowHighlight();
     }
     if (!ex) {
-      panel.replaceChildren(head, backBar, h('div', { class: 'flow-empty' },
+      show(head, backBar, h('div', { class: 'flow-empty' },
         h('div', { class: 'flow-hero' }, svg(ICON.flow)),
         h('h3', {}, `Pahami alur ${baseName(path)}`),
         h('p', {}, 'AI membaca file ini dan menjelaskannya langkah demi langkah, berurutan seperti kode berjalan: baris mana yang terlibat, contoh nilainya, istilah penting, dan hubungannya dengan file lain di project.'),
@@ -3962,7 +3964,7 @@
 
     const steps = ex.steps;
     const notes = ex.notes ?? [];
-    panel.replaceChildren(
+    show(
       head,
       backBar,
       h('div', { class: 'flow-scroll' },
