@@ -4275,6 +4275,13 @@
   ];
   const fnAiTests = new Map(); // nama provider -> hasil tes terakhir
 
+  // Pernyataan soal API key pengguna (tampil di bagian Provider AI dan di dialog tambah/ubah provider).
+  const aiKeyDisclaimer = () => h('div', { class: 'ai-disclaimer', role: 'note' },
+    h('strong', {}, '🔒 API key-mu tetap milikmu.'),
+    ' rakit.io tidak akan mengambil, membagikan, atau memakai API key dan token AI-mu untuk keperluan apa pun selain meneruskan panggilan ',
+    h('code', {}, 'ai.*'), ' dari fungsimu sendiri ke provider yang kamu pilih. Key tidak pernah dikirim ke browser maupun ke kode fungsi, dan dihapus dari database rakit.io saat provider dihapus. ',
+    'Sebagai pengaman tambahan, pasang batas pemakaian (spending limit) di dashboard provider dan ganti key bila curiga bocor.');
+
   async function testAiProvider(name) {
     fnAiTests.set(name, { running: true });
     renderFn();
@@ -4325,7 +4332,8 @@
     const close = openSheet('publish-modal ai-provider-modal', 'Provider AI', (done) => [
       h('h3', {}, existing ? `Ubah provider ${existing.name}` : 'Tambah provider AI'),
       h('p', {}, 'Fungsi memakai AI lewat ', h('code', {}, 'ai.chat()'), ', ', h('code', {}, 'ai.json()'), ', dan ', h('code', {}, 'ai.embed()'),
-        ' dengan API key milikmu sendiri — biayanya ditagih provider ke akunmu. Key disimpan di server dan tidak pernah dikirim ke browser maupun ke kode fungsi.'),
+        ' dengan API key milikmu sendiri — biayanya ditagih provider langsung ke akunmu, bukan oleh rakit.io.'),
+      aiKeyDisclaimer(),
       h('form', { class: 'ai-provider-form', onsubmit: async (e) => {
         e.preventDefault();
         save.disabled = true;
@@ -4426,6 +4434,7 @@
         h('button', { type: 'button', class: 'fn-btn primary', onclick: () => openAiProvider() }, '+ Tambah provider')),
       h('p', { class: 'fn-note' }, 'Pakai AI di fungsi lewat ', h('code', {}, 'ai.chat()'), ', ', h('code', {}, 'ai.json()'), ', dan ', h('code', {}, 'ai.embed()'),
         ' — satu cara untuk OpenAI, Claude, Gemini, dan endpoint kompatibel OpenAI (DeepSeek, Groq, OpenRouter, …). Memakai API key milikmu; waktu menunggu AI tidak dihitung ke batas waktu fungsi.'),
+      aiKeyDisclaimer(),
       rows.length ? h('ul', { class: 'fn-secrets ai-providers' }, rows)
         : h('p', { class: 'fn-placeholder' }, 'Belum ada provider. Tambahkan API key OpenAI, Claude, Gemini, atau provider lain, lalu panggil ai.chat(…) dari fungsi.'),
       h('details', { class: 'fn-help ai-example' },

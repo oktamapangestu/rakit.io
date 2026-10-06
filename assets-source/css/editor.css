@@ -2825,3 +2825,7 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
   .ai-prov-actions { width: 100%; justify-content: flex-end; }
   .ai-row { grid-template-columns: 1fr; gap: 0; }
 }
+.ai-disclaimer { margin: 0 0 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--ok) 8%, transparent); color: var(--text); font-size: 12px; line-height: 1.55; }
+.ai-disclaimer strong { color: var(--ok-text); }
+.ai-disclaimer code { padding: 1px 5px; border-radius: 5px; background: var(--raised); font: 11.5px var(--mono); }
+.ai-provider-modal .ai-disclaimer { margin-bottom: 16px; }

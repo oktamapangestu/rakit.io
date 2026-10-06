@@ -321,6 +321,11 @@ export default async function (req, { db, ai }) {
 - **API key** disimpan di server (tabel `fn_ai_providers`, seperti rahasia fungsi) dan tidak pernah dikirim ke browser maupun ke
   kode fungsi; editor hanya menampilkan 4 karakter terakhirnya. Biaya ditagih provider ke akun pemiliknya — rakit.io tidak
   memotong kredit.
+- **Pernyataan untuk pengguna** (tampil di bagian Provider AI dan dialognya): rakit.io tidak mengambil, membagikan, atau memakai
+  API key/token AI pengguna untuk keperluan apa pun selain meneruskan panggilan `ai.*` dari fungsi milik pengguna itu sendiri ke
+  provider yang dipilihnya; key dihapus dari database saat provider dihapus. Pengguna disarankan memasang spending limit di
+  provider. Jaga janji ini: jangan pernah memakai `fn_ai_providers.api_key` untuk hal lain (mis. AI platform, statistik, atau
+  debugging), dan jangan mencetaknya ke log.
 - `ai.chat(prompt | { messages, system, images, provider, model, temperature, maxTokens })` → `{ text, model, provider, finish,
   usage }`. `ai.json(prompt, shape, options)` → objek hasil (OpenAI memakai `response_format`, Gemini `responseMimeType`; bila
   bukan JSON, diminta ulang sekali). `ai.embed(teks | array)` → vektor / array vektor (Anthropic tidak punya embedding).
