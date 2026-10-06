@@ -75,22 +75,29 @@ Catatan:
 
 ## Deploy tahap ini
 
-Go menangani semuanya sendiri, jadi server Node dimatikan:
+Go menangani semuanya sendiri; unit yang dipakai adalah `rakit.service` (Go). Hanya **satu**
+unit rakit yang boleh aktif:
 
 ```bash
 GOOS=linux GOARCH=amd64 go build -o bin/rakit .      # dari folder go/; sesuaikan GOARCH server
-sudo cp deploy/rakit-go.service /etc/systemd/system/ && sudo systemctl daemon-reload
-sudo systemctl restart rakit-go.service              # atau: enable --now bila belum pernah dipasang
+sudo cp deploy/rakit.service /etc/systemd/system/ && sudo systemctl daemon-reload
+sudo systemctl restart rakit.service                 # atau: enable --now bila belum pernah dipasang
 # deploy/nginx-rakit.conf: proxy_pass http://127.0.0.1:3011;  lalu  sudo nginx -t && sudo systemctl reload nginx
-sudo systemctl disable --now rakit.service           # Node
 ```
 
-`rakit-go.service` versi baru tidak lagi memakai `NODE_UPSTREAM` dan tidak bergantung pada `rakit.service`.
+> **Jangan** memasang unit kedua (mis. `rakit-go.service`) dengan binary & port yang sama.
+> Proses kedua akan gagal bind port, tetapi tetap menjalankan inisialisasi sebelum listen —
+> termasuk `AI.Start()` yang me-refund job `queued`/`running`, sehingga kredit AI terus
+> dikembalikan (bug "kredit berkurang lalu kembali lagi"). Bila menemukan unit duplikat,
+> matikan: `sudo systemctl disable --now rakit-go.service`.
 
-**Membatalkan:** hapus `Environment=AI_JOBS_ELSEWHERE=1` dari `rakit.service` bila masih ada, lalu
-`sudo systemctl enable --now rakit.service`, kembalikan `proxy_pass` ke `3010`, reload Nginx, dan
-`sudo systemctl stop rakit-go.service`. Node bisa langsung memakai database yang sama. Job AI yang sedang
-berjalan di Go saat itu ditandai gagal dan kreditnya dikembalikan saat Node menyala.
+`rakit.service` versi Go tidak lagi memakai `NODE_UPSTREAM` dan tidak bergantung pada server Node.
+
+
+**Membatalkan (kembali ke Node, kalau perlu):** jalankan server Node di port 3010, kembalikan
+`proxy_pass` ke `3010`, reload Nginx, lalu `sudo systemctl stop rakit.service` (Go). Node bisa
+langsung memakai database yang sama. Job AI yang sedang berjalan di Go saat itu ditandai gagal
+dan kreditnya dikembalikan saat server menyala.
 
 ## Sesudah stabil
 
@@ -98,5 +105,6 @@ Bila Go sudah berjalan beberapa waktu tanpa perlu dibatalkan:
 
 1. Pindahkan sumber prompt AI dari `src/ai.js` ke Go (`internal/ai/prompts.go` jadi berkas yang diedit langsung)
    dan hapus `scripts/gen-go-prompts.cjs`.
-2. Hapus `src/`, `deploy/rakit.service`, dependensi `express` & `qrcode`, dan skrip `npm start`/`dev`/`test`
+2. Hapus `src/`, dependensi `express` & `qrcode`, dan skrip `npm start`/`dev`/`test`
    (`test:go` jadi `test`). Test di `tests/` dan rekaman `testdata/js.json` tetap dipakai.
+   `deploy/rakit.service` tetap dipakai (kini unit Go).

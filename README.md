@@ -426,20 +426,26 @@ ukuran panel berubah.
 1. **DNS** — arahkan dua record ke IP VPS:
    - `A  rakit.io    -> <IP>`
    - `A  *.rakit.io  -> <IP>`
-2. **Aplikasi** (di server ini: `/srv/rakit`)
+2. **Aplikasi** (di server ini: `/srv/rakit`) — server **Go** (lihat `go/README.md`; server Node lama sudah tidak dipakai)
    ```bash
    git clone ... /srv/rakit && cd /srv/rakit
-   npm ci --omit=dev
+   cd go && go build -o bin/rakit . && cd ..
    cat > .env <<'ENV'
-   PORT=3010
+   HOST=127.0.0.1
+   PORT=3011
    BASE_DOMAIN=rakit.io
    PROTOCOL=https
    PUBLIC_PORT=
    NODE_ENV=production
    DATA_DIR=/srv/rakit/data
    ENV
-   sudo cp deploy/rakit.service /etc/systemd/system/ && sudo systemctl enable --now rakit
+   sudo cp deploy/rakit.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now rakit.service
    ```
+   > Hanya **satu** unit rakit yang boleh aktif. Jangan memasang unit kedua dengan binary &
+   > port yang sama — proses kedua gagal bind tapi tetap me-refund job AI (kredit bisa
+   > berkurang lalu kembali lagi). Bila ada unit duplikat: `sudo systemctl disable --now rakit-go.service`.
    > `PORT` di `.env` harus sama dengan `proxy_pass` di konfigurasi Nginx.
 3. **Reverse proxy + HTTPS wildcard** — pakai Nginx (lihat `deploy/nginx-rakit.conf`):
    ```bash

@@ -1,23 +1,34 @@
-# Unit systemd untuk rakit.io — salin ke /etc/systemd/system/rakit.service
+# Unit systemd untuk rakit.io (server Go) — salin ke /etc/systemd/system/rakit.service
 #
 #   sudo cp deploy/rakit.service /etc/systemd/system/rakit.service
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now rakit.service
 #
-# Catatan: app hanya mendengarkan di 127.0.0.1 (lihat HOST/PORT di .env) dan
-# diakses publik lewat Nginx reverse proxy (lihat deploy/nginx-rakit.conf).
+# PENTING — hanya satu unit rakit yang boleh aktif. Jangan pernah memasang unit kedua
+# (mis. "rakit-go.service") yang menjalankan binary & port yang sama: proses kedua akan
+# gagal bind port, tetapi tetap MENJALANKAN inisialisasi sebelum listen — termasuk
+# AI.Start() yang me-refund job queued/running. Akibatnya kredit AI terus dikembalikan
+# setiap restart (gejala "kredit berkurang lalu kembali lagi"). Kejadian: 2026-10-06.
+#
+# Server Go menangani semuanya sendiri (aplikasi, website project, AI, pembayaran,
+# dashboard owner) dan membuat skema database saat menyala. Server Node lama sudah tidak
+# dipakai. App hanya mendengarkan di 127.0.0.1 (HOST/PORT di bawah) dan diakses publik
+# lewat Nginx reverse proxy (lihat deploy/nginx-rakit.conf, proxy_pass 127.0.0.1:3011).
 [Unit]
-Description=rakit.io - editor kode online
+Description=rakit.io - editor kode online (Go)
+Documentation=https://github.com/oktamapangestu/rakit.icu
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=/srv/rakit
-ExecStart=/usr/local/bin/node --env-file-if-exists=/srv/rakit/.env /srv/rakit/src/server.js
+ExecStart=/srv/rakit/go/bin/rakit --env-file /srv/rakit/.env
+Environment=HOST=127.0.0.1
+Environment=PORT=3011
+Environment=NODE_ENV=production
 Restart=always
 RestartSec=5
 User=root
-Environment=NODE_ENV=production
 
 [Install]
 WantedBy=multi-user.target
