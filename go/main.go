@@ -96,6 +96,7 @@ func main() {
 	editorAI.ResolvePage = site.ResolvePage
 	editorAI.SecretNames = functions.SecretNames
 	editorAI.AIProviders = functions.AIProviderNames
+	editorAI.FnStatus = functions.AIContext
 	editorAI.Start()
 	appAPI, err := api.New(cfg, db, sessions, api.Services{
 		Plans: limits, UserDB: projectDB, Versions: history, Credits: wallet,

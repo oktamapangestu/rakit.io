@@ -6,9 +6,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -283,4 +285,65 @@ func (s *Service) runScheduled(ctx context.Context, p store.Project, name string
 		status = 500
 	}
 	s.db.Exec("UPDATE fn_schedules SET last_status = ? WHERE project_id = ? AND name = ?", status, p.ID, name)
+}
+
+// ---------- Konteks AI Builder ----------
+
+const (
+	aiRecentFailures = 5    // eksekusi gagal terbaru yang ikut ke AI
+	aiFailureChars   = 1500 // potongan error + console per eksekusi
+)
+
+// AIContext: jadwal fungsi dan eksekusi gagal terbaru project (yang kodenya belum diubah sejak gagal), untuk konteks AI Builder — supaya
+// permintaan seperti "perbaiki fungsi yang error" bisa dikerjakan tanpa pengguna menyalin log.
+// Nilai rahasia tidak pernah ada di sini (hanya error & console keluaran kode fungsi sendiri).
+func (s *Service) AIContext(slug string) (schedules, failures []string) {
+	p, err := s.store.ProjectBySlug(slug)
+	if err != nil || p == nil {
+		return nil, nil
+	}
+	if list, err := s.schedules(p); err == nil {
+		for name, sc := range list {
+			line := fmt.Sprintf("%s: %q (WIB)", name, sc.Cron)
+			if !sc.Active && sc.Note != "" {
+				line += " — tidak berjalan: " + sc.Note
+			}
+			schedules = append(schedules, line)
+		}
+		sort.Strings(schedules)
+	}
+	rows, err := s.db.Query(`
+		SELECT name, trigger, status, error, logs, created_at FROM fn_logs
+		WHERE project_id = ? AND (status >= 500 OR error IS NOT NULL) ORDER BY id DESC LIMIT 20`, p.ID)
+	if err != nil {
+		return schedules, nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, trigger string
+		var status int
+		var errText, logs sql.NullString
+		var at int64
+		if rows.Scan(&name, &trigger, &status, &errText, &logs, &at) != nil {
+			continue
+		}
+		// Kode yang diubah setelah gagal (atau sudah dihapus) kemungkinan sudah diperbaiki: jangan dikejar AI.
+		info, err := os.Stat(filepath.Join(s.cfg.SiteRoot(slug), Dir, name+".js"))
+		if err != nil || info.ModTime().UnixMilli() > at {
+			continue
+		}
+		text := strings.TrimSpace(errText.String)
+		if l := strings.TrimSpace(logs.String); l != "" {
+			text += "\nconsole:\n" + l
+		}
+		if r := []rune(text); len(r) > aiFailureChars {
+			text = string(r[:aiFailureChars]) + "…"
+		}
+		when := time.UnixMilli(at).In(wib).Format("2006-01-02 15:04")
+		if len(failures) == aiRecentFailures {
+			break
+		}
+		failures = append(failures, fmt.Sprintf("- %s (%s, %s, status %d):\n%s", name, trigger, when, status, text))
+	}
+	return schedules, failures
 }

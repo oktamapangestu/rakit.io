@@ -122,3 +122,30 @@ func TestJadwal(t *testing.T) {
 		t.Fatal("jadwal tidak terhapus")
 	}
 }
+
+func TestAIContext(t *testing.T) {
+	s, db, p := setup(t)
+	target := Target{Project: p, Root: s.cfg.SiteRoot("toko"), DBKey: "toko", Dev: true}
+	s.record(target, "lapor", "test", &Outcome{Status: 200, Logs: "info: aman\n"})
+	os.WriteFile(filepath.Join(s.cfg.SiteRoot("toko"), Dir, "kirim.js"), []byte("export default (r) => r.x.y"), 0o644)
+	os.Chtimes(filepath.Join(s.cfg.SiteRoot("toko"), Dir, "kirim.js"), time.Now().Add(-time.Minute), time.Now().Add(-time.Minute))
+	s.record(target, "kirim", "http", &Outcome{Status: 500, Error: "TypeError: x is undefined", Logs: "log: mulai\n"})
+	// Jadwal dari masa langganan yang sudah habis: tetap tersimpan, tapi tidak berjalan di paket gratis.
+	db.DB().Exec("INSERT INTO fn_schedules (project_id, name, cron, created_at) VALUES (?, 'lapor', '0 7 * * *', 0)", p.ID)
+	schedules, failures := s.AIContext("toko")
+	if len(schedules) != 1 || !strings.HasPrefix(schedules[0], `lapor: "0 7 * * *"`) || !strings.Contains(schedules[0], "Pro/Unlimited") {
+		t.Fatalf("jadwal: %q", schedules)
+	}
+	if len(failures) != 1 || !strings.Contains(failures[0], "kirim (http") || !strings.Contains(failures[0], "TypeError: x is undefined") || !strings.Contains(failures[0], "log: mulai") {
+		t.Fatalf("eksekusi gagal: %q", failures)
+	}
+	// Kode yang diubah sesudah gagal dianggap sudah diperbaiki.
+	os.MkdirAll(filepath.Join(s.cfg.SiteRoot("toko"), Dir), 0o755)
+	os.WriteFile(filepath.Join(s.cfg.SiteRoot("toko"), Dir, "kirim.js"), []byte("export default () => 1"), 0o644)
+	if _, failures = s.AIContext("toko"); len(failures) != 0 {
+		t.Fatalf("eksekusi gagal sebelum kode diubah ikut: %q", failures)
+	}
+	if sc, f := s.AIContext("tidak-ada"); sc != nil || f != nil {
+		t.Fatalf("project tidak ada: %q %q", sc, f)
+	}
+}

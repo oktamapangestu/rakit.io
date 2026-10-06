@@ -1480,7 +1480,7 @@ button.credit-badge:disabled { cursor: default; }
 .db-title h3 { margin: 0; font: 600 15px var(--mono); color: var(--white); }
 .db-access { padding: 2px 9px; border-radius: 999px; background: var(--panel-2); color: var(--muted); font-size: 11.5px; white-space: nowrap; }
 .db-access.open { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--ok-text); }
-.db-actions { display: flex; align-items: center; gap: 6px; }
+.db-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 
 .db-btn {
   display: inline-flex;
@@ -1493,6 +1493,7 @@ button.credit-badge:disabled { cursor: default; }
   background: var(--raised);
   color: var(--text);
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
 }
 .db-btn svg { width: 14px; height: 14px; }
@@ -2605,6 +2606,22 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 .fn-help[open] summary::before { transform: rotate(90deg); }
 .fn-help summary:hover { color: var(--text); }
 .fn-help .fn-pre { margin: 0 12px 12px; }
+
+/* Tombol "✦ … dengan AI" di fitur lain: mengisi kotak AI dengan permintaan beserta konteksnya. */
+.ai-handoff { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ai-spark { color: var(--accent-text); font-weight: 700; }
+.fn-head-actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
+.fn-head-actions .fn-btn { height: 32px; }
+.fn-ai-fix { display: flex; justify-content: flex-end; margin: 6px 0 2px; }
+.fn-result .fn-ai-fix { margin-top: 8px; }
+.db-empty .ai-handoff { margin-top: 8px; }
+.finding-fix, .flow-ai-fix {
+  margin-top: 6px; padding: 2px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel);
+  color: var(--text); font: 600 11.5px var(--ui); cursor: pointer;
+}
+.finding-fix:hover, .flow-ai-fix:hover { border-color: var(--faint); color: var(--white); }
+.flow-ai-fix { margin-top: 4px; }
+.flow-line-link + .flow-ai-fix { margin-left: 6px; }
 
 @container (max-width: 560px) {
   .fn-wrap { padding: 14px 12px 24px; }

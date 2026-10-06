@@ -1721,6 +1721,29 @@
     autoFocus($('#aiInput'));
   }
 
+  // Jembatan dari fitur lain (fungsi, database, diagram, Baca Alur Kode, editor) ke panel AI: tombol yang
+  // mengisi kotak AI dengan permintaan beserta konteksnya. Log/kode panjang dipotong.
+  const clipText = (text, max = 1500) => {
+    const t = String(text ?? '').trim();
+    return t.length > max ? `${t.slice(0, max)}…` : t;
+  };
+  function aiButton(label, text, { cls = 'fn-btn', mode = 'build' } = {}) {
+    return h('button', {
+      type: 'button', class: `${cls} ai-handoff`,
+      title: `Isi kotak AI (${mode === 'plan' ? 'Plan' : 'Builder'}) dengan permintaan ini — bisa diubah dulu sebelum dikirim`,
+      onclick: (e) => { e.stopPropagation(); askAi(typeof text === 'function' ? text() : text, mode); },
+    }, h('span', { class: 'ai-spark', 'aria-hidden': 'true' }, '✦'), label);
+  }
+  // Permintaan perbaikan untuk eksekusi fungsi yang gagal (dari log atau uji coba).
+  function fnFixPrompt(name, { status, error, logs, trigger, request }) {
+    const info = [status ? `status ${status}` : '', trigger ? `dipicu ${trigger}` : ''].filter(Boolean).join(', ');
+    const parts = [`Fungsi functions/${name}.js gagal${info ? ` (${info})` : ''}. Cari penyebabnya dan perbaiki kodenya.`];
+    if (request) parts.push(`Request:\n${request}`);
+    if (error) parts.push(`Error:\n${clipText(error)}`);
+    if (logs) parts.push(`console:\n${clipText(logs)}`);
+    return parts.join('\n\n');
+  }
+
   function showFeatureInfo(key) {
     const info = FEATURE_INFO[key];
     if (!info) return;
@@ -2565,7 +2588,8 @@
         h('h3', {}, 'Belum ada tabel'),
         h('p', {}, 'Tabel menyimpan data dari websitemu — misalnya ucapan tamu, RSVP, atau pesan dari form kontak.'),
         h('button', { type: 'button', class: 'db-btn primary', onclick: openCreateTable }, '+ Buat tabel'),
-        h('p', { class: 'db-hint' }, 'Atau minta AI di mode Builder, misalnya: "buat form RSVP yang datanya tersimpan".')));
+        h('p', { class: 'db-hint' }, 'Atau minta AI membuatkan tabel sekaligus halamannya:'),
+        aiButton('Buat form RSVP dengan AI', 'Buatkan form RSVP (nama, jumlah tamu, pesan) yang datanya tersimpan di database, beserta daftar tamu yang sudah konfirmasi.', { cls: 'db-btn' })));
       return;
     }
 
@@ -2579,6 +2603,7 @@
           publicOps.length ? `Publik: ${publicOps.join(', ')}` : 'Privat — hanya kamu')),
       h('div', { class: 'db-actions' },
         h('button', { type: 'button', class: 'icon-btn', title: 'Muat ulang', onclick: dbLoad }, svg(ICON.refresh)),
+        aiButton('Pakai di website', () => `Tampilkan data dari tabel "${t.name}" di website dengan tampilan yang rapi dan responsif${t.rules.create === 'public' ? ', beserta form untuk menambah data' : ''}. Pakai tabel yang sudah ada; tambah kolom atau akses publik hanya bila perlu.`, { cls: 'db-btn' }),
         h('button', { type: 'button', class: 'db-btn', onclick: () => openTableSettings(t.name) }, svg(ICON.gear), 'Atur'),
         h('button', { type: 'button', class: 'db-btn primary', onclick: () => openRowForm(t) }, '+ Baris')));
 
@@ -3125,7 +3150,10 @@
       h('h4', {}, 'Temuan'),
       findings.length ? h('ul', {}, findings.map((f) => h('li', { class: f.level },
         h('span', { class: 'f-icon' }, icon[f.level]),
-        h('div', {}, h('p', {}, f.text)))))
+        h('div', {}, h('p', {}, f.text),
+          f.level === 'error' || f.level === 'warn'
+            ? aiButton('Perbaiki', `Diagram ${DIAGRAM_NAMES[diagram.kind] ?? ''} project ini menemukan masalah: "${f.text}". Periksa file dan database yang terkait, lalu perbaiki.`, { cls: 'finding-fix' })
+            : null))))
         : h('p', { class: 'f-empty' }, 'Tidak ada catatan.'));
   }
 
@@ -3990,7 +4018,11 @@
             return h('li', { class: `flow-note ${n.level}` },
               h('span', { class: 'flow-note-icon', title: label }, icon),
               h('div', {}, linkifyLines(renderMarkdown(n.text)),
-                n.line ? h('button', { type: 'button', class: 'flow-line-link', onclick: () => flashFlowLines(n.line, n.line) }, `baris ${n.line}`) : null));
+                n.line ? h('button', { type: 'button', class: 'flow-line-link', onclick: () => flashFlowLines(n.line, n.line) }, `baris ${n.line}`) : null,
+                n.level === 'bug' || n.level === 'warn' || n.level === 'tip'
+                  ? aiButton(n.level === 'tip' ? 'Terapkan dengan AI' : 'Perbaiki dengan AI',
+                    `Di file ${path}${n.line ? ` baris ${n.line}` : ''}: ${n.text}\n\n${n.level === 'tip' ? 'Terapkan saran ini' : 'Perbaiki masalah ini'} tanpa mengubah perilaku lain.`, { cls: 'flow-ai-fix' })
+                  : null));
           }))) : null,
         h('section', { class: 'flow-ask-wrap' },
           h('span', { class: 'flow-sub' }, 'Masih bingung? Tanya AI'),
@@ -4231,7 +4263,9 @@
               h('span', { class: 'fn-log-more' }, open ? '▴' : '▾')),
             open && l.error ? h('p', { class: 'fn-error' }, l.error) : null,
             open && l.logs ? [h('div', { class: 'fn-label' }, 'console'), consoleView(l.logs)] : null,
-            open && !l.logs && !l.error ? h('p', { class: 'fn-note fn-log-empty' }, 'Tidak ada keluaran console. Tambahkan console.log(...) di kode fungsi untuk melihat isinya di sini.') : null);
+            open && !l.logs && !l.error ? h('p', { class: 'fn-note fn-log-empty' }, 'Tidak ada keluaran console. Tambahkan console.log(...) di kode fungsi untuk melihat isinya di sini.') : null,
+            open && (l.error || l.status >= 500) ? h('div', { class: 'fn-ai-fix' },
+              aiButton('Perbaiki dengan AI', () => fnFixPrompt(l.name, { status: l.status, error: l.error, logs: l.logs, trigger: (TRIGGER[l.trigger] ?? l.trigger).toLowerCase() }))) : null);
         }))
         : h('p', { class: 'fn-placeholder' }, 'Belum ada eksekusi. Panggilan dari pengunjung, jadwal, dan uji coba tercatat di sini (100 terakhir).'));
   }
@@ -4254,7 +4288,13 @@
           h('span', { class: `fn-status s${String(r.status)[0]}` }, r.status), h('span', {}, `${r.ms} ms`), r.headers?.['content-type'] ? h('code', {}, r.headers['content-type']) : null) : null,
         r.error ? h('p', { class: 'fn-error' }, r.error) : null,
         shown ? h('pre', { class: 'fn-pre' }, shown) : null,
-        r.logs ? [h('div', { class: 'fn-label' }, 'console'), consoleView(r.logs)] : null) : null);
+        r.logs ? [h('div', { class: 'fn-label' }, 'console'), consoleView(r.logs)] : null,
+        // Hanya bila fungsinya benar-benar berjalan (ada status) — bukan kuota habis/gagal menyimpan.
+        r.status && (r.error || r.status >= 500) ? h('div', { class: 'fn-ai-fix' },
+          aiButton('Perbaiki dengan AI', () => fnFixPrompt(f.name, {
+            status: r.status, error: r.error || (r.status >= 500 ? shown : ''), logs: r.logs, trigger: 'uji coba',
+            request: [`${fnState.form.method} /api/fn/${f.name}${fnState.form.query ? `?${fnState.form.query}` : ''}`, clipText(fnState.form.body, 1000)].filter(Boolean).join('\n'),
+          }))) : null) : null);
   }
 
   // ---------- Provider AI (library ai.* di fungsi; API key milik pemilik project) ----------
@@ -4431,6 +4471,7 @@
     });
     return h('section', { class: 'fn-section' },
       fnSectionHead('Provider AI', d.aiProviders.length || null,
+        d.aiProviders.length ? aiButton('Buat fitur AI', 'Buatkan fungsi serverless yang memakai ai.chat dari provider AI-ku untuk ') : null,
         h('button', { type: 'button', class: 'fn-btn primary', onclick: () => openAiProvider() }, '+ Tambah provider')),
       h('p', { class: 'fn-note' }, 'Pakai AI di fungsi lewat ', h('code', {}, 'ai.chat()'), ', ', h('code', {}, 'ai.json()'), ', dan ', h('code', {}, 'ai.embed()'),
         ' — satu cara untuk OpenAI, Claude, Gemini, dan endpoint kompatibel OpenAI (DeepSeek, Groq, OpenRouter, …). Memakai API key milikmu; waktu menunggu AI tidak dihitung ke batas waktu fungsi.'),
@@ -4489,6 +4530,7 @@
         h('button', { type: 'button', class: 'fn-btn', onclick: () => openSchedule(f) }, 'Jadwal'),
         h('button', { type: 'button', class: 'fn-btn', onclick: () => copyText(f.url, 'URL fungsi disalin') }, 'Salin URL'),
         h('button', { type: 'button', class: 'fn-btn', onclick: async () => { setMode('code'); expandTo(f.path); await openFile(f.path); } }, 'Buka kode'),
+        aiButton('Ubah', `Ubah fungsi ${f.path} supaya `),
         h('button', { type: 'button', class: 'fn-btn primary', onclick: () => { fnState.open = fnState.open === f.name ? null : f.name; fnState.result = null; renderFn(); } }, fnState.open === f.name ? 'Tutup' : 'Coba')),
       fnState.open === f.name ? fnTryPanel(f) : null));
     const used = usage.limit ? Math.min(1, usage.today / usage.limit) : 0;
@@ -4496,7 +4538,9 @@
       h('div', { class: 'fn-head' },
         h('div', {}, h('h3', {}, 'Fungsi serverless'),
           h('p', {}, 'Kode backend yang berjalan di server: simpan API key dengan aman, olah data, kirim notifikasi, atau panggil layanan lain.')),
-        h('button', { type: 'button', class: 'fn-new', onclick: fnCreate }, '+ Fungsi baru')),
+        h('div', { class: 'fn-head-actions' },
+          aiButton('Buat dengan AI', 'Buatkan fungsi serverless yang '),
+          h('button', { type: 'button', class: 'fn-new', onclick: fnCreate }, '+ Fungsi baru'))),
       h('div', { class: 'fn-usage' },
         h('div', { class: 'fn-usage-top' },
           h('span', { class: 'fn-usage-count' }, h('strong', {}, usage.today.toLocaleString('id-ID')), ` / ${usage.limit.toLocaleString('id-ID')} eksekusi hari ini`),
@@ -5528,6 +5572,23 @@
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => state.active && save(state.active));
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyS, saveAll);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => toggleAi());
+    // Klik kanan di kode: kirim bagian yang dipilih (atau baris kursor) ke panel AI.
+    const codeForAi = (ed) => {
+      const model = ed.getModel();
+      let sel = ed.getSelection();
+      if (!model || !state.active || !sel) return null;
+      if (sel.isEmpty()) sel = new monaco.Range(sel.startLineNumber, 1, sel.startLineNumber, model.getLineMaxColumn(sel.startLineNumber));
+      const lines = sel.startLineNumber === sel.endLineNumber ? `baris ${sel.startLineNumber}` : `baris ${sel.startLineNumber}–${sel.endLineNumber}`;
+      return `Di file ${state.active} ${lines}:\n\`\`\`\n${clipText(model.getValueInRange(sel), 4000)}\n\`\`\`\n\n`;
+    };
+    editor.addAction({
+      id: 'rakit.aiChange', label: '✦ Minta AI mengubah kode ini', contextMenuGroupId: 'navigation', contextMenuOrder: 0,
+      run: (ed) => { const code = codeForAi(ed); if (code) askAi(`${code}Ubah bagian ini supaya `, 'build'); },
+    });
+    editor.addAction({
+      id: 'rakit.aiExplain', label: '✦ Tanya AI tentang kode ini', contextMenuGroupId: 'navigation', contextMenuOrder: 0.1,
+      run: (ed) => { const code = codeForAi(ed); if (code) askAi(`${code}Jelaskan apa yang dilakukan kode ini dengan bahasa sederhana.`, 'plan'); },
+    });
     // Di Mac, Monaco hanya memakai ⌘F (cari) & ⌥⌘F (ganti). Banyak pengguna terbiasa Ctrl+F / Ctrl+H dari
     // Windows, jadi tombol Ctrl yang asli (WinCtrl di Monaco) juga dipasang. Di Windows/Linux Ctrl+F sudah bawaan.
     if (/Mac|iPhone|iPad/.test(navigator.platform)) {

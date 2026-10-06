@@ -336,6 +336,11 @@ export default async function (req, { db, ai }) {
   10 detik fungsi (jam eksekusi dijeda). Base URL & URL gambar melewati penjaga alamat internal yang sama dengan `fetch`.
 - **Pemakaian** per provider per hari (panggilan, gagal, token) di tabel `fn_ai_usage`, tampil di tab Fungsi.
 - AI Builder tahu library ini dan nama provider yang terpasang (tanpa key).
+- AI Builder juga menerima jadwal fungsi dan maks. 5 eksekusi gagal terbaru (error + console, dilewati bila kodenya
+  sudah diubah sesudahnya), jadi "perbaiki fungsi yang error" bisa langsung dikerjakan.
+- Tombol **✦ … dengan AI** menghubungkan fitur lain ke panel AI (mengisi kotak prompt, tidak langsung dikirim): Fungsi
+  (buat/ubah, perbaiki dari log & uji coba, buat fitur AI), Database (pakai tabel di website), temuan Diagram, catatan
+  Baca Alur Kode, dan klik kanan di editor kode (ubah / tanya tentang kode terpilih).
 - API: `PUT /api/functions/ai-providers` `{ name, kind, baseUrl, apiKey, model, embedModel, default }` (apiKey kosong saat
   mengubah = key lama), `DELETE /api/functions/ai-providers/:name`, `POST /api/functions/ai-providers/:name/test`;
   daftarnya ada di `GET /api/functions` (`aiProviders`, `aiKinds`).
