@@ -64,6 +64,8 @@ type Service struct {
 	ResolvePage func(slug, pathname string) string
 	// SecretNames: nama rahasia fungsi serverless project (bukan isinya), dari paket fn.
 	SecretNames func(slug string) []string
+	// AIProviders: provider AI fungsi yang dipasang ("nama (jenis, model)", tanpa key), dari paket fn.
+	AIProviders func(slug string) []string
 
 	mu      sync.Mutex
 	jobs    map[int64]*job // id pesan AI -> job
@@ -416,6 +418,13 @@ func (s *Service) projectContext(ctx context.Context, slug, activePath string, p
 			names = strings.Join(list, ", ")
 		}
 		sections = append(sections, "Function secrets (names only, read with env.NAME): "+names)
+	}
+	if s.AIProviders != nil {
+		names := "(none yet — the owner adds them in the Fungsi tab → Provider AI)"
+		if list := s.AIProviders(slug); len(list) > 0 {
+			names = strings.Join(list, ", ")
+		}
+		sections = append(sections, "AI providers for ai.* in functions: "+names)
 	}
 	if activePath != "" {
 		sections = append(sections, fmt.Sprintf(`The user currently has "%s" open in the editor.`, activePath))

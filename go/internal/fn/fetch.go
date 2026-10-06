@@ -34,7 +34,9 @@ func blockedIP(ip net.IP) bool {
 
 var errBlocked = errors.New("alamat internal tidak boleh dihubungi dari fungsi")
 
-func newClient(allowPrivate bool) *http.Client {
+// newClient: klien HTTP fungsi. headerTimeout: lama menunggu jawaban (fetch biasa 8 detik; provider AI
+// menjawab setelah selesai membuat teks, jadi lebih lama).
+func newClient(allowPrivate bool, headerTimeout time.Duration) *http.Client {
 	dialer := &net.Dialer{
 		Timeout: 5 * time.Second,
 		Control: func(_, address string, _ syscall.RawConn) error {
@@ -53,7 +55,7 @@ func newClient(allowPrivate bool) *http.Client {
 			Proxy:                 nil, // jangan lewat proxy lingkungan server
 			DialContext:           dialer.DialContext,
 			TLSHandshakeTimeout:   5 * time.Second,
-			ResponseHeaderTimeout: fetchTimeout,
+			ResponseHeaderTimeout: headerTimeout,
 			MaxIdleConns:          20,
 			IdleConnTimeout:       30 * time.Second,
 		},

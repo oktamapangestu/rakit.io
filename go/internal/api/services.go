@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"rakit.io/server/internal/fn"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
 )
@@ -308,6 +309,27 @@ func (h *Handler) functions(q *request) error {
 		if err := svc.DeleteSecret(project, q.rest[1]); err != nil {
 			return err
 		}
+	// Provider AI untuk library ai.* (API key milik pemilik project, tidak pernah dikirim balik).
+	case q.is("PUT", "ai-providers"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		if err := svc.SetProvider(project, fn.ProviderInput{
+			Name: q.text("name"), Kind: q.text("kind"), BaseURL: q.text("baseUrl"), APIKey: q.text("apiKey"),
+			Model: q.text("model"), EmbedModel: q.text("embedModel"), Default: jsconv.Truthy(q.body["default"]),
+		}); err != nil {
+			return err
+		}
+	case q.is("DELETE", "ai-providers", ":"):
+		if err := svc.DeleteProvider(project, q.rest[1]); err != nil {
+			return err
+		}
+	case q.is("POST", "ai-providers", ":", "test"):
+		out, err := svc.TestProvider(q.r.Context(), project, q.rest[1])
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
 	case q.is("PUT", ":", "schedule"):
 		if err := q.load(); err != nil {
 			return err

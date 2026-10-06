@@ -299,6 +299,42 @@ menampilkannya sebagai teks abu-abu: **Tab** menerima, **Esc** atau lanjut menge
 - Yang dikirim: path file, maks. 6.000 karakter sebelum kursor dan 2.000 sesudahnya.
 - Bisa dimatikan di menu avatar → **Pengaturan** → "Prediksi kode otomatis (AI)" (disimpan per browser).
 
+## Library AI di fungsi (Provider AI)
+
+Fungsi serverless (`functions/<nama>.js`) mendapat objek `ai` untuk memakai AI dengan **API key milik pemilik project**.
+Satu cara untuk semua provider; server Go menerjemahkannya ke API tiap provider (`go/internal/fnai`). Hanya di server Go.
+
+```js
+export default async function (req, { db, ai }) {
+  const { text } = await ai.chat('Buat deskripsi produk: ' + req.body.nama, { system: 'Kamu penulis toko online.' });
+  const data = await ai.json('Ambil nama & HP dari: ' + req.body.pesan, { nama: 'string', hp: 'string' }); // -> objek
+  const cek = await ai.chat('Apakah ini bukti transfer?', { images: ['/uploads/bukti/abc.jpg'] });            // vision
+  const [a, b] = await ai.embed(['kue coklat', 'brownies']);                                                // embedding
+  return { text, data, cek: cek.text, mirip: ai.similarity(a, b) };
+}
+```
+
+- **Provider** diatur di tab **Fungsi → Provider AI**: OpenAI, Anthropic Claude, Google Gemini, atau **kompatibel OpenAI**
+  (isi base URL; tombol cepat DeepSeek, Groq, OpenRouter, Mistral, Together). Tiap provider punya nama (dipakai di kode lewat
+  `{ provider: 'gemini' }`), model chat, model embedding opsional, dan satu provider **default**. Maks. 10 per project.
+  Tombol **Tes** mengirim pesan pendek untuk memeriksa key & model.
+- **API key** disimpan di server (tabel `fn_ai_providers`, seperti rahasia fungsi) dan tidak pernah dikirim ke browser maupun ke
+  kode fungsi; editor hanya menampilkan 4 karakter terakhirnya. Biaya ditagih provider ke akun pemiliknya — rakit.io tidak
+  memotong kredit.
+- `ai.chat(prompt | { messages, system, images, provider, model, temperature, maxTokens })` → `{ text, model, provider, finish,
+  usage }`. `ai.json(prompt, shape, options)` → objek hasil (OpenAI memakai `response_format`, Gemini `responseMimeType`; bila
+  bukan JSON, diminta ulang sekali). `ai.embed(teks | array)` → vektor / array vektor (Anthropic tidak punya embedding).
+  `ai.providers()` → daftar provider (tanpa key). `ai.similarity(a, b)` → kemiripan cosine.
+- **Gambar** (maks. 4 per panggilan, 5 MB, JPG/PNG/WEBP/GIF): URL https publik, path gambar di project (`/uploads/…`,
+  `/images/…`), atau data URL. Diunduh/dibaca server lalu dikirim sebagai base64 ke provider.
+- **Batas**: maks. 5 panggilan `ai.*` per eksekusi, 60 detik per panggilan. Waktu menunggu provider **tidak dihitung** ke batas
+  10 detik fungsi (jam eksekusi dijeda). Base URL & URL gambar melewati penjaga alamat internal yang sama dengan `fetch`.
+- **Pemakaian** per provider per hari (panggilan, gagal, token) di tabel `fn_ai_usage`, tampil di tab Fungsi.
+- AI Builder tahu library ini dan nama provider yang terpasang (tanpa key).
+- API: `PUT /api/functions/ai-providers` `{ name, kind, baseUrl, apiKey, model, embedModel, default }` (apiKey kosong saat
+  mengubah = key lama), `DELETE /api/functions/ai-providers/:name`, `POST /api/functions/ai-providers/:name/test`;
+  daftarnya ada di `GET /api/functions` (`aiProviders`, `aiKinds`).
+
 ## Baca Alur Kode
 
 Tombol **Baca Alur Kode** di atas editor kode (file .html, .css, .js) membuka panel di samping editor. AI membaca file itu

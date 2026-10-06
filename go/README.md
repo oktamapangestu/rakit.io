@@ -69,6 +69,9 @@ Catatan:
   oleh server Go — server Node tidak tahu aturan ini. Jadwal (cron, WIB) dijalankan penjadwal di proses Go tiap
   menit (Pro: min. 15 menit, Unlimited: min. 5 menit); log 100 eksekusi terakhir per project ada di tabel `fn_logs`.
   Panduan fungsi untuk AI ada di prompt `src/ai.js` (bagian "Serverless functions").
+- **Library AI fungsi** (`internal/fnai` + `internal/fn/ai.go`): `ai.chat` / `ai.json` / `ai.embed` di kode fungsi memakai
+  provider (OpenAI, Anthropic, Gemini, kompatibel OpenAI) dengan API key pemilik project (`fn_ai_providers`). Waktu menunggu
+  provider dijeda dari batas 10 detik (`clock.go`); tiap panggilan maks. 60 detik, maks. 5 per eksekusi. Lihat README utama.
 
 ## Deploy tahap ini
 

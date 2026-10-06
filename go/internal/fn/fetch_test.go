@@ -27,7 +27,7 @@ func TestBlockedIP(t *testing.T) {
 func TestFetchDiblokir(t *testing.T) {
 	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("rahasia internal")) }))
 	defer local.Close()
-	s := &Service{cfg: &config.Config{BaseDomain: "rakit.io"}, client: newClient(false)}
+	s := &Service{cfg: &config.Config{BaseDomain: "rakit.io"}, client: newClient(false, fetchTimeout)}
 	arg := func(v any) json.RawMessage { b, _ := json.Marshal(v); return b }
 	for _, c := range []struct{ url, want string }{
 		{local.URL, "alamat internal tidak boleh dihubungi"},

@@ -95,6 +95,7 @@ func main() {
 	editorAI := ai.New(cfg, db, wallet, limits, projectDB, history, models, queue)
 	editorAI.ResolvePage = site.ResolvePage
 	editorAI.SecretNames = functions.SecretNames
+	editorAI.AIProviders = functions.AIProviderNames
 	editorAI.Start()
 	appAPI, err := api.New(cfg, db, sessions, api.Services{
 		Plans: limits, UserDB: projectDB, Versions: history, Credits: wallet,

@@ -22,6 +22,7 @@ import (
 
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/files"
+	"rakit.io/server/internal/fnai"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/store"
@@ -53,6 +54,8 @@ type Service struct {
 	userdb *userdb.DB
 	plans  *plans.Plans
 	client *http.Client
+	// aiClient: untuk provider AI (ai.*); penjaga alamat internal sama dengan fetch.
+	aiClient *http.Client
 
 	slots             chan struct{}
 	perProject, perIP *httpx.RateLimiter
@@ -62,7 +65,8 @@ func New(cfg *config.Config, db *store.Store, udb *userdb.DB, p *plans.Plans) *S
 	// Hanya untuk test lokal (server tiruan di 127.0.0.1); jangan pernah dinyalakan di produksi.
 	allowPrivate := os.Getenv("FN_ALLOW_PRIVATE_FETCH") == "1"
 	return &Service{
-		cfg: cfg, store: db, db: db.DB(), userdb: udb, plans: p, client: newClient(allowPrivate),
+		cfg: cfg, store: db, db: db.DB(), userdb: udb, plans: p,
+		client: newClient(allowPrivate, fetchTimeout), aiClient: newClient(allowPrivate, aiCallTimeout),
 		slots:      make(chan struct{}, maxConcurrent),
 		perProject: httpx.NewRateLimiter(time.Minute, 120, "Fungsi website ini sedang ramai. Coba lagi sebentar lagi."),
 		perIP:      httpx.NewRateLimiter(time.Minute, 60, "Terlalu banyak permintaan. Coba lagi sebentar lagi."),
@@ -200,7 +204,10 @@ type SecretInfo struct {
 type Overview struct {
 	Functions []Info       `json:"functions"`
 	Secrets   []SecretInfo `json:"secrets"`
-	Usage     struct {
+	// Library AI: provider yang dipasang (tanpa API key) dan jenis yang bisa dipilih.
+	AIProviders []ProviderInfo    `json:"aiProviders"`
+	AIKinds     map[string]string `json:"aiKinds"`
+	Usage       struct {
 		Today int    `json:"today"`
 		Limit int    `json:"limit"`
 		Plan  string `json:"plan"`
@@ -249,6 +256,13 @@ func (s *Service) Overview(p *store.Project) (*Overview, error) {
 			return nil, err
 		}
 		out.Secrets = append(out.Secrets, si)
+	}
+	if out.AIProviders, err = s.ProviderInfos(p); err != nil {
+		return nil, err
+	}
+	out.AIKinds = map[string]string{}
+	for k, v := range fnai.Kinds {
+		out.AIKinds[k] = v.Label
 	}
 	out.Usage.Today = s.usedToday(p.UserID)
 	out.Usage.Limit, out.Usage.Plan = s.limitFor(p.UserID)
@@ -320,16 +334,29 @@ func (s *Service) execute(parent context.Context, t Target, name string, req Req
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(parent, timeout)
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	clk := newClock(timeout, cancel)
+	defer clk.stop()
 
-	fetches := 0
+	fetches, aiCalls := 0, 0
 	host := func(ctx context.Context, op string, args []json.RawMessage) (any, error) {
-		if op == "fetch" {
+		switch {
+		case op == "fetch":
 			if fetches++; fetches > maxFetches {
 				return nil, fmt.Errorf("fetch: maksimal %d panggilan per eksekusi", maxFetches)
 			}
 			return s.fetch(ctx, args)
+		case strings.HasPrefix(op, "ai."):
+			if op != "ai.providers" {
+				if aiCalls++; aiCalls > maxAICalls {
+					return nil, fmt.Errorf("ai: maksimal %d panggilan per eksekusi", maxAICalls)
+				}
+			}
+			// Menunggu provider AI tidak dihitung ke batas waktu fungsi (tiap panggilan dibatasi aiCallTimeout).
+			clk.pause()
+			defer clk.resume()
+			return s.aiOp(ctx, t, op, args)
 		}
 		return s.dbOp(ctx, t.DBKey, op, args)
 	}

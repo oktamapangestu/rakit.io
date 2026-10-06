@@ -181,6 +181,30 @@ const schema = `
 	  count   INTEGER NOT NULL DEFAULT 0,
 	  PRIMARY KEY (user_id, day)
 	);
+	-- Library AI fungsi (internal/fnai): provider yang dipasang pemilik project dengan API key-nya sendiri
+	-- (tidak pernah dikirim ke browser maupun ke kode fungsi), dan pemakaian per project per hari (WIB).
+	CREATE TABLE IF NOT EXISTS fn_ai_providers (
+	  project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+	  name        TEXT NOT NULL,   -- dipakai di kode: ai.chat({ provider: name })
+	  kind        TEXT NOT NULL,   -- openai | anthropic | gemini | compatible
+	  base_url    TEXT NOT NULL DEFAULT '',
+	  api_key     TEXT NOT NULL,
+	  model       TEXT NOT NULL DEFAULT '',
+	  embed_model TEXT NOT NULL DEFAULT '',
+	  is_default  INTEGER NOT NULL DEFAULT 0,
+	  updated_at  INTEGER NOT NULL,
+	  PRIMARY KEY (project_id, name)
+	);
+	CREATE TABLE IF NOT EXISTS fn_ai_usage (
+	  project_id    INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+	  day           TEXT NOT NULL,
+	  provider      TEXT NOT NULL,
+	  calls         INTEGER NOT NULL DEFAULT 0,
+	  errors        INTEGER NOT NULL DEFAULT 0,
+	  input_tokens  INTEGER NOT NULL DEFAULT 0,
+	  output_tokens INTEGER NOT NULL DEFAULT 0,
+	  PRIMARY KEY (project_id, day, provider)
+	);
 	-- Prediksi kode di editor (internal/ai/complete.go): jumlah permintaan & token per akun per hari (WIB).
 	CREATE TABLE IF NOT EXISTS ai_complete_usage (
 	  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

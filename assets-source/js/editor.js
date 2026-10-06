@@ -4054,11 +4054,12 @@
 
   const fnTemplate = (name) => [
     `// Fungsi serverless — dipanggil lewat /api/fn/${name}`,
-    '// req: { method, query, headers, body } · ctx: { db, env, fetch }',
+    '// req: { method, query, headers, body } · ctx: { db, env, fetch, ai }',
     '//   db   : list / get / insert / update / delete tabel project (sebagai pemilik)',
     '//   env  : rahasia project (atur di tab Fungsi), mis. env.TELEGRAM_TOKEN',
     '//   fetch: memanggil API luar',
-    'export default async function (req, { db, env, fetch }) {',
+    "//   ai   : ai.chat('…') / ai.json / ai.embed — provider & API key di tab Fungsi → Provider AI",
+    'export default async function (req, { db, env, fetch, ai }) {',
     "  const nama = req.body?.nama ?? req.query.nama ?? 'dunia';",
     '  return { pesan: `Halo, ${nama}!`, waktu: new Date().toISOString() };',
     '}',
@@ -4256,6 +4257,183 @@
         r.logs ? [h('div', { class: 'fn-label' }, 'console'), consoleView(r.logs)] : null) : null);
   }
 
+  // ---------- Provider AI (library ai.* di fungsi; API key milik pemilik project) ----------
+  // Contoh model hanya saran di kotak isian; nama model mana pun yang dikenal provider bisa diketik.
+  const AI_KIND_INFO = {
+    openai: { name: 'openai', keyUrl: 'https://platform.openai.com/api-keys', models: ['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4.1'], embed: 'text-embedding-3-small' },
+    anthropic: { name: 'claude', keyUrl: 'https://console.anthropic.com/settings/keys', models: ['claude-sonnet-4-5', 'claude-haiku-4-5'], embed: '' },
+    gemini: { name: 'gemini', keyUrl: 'https://aistudio.google.com/apikey', models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'], embed: 'gemini-embedding-001' },
+    compatible: { name: '', keyUrl: '', models: [], embed: '' },
+  };
+  // Endpoint kompatibel OpenAI yang populer: isi base URL & nama sekali klik.
+  const AI_PRESETS = [
+    { label: 'DeepSeek', name: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+    { label: 'Groq', name: 'groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+    { label: 'OpenRouter', name: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
+    { label: 'Mistral', name: 'mistral', baseUrl: 'https://api.mistral.ai/v1', model: 'mistral-small-latest' },
+    { label: 'Together', name: 'together', baseUrl: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo' },
+  ];
+  const fnAiTests = new Map(); // nama provider -> hasil tes terakhir
+
+  async function testAiProvider(name) {
+    fnAiTests.set(name, { running: true });
+    renderFn();
+    try {
+      fnAiTests.set(name, await api('POST', `/api/functions/ai-providers/${encodeURIComponent(name)}/test`));
+    } catch (err) {
+      fnAiTests.set(name, { ok: false, error: err.message });
+    }
+    fnState.data = await api('GET', '/api/functions').catch(() => fnState.data); // pemakaian hari ini
+    renderFn();
+  }
+
+  function openAiProvider(existing = null) {
+    const kinds = fnState.data.aiKinds;
+    const kind = h('select', { disabled: Boolean(existing) }, Object.keys(AI_KIND_INFO).map((k) => h('option', { value: k, selected: k === (existing?.kind ?? 'openai') }, kinds[k] ?? k)));
+    const name = h('input', { value: existing?.name ?? 'openai', disabled: Boolean(existing), spellcheck: 'false', autocomplete: 'off',
+      oninput: (e) => { e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '-'); nameTouched = true; } });
+    const baseUrl = h('input', { value: existing?.baseUrl ?? '', placeholder: 'https://api.deepseek.com/v1', spellcheck: 'false', autocomplete: 'off' });
+    const apiKey = h('input', { type: 'password', autocomplete: 'new-password', placeholder: existing ? `kosongkan untuk tetap memakai key ${existing.keyHint}` : 'sk-…' });
+    const modelList = h('datalist', { id: 'aiModelList' });
+    const model = h('input', { value: existing?.model ?? '', list: 'aiModelList', spellcheck: 'false', autocomplete: 'off' });
+    const embedModel = h('input', { value: existing?.embedModel ?? '', spellcheck: 'false', autocomplete: 'off' });
+    const isDefault = h('input', { type: 'checkbox', checked: existing ? existing.default : !fnState.data.aiProviders.length });
+    const keyLink = h('a', { target: '_blank', rel: 'noopener' }, 'Dapatkan API key ↗');
+    const presets = h('div', { class: 'ai-presets' }, AI_PRESETS.map((p) => h('button', {
+      type: 'button', class: 'fn-chip',
+      onclick: () => { baseUrl.value = p.baseUrl; if (!existing) name.value = p.name; if (!model.value) model.value = p.model; },
+    }, p.label)));
+    let nameTouched = Boolean(existing);
+    const urlRow = h('label', {}, 'Base URL', baseUrl);
+    const embedRow = h('label', {}, 'Model embedding ', h('span', { class: 'ai-optional' }, '(opsional, untuk ai.embed)'), embedModel);
+    const sync = () => {
+      const info = AI_KIND_INFO[kind.value];
+      const compatible = kind.value === 'compatible';
+      if (!nameTouched) name.value = info.name;
+      presets.hidden = !compatible;
+      urlRow.firstChild.textContent = compatible ? 'Base URL' : 'Base URL (opsional, kosongkan untuk alamat resmi)';
+      baseUrl.required = compatible;
+      keyLink.hidden = !info.keyUrl;
+      keyLink.href = info.keyUrl || '#';
+      modelList.replaceChildren(...info.models.map((m) => h('option', { value: m })));
+      model.placeholder = info.models[0] ?? 'nama model, mis. deepseek-chat';
+      embedRow.hidden = kind.value === 'anthropic';
+      embedModel.placeholder = info.embed || 'nama model embedding (bila didukung)';
+    };
+    kind.addEventListener('change', sync);
+    const save = h('button', { type: 'submit', class: 'primary' }, 'Simpan & tes');
+    const close = openSheet('publish-modal ai-provider-modal', 'Provider AI', (done) => [
+      h('h3', {}, existing ? `Ubah provider ${existing.name}` : 'Tambah provider AI'),
+      h('p', {}, 'Fungsi memakai AI lewat ', h('code', {}, 'ai.chat()'), ', ', h('code', {}, 'ai.json()'), ', dan ', h('code', {}, 'ai.embed()'),
+        ' dengan API key milikmu sendiri — biayanya ditagih provider ke akunmu. Key disimpan di server dan tidak pernah dikirim ke browser maupun ke kode fungsi.'),
+      h('form', { class: 'ai-provider-form', onsubmit: async (e) => {
+        e.preventDefault();
+        save.disabled = true;
+        try {
+          fnState.data = await api('PUT', '/api/functions/ai-providers', {
+            name: name.value, kind: kind.value, baseUrl: baseUrl.value, apiKey: apiKey.value,
+            model: model.value, embedModel: embedModel.value, default: isDefault.checked,
+          });
+          done();
+          toast(`Provider ${name.value} disimpan. Mengetes koneksi…`);
+          testAiProvider(name.value);
+        } catch (err) {
+          toast(err.message, 'error');
+          save.disabled = false;
+        }
+      } },
+      h('div', { class: 'ai-row' }, h('label', {}, 'Jenis', kind), h('label', {}, 'Nama di kode', name)),
+      presets,
+      urlRow,
+      h('label', {}, h('span', { class: 'ai-label-row' }, 'API key', keyLink), apiKey),
+      h('label', {}, 'Model chat', model, modelList),
+      embedRow,
+      h('label', { class: 'ai-check' }, isDefault, 'Jadikan default (dipakai bila kode tidak menyebut provider)'),
+      h('div', { class: 'modal-buttons' }, save, h('button', { type: 'button', onclick: done }, 'Batal'))),
+    ]);
+    sync();
+    (existing ? apiKey : kind).focus();
+    return close;
+  }
+
+  async function deleteAiProvider(p) {
+    const ok = await modal({ title: `Hapus provider ${p.name}?`, message: `Fungsi yang memakai provider '${p.name}' akan gagal sampai provider ditambahkan lagi. API key-nya ikut dihapus dari server.`, buttons: [{ label: 'Hapus', value: true, danger: true }, { label: 'Batal', value: null }] });
+    if (!ok) return;
+    try {
+      fnState.data = await api('DELETE', `/api/functions/ai-providers/${encodeURIComponent(p.name)}`);
+      fnAiTests.delete(p.name);
+      renderFn();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  async function makeDefaultAiProvider(p) {
+    try {
+      fnState.data = await api('PUT', '/api/functions/ai-providers', { ...p, apiKey: '', default: true });
+      renderFn();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  const AI_EXAMPLE = [
+    "export default async function (req, { db, ai }) {",
+    "  // Teks: provider default, atau pilih { provider: 'gemini', model: '…' }",
+    "  const { text } = await ai.chat(`Buat deskripsi singkat untuk produk: ${req.body.nama}`, {",
+    "    system: 'Kamu penulis toko online yang ramah. Jawab dalam bahasa Indonesia.',",
+    "  });",
+    "",
+    "  // JSON terstruktur: hasilnya langsung objek",
+    "  const data = await ai.json(`Ambil nama & nomor HP dari: ${req.body.pesan}`, { nama: 'string', hp: 'string' });",
+    "",
+    "  // Gambar (vision): URL https, path gambar di project, atau data URL",
+    "  const cek = await ai.chat('Apakah ini bukti transfer? Sebutkan nominalnya.', { images: [req.body.bukti] });",
+    "",
+    "  // Embedding: cari data yang maknanya mirip",
+    "  const [a, b] = await ai.embed(['kue coklat', 'brownies']);",
+    "  return { text, data, cek: cek.text, mirip: ai.similarity(a, b) };",
+    "}",
+  ].join('\n');
+
+  function fnAiProviders(d) {
+    const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}rb` : String(n));
+    const rows = d.aiProviders.map((p) => {
+      const t = fnAiTests.get(p.name);
+      return h('li', {},
+        h('div', { class: 'ai-prov-main' },
+          h('div', { class: 'ai-prov-title' },
+            h('code', {}, p.name),
+            h('span', { class: 'fn-chip' }, d.aiKinds[p.kind] ?? p.kind),
+            p.default ? h('span', { class: 'fn-chip ai-default' }, 'default') : null),
+          h('div', { class: 'ai-prov-meta' },
+            h('span', { title: 'Model chat' }, p.model),
+            p.embedModel ? h('span', { title: 'Model embedding' }, `embed: ${p.embedModel}`) : null,
+            h('span', { title: 'API key' }, `key ${p.keyHint}`),
+            h('span', { title: 'Pemakaian hari ini (WIB)' }, p.today.calls
+              ? `${p.today.calls} panggilan · ${fmt(p.today.inputTokens + p.today.outputTokens)} token${p.today.errors ? ` · ${p.today.errors} gagal` : ''} hari ini`
+              : 'belum dipakai hari ini')),
+          t ? h('div', { class: `ai-test ${t.running ? '' : t.ok ? 'ok' : 'fail'}` },
+            t.running ? 'Mengetes koneksi…' : t.ok ? `✓ Tersambung (${t.ms} ms) — jawaban: "${String(t.text).trim().slice(0, 60)}"` : `✕ ${t.error}`) : null),
+        h('div', { class: 'ai-prov-actions' },
+          h('button', { type: 'button', class: 'fn-btn', disabled: t?.running, onclick: () => testAiProvider(p.name) }, 'Tes'),
+          !p.default ? h('button', { type: 'button', class: 'fn-btn', onclick: () => makeDefaultAiProvider(p) }, 'Jadikan default') : null,
+          h('button', { type: 'button', class: 'fn-btn', onclick: () => openAiProvider(p) }, 'Ubah'),
+          h('button', { type: 'button', class: 'icon-btn', title: `Hapus ${p.name}`, onclick: () => deleteAiProvider(p) }, svg(ICON.trash))));
+    });
+    return h('section', { class: 'fn-section' },
+      fnSectionHead('Provider AI', d.aiProviders.length || null,
+        h('button', { type: 'button', class: 'fn-btn primary', onclick: () => openAiProvider() }, '+ Tambah provider')),
+      h('p', { class: 'fn-note' }, 'Pakai AI di fungsi lewat ', h('code', {}, 'ai.chat()'), ', ', h('code', {}, 'ai.json()'), ', dan ', h('code', {}, 'ai.embed()'),
+        ' — satu cara untuk OpenAI, Claude, Gemini, dan endpoint kompatibel OpenAI (DeepSeek, Groq, OpenRouter, …). Memakai API key milikmu; waktu menunggu AI tidak dihitung ke batas waktu fungsi.'),
+      rows.length ? h('ul', { class: 'fn-secrets ai-providers' }, rows)
+        : h('p', { class: 'fn-placeholder' }, 'Belum ada provider. Tambahkan API key OpenAI, Claude, Gemini, atau provider lain, lalu panggil ai.chat(…) dari fungsi.'),
+      h('details', { class: 'fn-help ai-example' },
+        h('summary', {}, 'Contoh kode'),
+        h('div', { class: 'ai-example-tools' }, h('button', { type: 'button', class: 'fn-btn', onclick: () => copyText(AI_EXAMPLE, 'Contoh kode disalin') }, 'Salin')),
+        h('pre', { class: 'fn-pre' }, AI_EXAMPLE)));
+  }
+
   function fnSecrets(d) {
     const name = h('input', { placeholder: 'NAMA_RAHASIA', spellcheck: 'false', autocomplete: 'off', oninput: (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'); } });
     const value = h('input', { type: 'password', placeholder: 'isi (mis. API key)', autocomplete: 'new-password' });
@@ -4325,6 +4503,7 @@
           h('span', { class: 'fn-icon' }, svg('M9.3 1 3 9.2h4.2L6.3 15l6.6-8.4H8.7z')),
           h('p', {}, 'Belum ada fungsi. Fungsi disimpan di folder ', h('code', {}, 'functions/'), ' dan langsung bisa dipanggil dari halaman website-mu.'),
           h('button', { type: 'button', class: 'fn-btn primary', onclick: fnCreate }, 'Buat fungsi pertama'))),
+      fnAiProviders(d),
       fnSecrets(d),
       fnLogsSection(d),
       h('details', { class: 'fn-help' },

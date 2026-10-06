@@ -39,6 +39,50 @@
     delete: async (table, id) => call('db.delete', table, id),
   });
 
+  // ---------- Library AI (provider & API key diatur di tab Fungsi → Provider AI) ----------
+  const asParts = (content) => {
+    if (typeof content === 'string') return [{ text: content }];
+    if (!Array.isArray(content)) throw new Error('content pesan harus teks atau array bagian ({ text } / { image })');
+    return content.map((p) => {
+      if (typeof p === 'string') return { text: p };
+      if (p && (p.image != null || p.type === 'image')) return { image: String(p.image ?? p.url) };
+      if (p && p.type === 'image_url') return { image: String(p.image_url?.url ?? p.image_url) };
+      if (p && p.text != null) return { text: String(p.text) };
+      throw new Error('Bagian pesan harus { text } atau { image }');
+    });
+  };
+  // ai.chat('teks') · ai.chat('teks', { provider, model, ... }) · ai.chat({ messages, system, images, ... })
+  const chatArgs = (input, options = {}) => {
+    const o = typeof input === 'string' ? { ...options, prompt: input } : { ...(input || {}), ...(options || {}) };
+    let system = o.system == null ? '' : String(o.system);
+    const messages = [];
+    for (const m of o.messages || []) {
+      if (m?.role === 'system') system = [system, String(m.content)].filter(Boolean).join('\n\n');
+      else messages.push({ role: m?.role, content: asParts(m?.content) });
+    }
+    if (o.prompt != null) messages.push({ role: 'user', content: asParts(String(o.prompt)) });
+    const images = o.images == null ? [] : [].concat(o.images);
+    if (images.length) {
+      let last = null;
+      for (const m of messages) if (m.role === 'user') last = m;
+      if (!last) messages.push((last = { role: 'user', content: [] }));
+      for (const img of images) last.content.push({ image: String(img) });
+    }
+    return { provider: o.provider, model: o.model, system, temperature: o.temperature, maxTokens: o.maxTokens, messages };
+  };
+  const ai = Object.freeze({
+    chat: async (input, options) => call('ai.chat', chatArgs(input, options)),
+    json: async (input, shape, options) => call('ai.json', { ...chatArgs(input, options), shape: shape ?? null }),
+    embed: async (input, options = {}) => call('ai.embed', { input, provider: options.provider, model: options.model }),
+    // Kemiripan dua vektor embedding (cosine): 1 = sama persis, 0 = tidak berhubungan.
+    similarity: (a, b) => {
+      let dot = 0, na = 0, nb = 0;
+      for (let i = 0; i < Math.min(a.length, b.length); i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+      return na && nb ? dot / Math.sqrt(na * nb) : 0;
+    },
+    providers: async () => call('ai.providers'),
+  });
+
   async function fetch(url, init = {}) {
     let body = init.body;
     if (body != null && typeof body !== 'string') body = JSON.stringify(body);
@@ -129,7 +173,7 @@
   // Jalankan fungsi: kembalikan JSON {status, headers, body, json}.
   globalThis.__run = async (handler, raw) => {
     if (typeof handler !== 'function') {
-      throw new Error('File fungsi harus berisi: export default async function (req, { db, env, fetch }) { ... }');
+      throw new Error('File fungsi harus berisi: export default async function (req, { db, env, fetch, ai }) { ... }');
     }
     const r = JSON.parse(raw);
     const req = Object.freeze({
@@ -141,7 +185,7 @@
       text: async () => r.text,
       json: async () => JSON.parse(r.text || 'null'),
     });
-    const out = await handler(req, Object.freeze({ db, env, fetch }));
+    const out = await handler(req, Object.freeze({ db, env, fetch, ai }));
     if (out instanceof Response) {
       const isText = typeof out.body === 'string' || out.body == null;
       return JSON.stringify({ status: out.status, headers: out.headers, body: isText ? out.body ?? '' : JSON.stringify(out.body), json: !isText });

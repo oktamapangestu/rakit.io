@@ -38,7 +38,7 @@ AI assistant for the website (chatbot for visitors):
 Serverless functions (server-side code):
 - For anything that must run on the server — secret API keys/tokens (Telegram, WhatsApp, payment, email…), logic visitors must not see or tamper with (prices, totals, coupon or quota checks), writing to owner-only tables, or calling other services — write a function in functions/<name>.js (name: lowercase letters, digits, - or _). The site calls it on the same domain with fetch('/api/fn/<name>', …); its source is never served to visitors.
 - Format (an ES module running in a sandbox — not Node.js: no require, no npm packages, no filesystem):
-    export default async function (req, { db, env, fetch }) {
+    export default async function (req, { db, env, fetch, ai }) {
       // req: { method, query, headers, body } — body is already parsed when the request sends JSON
       const row = await db.insert('pesanan', { nama: req.body.nama, total: 150000 });
       const res = await fetch('https://api.example.com/notify', { method: 'POST', headers: { Authorization: 'Bearer ' + env.API_TOKEN }, body: { id: row.id } });
@@ -46,6 +46,16 @@ Serverless functions (server-side code):
     }
   db works as the owner (public rules do not apply): db.list(table, { sort: '-id', limit, offset, filter: { column: value } }) -> { rows, total }, db.get(table, id), db.insert(table, data), db.update(table, id, data), db.delete(table, id). For other responses: return new Response(text, { status, headers }) or Response.json(data, { status }).
 - Secrets: read them from env.NAME and NEVER write a key or token into any file. You cannot set secrets yourself — tell the user to open the "Fungsi" tab → "Rahasia (env)" and add NAME. Existing secret names are listed under "Function secrets".
+- AI inside a function (text generation, chatbots, classification, data extraction, image checks, semantic search): use the built-in ai library from the second argument — never call AI APIs with fetch and never ask for an API key in code:
+    export default async function (req, { db, ai }) {
+      const { text } = await ai.chat(req.body.pertanyaan, { system: 'Kamu CS toko kue. Jawab singkat dalam bahasa Indonesia.' });
+      const data = await ai.json('Ambil nama & nomor HP dari: ' + req.body.pesan, { nama: 'string', hp: 'string' });   // -> object
+      const cek = await ai.chat('Apakah ini bukti transfer? Berapa nominalnya?', { images: [row.bukti] });              // vision
+      const [a, b] = await ai.embed(['kue coklat', 'brownies']); const skor = ai.similarity(a, b);                       // 0..1
+      return { text, data };
+    }
+  ai.chat(prompt | { messages: [{ role: 'user'|'assistant', content }], system, images, provider, model, temperature, maxTokens }) -> { text, model, provider, usage }. images: https URLs, project image paths ("/uploads/…", "/images/…") or data URLs (max 4). ai.json(prompt, shape, options) returns the parsed object. ai.embed(text | texts, { provider, model }) -> vector | vectors. The default provider is used unless { provider: '<name>' } is given (names under "AI providers"). Max 5 ai calls per run; waiting for AI does not count toward the 10-second limit. The owner adds providers (OpenAI, Claude, Gemini, or OpenAI-compatible like DeepSeek/Groq) with their OWN API key in the "Fungsi" tab → "Provider AI"; if none is listed, tell the user to add one there. Anthropic has no embeddings.
+- For a visitor chatbot without their own API key, prefer the AI assistant widget above; use ai.* in functions when the owner wants their own provider/key or custom logic.
 - Limits: 10 seconds and 64 MB per run, at most 10 fetch calls, and fetch cannot reach rakit.io websites (use db instead). A thrown error returns status 500 { "error" } to the caller.
 - Scheduled runs (cron, e.g. a daily report) are set by the user in the "Fungsi" tab → "Jadwal" (Pro/Unlimited plans); a scheduled run receives req.method "CRON".
 
