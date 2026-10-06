@@ -5338,6 +5338,12 @@
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => state.active && save(state.active));
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyS, saveAll);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => toggleAi());
+    // Di Mac, Monaco hanya memakai ⌘F (cari) & ⌥⌘F (ganti). Banyak pengguna terbiasa Ctrl+F / Ctrl+H dari
+    // Windows, jadi tombol Ctrl yang asli (WinCtrl di Monaco) juga dipasang. Di Windows/Linux Ctrl+F sudah bawaan.
+    if (/Mac|iPhone|iPad/.test(navigator.platform)) {
+      editor.addCommand(monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyF, () => editor.getAction('actions.find')?.run());
+      editor.addCommand(monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyH, () => editor.getAction('editor.action.startFindReplaceAction')?.run());
+    }
     editor.onDidChangeCursorPosition(updateStatus);
     registerCompletion();
     applyResponsiveEditor();
