@@ -1,0 +1,242 @@
+[
+  {
+    "task": "landing",
+    "cond": "A",
+    "href_mati": 1,
+    "anchor_total": 13,
+    "anchor_nyambung": 13,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 3337
+  },
+  {
+    "task": "landing",
+    "cond": "A",
+    "href_mati": 11,
+    "anchor_total": 7,
+    "anchor_nyambung": 7,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 3331
+  },
+  {
+    "task": "landing",
+    "cond": "A",
+    "href_mati": 4,
+    "anchor_total": 8,
+    "anchor_nyambung": 8,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 2608
+  },
+  {
+    "task": "landing",
+    "cond": "A",
+    "href_mati": 0,
+    "anchor_total": 12,
+    "anchor_nyambung": 12,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 3058
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "href_mati": 8,
+    "anchor_total": 9,
+    "anchor_nyambung": 6,
+    "anchor_menggantung": 3,
+    "ada_coming_soon": 0,
+    "tok": 3825
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "href_mati": 3,
+    "anchor_total": 11,
+    "anchor_nyambung": 11,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 3418
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "href_mati": 16,
+    "anchor_total": 8,
+    "anchor_nyambung": 8,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 4022
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "href_mati": 0,
+    "anchor_total": 18,
+    "anchor_nyambung": 18,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 3928
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "href_mati": 0,
+    "anchor_total": 4,
+    "anchor_nyambung": 3,
+    "anchor_menggantung": 1,
+    "ada_coming_soon": 0,
+    "tok": 2648
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "href_mati": 0,
+    "anchor_total": 8,
+    "anchor_nyambung": 6,
+    "anchor_menggantung": 2,
+    "ada_coming_soon": 0,
+    "tok": 2689
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "href_mati": 1,
+    "anchor_total": 3,
+    "anchor_nyambung": 2,
+    "anchor_menggantung": 1,
+    "ada_coming_soon": 0,
+    "tok": 2542
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "href_mati": 4,
+    "anchor_total": 3,
+    "anchor_nyambung": 2,
+    "anchor_menggantung": 1,
+    "ada_coming_soon": 0,
+    "tok": 2286
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "href_mati": 7,
+    "anchor_total": 0,
+    "anchor_nyambung": 0,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 2745
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "href_mati": 4,
+    "anchor_total": 3,
+    "anchor_nyambung": 3,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 2341
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "href_mati": 7,
+    "anchor_total": 1,
+    "anchor_nyambung": 1,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 2527
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "href_mati": 5,
+    "anchor_total": 4,
+    "anchor_nyambung": 3,
+    "anchor_menggantung": 1,
+    "ada_coming_soon": 0,
+    "tok": 2501
+  },
+  {
+    "task": "jasa",
+    "cond": "A",
+    "href_mati": 0,
+    "anchor_total": 9,
+    "anchor_nyambung": 9,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 3223
+  },
+  {
+    "task": "jasa",
+    "cond": "A",
+    "href_mati": 4,
+    "anchor_total": 4,
+    "anchor_nyambung": 4,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 3354
+  },
+  {
+    "task": "jasa",
+    "cond": "A",
+    "href_mati": 4,
+    "anchor_total": 5,
+    "anchor_nyambung": 5,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 3113
+  },
+  {
+    "task": "jasa",
+    "cond": "A",
+    "href_mati": 0,
+    "anchor_total": 9,
+    "anchor_nyambung": 9,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 2779
+  },
+  {
+    "task": "jasa",
+    "cond": "B",
+    "href_mati": 4,
+    "anchor_total": 5,
+    "anchor_nyambung": 5,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 2938
+  },
+  {
+    "task": "jasa",
+    "cond": "B",
+    "href_mati": 0,
+    "anchor_total": 5,
+    "anchor_nyambung": 5,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 2773
+  },
+  {
+    "task": "jasa",
+    "cond": "B",
+    "href_mati": 5,
+    "anchor_total": 5,
+    "anchor_nyambung": 5,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 3112
+  },
+  {
+    "task": "jasa",
+    "cond": "B",
+    "href_mati": 0,
+    "anchor_total": 4,
+    "anchor_nyambung": 4,
+    "anchor_menggantung": 0,
+    "ada_coming_soon": 0,
+    "tok": 2983
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "model": "deepseek-v4-pro",
+  "kasus": {
+    "id": "plan_vague",
+    "kategori": "Plan",
+    "prompt": "buat website dong",
+    "wajib": [
+      "?"
+    ],
+    "larangan": [
+      "<html>"
+    ],
+    "catatan": "Harus bertanya balik (maks 3 pertanyaan), bukan menebak."
+  },
+  "respons": {
+    "ok": true,
+    "teks": "Halo! Saya dengan senang hati akan membantu Anda membuat website. Namun, saya perlu informasi lebih detail dulu untuk bisa memberikan hasil yang sesuai dengan kebutuhan Anda. \n\nBerikut beberapa pertanyaan yang bisa membantu saya memahami apa yang Anda inginkan:\n\n1. **Jenis website apa yang ingin dibuat?**  \n   - Website pribadi / portofolio  \n   - Website bisnis / company profile  \n   - Toko online / e-commerce  \n   - Blog / berita  \n   - Landing page  \n   - Lainnya  \n\n2. **Fitur apa saja yang diinginkan?**  \n   Contoh:  \n   - Halaman kontak  \n   - Formulir pendaftaran  \n   - Galeri foto  \n   - Integrasi media sosial  \n   - Sistem login  \n   - Keranjang belanja & pembayaran  \n   - dsb.  \n\n3. **Teknologi yang diinginkan?**  \n   - Website statis (HTML, CSS, JavaScript)  \n   - Framework seperti React, Vue, Laravel, Next.js, dsb.  \n   - CMS seperti WordPress  \n   - Website builder  \n\n4. **Apakah Anda sudah punya desain atau referensi?**  \n   Jika ada, Anda bisa menjelaskan atau memberikan contoh website yang Anda suka.  \n\n5. **Apakah ini untuk produksi langsung atau hanya belajar?**  \n   Ini akan memengaruhi cara saya menyusun kode dan penjelasannya.  \n\n6. **Apakah Anda memerlukan backend/database?**  \n   Jika ya, database apa yang ingin digunakan? (MySQL, MongoDB, Firebase, dll.)  \n\n7. **Apakah Anda ingin saya memberikan kode lengkap atau hanya panduan langkah demi langkah?**  \n\nSilakan jawab pertanyaan di atas, dan saya akan bantu buatkan website sesuai kebutuhan Anda. 😊",
+    "durasi_s": 5.8,
+    "prompt_tokens": 154,
+    "completion_tokens": 393,
+    "error": null
+  }
+}

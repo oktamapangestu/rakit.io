@@ -1,0 +1,29 @@
+{
+  "model": "gpt-6-sol",
+  "kasus": {
+    "id": "plan_landing",
+    "kategori": "Plan",
+    "prompt": "Saya mau bikin website untuk warung kopi kecil di Pekanbaru. Isinya: halaman depan dengan menu, foto-foto, alamat, dan formulir pesan. Bisa terima pesanan online juga. Tolong rencanakan dulu.",
+    "wajib": [
+      "index",
+      "menu",
+      "formulir",
+      "warna",
+      "tabel",
+      "alamat"
+    ],
+    "larangan": [
+      "<html>",
+      "```html"
+    ],
+    "catatan": "Plan harus konkret: file, tabel DB, tampilan. Tanpa kode penuh."
+  },
+  "respons": {
+    "ok": true,
+    "teks": "Tentu. Untuk warung kopi kecil di Pekanbaru, saya sarankan mulai dari website yang sederhana, cepat dibuka di ponsel, dan mudah diperbarui.\n\n## Rencana website\n\n**1. Halaman depan**\n- Nama warung, foto utama, jam buka, dan tombol **Lihat Menu** serta **Pesan Sekarang**\n- Ringkasan menu favorit dan promo yang sedang berlaku\n- Foto suasana warung dan produk\n- Alamat lengkap, tautan Google Maps, dan kontak WhatsApp\n\n**2. Halaman menu**\n- Kategori seperti kopi, non-kopi, makanan, dan camilan\n- Foto, nama, harga, serta keterangan singkat tiap produk\n- Penanda jika produk sedang habis\n\n**3. Pemesanan online**\nUntuk tahap awal, pilihan paling praktis adalah pelanggan memilih menu di website, lalu mengirim rincian pesanan ke WhatsApp warung. Pemilik bisa mengonfirmasi ketersediaan, total harga, dan waktu pengambilan atau pengantaran. Setelah alurnya berjalan lancar, barulah dipertimbangkan pembayaran online dan pengelolaan pesanan otomatis.\n\n**4. Formulir pesan**\nFormulir terpisah untuk pertanyaan, saran, atau reservasi, berisi nama, kontak, dan pesan. Tambahkan perlindungan spam sederhana.\n\n## Tahapan pengerjaan\n\n1. **Siapkan bahan:** logo atau nama warung, daftar menu dan harga, foto, alamat, jam buka, nomor WhatsApp, serta area layanan pesan antar.\n2. **Buat rancangan tampilan:** utamakan tampilan ponsel dan tombol pesan yang mudah ditemukan.\n3. **Bangun dan isi website:** halaman depan, menu, galeri, lokasi, formulir, dan alur pemesanan.\n4. **Uji sebelum tayang:** cek harga, tautan WhatsApp, formulir, peta, dan proses pesanan dari ponsel.\n5. **Terbitkan dan rawat:** gunakan domain, lalu perbarui menu, harga, foto, dan jam buka saat berubah.\n\nAgar rencananya lebih tepat, apakah pesanan online nantinya **untuk ambil di tempat saja**, atau juga **diantar**? Dan apakah warung sudah punya daftar menu beserta harganya?",
+    "durasi_s": 12.6,
+    "prompt_tokens": 205,
+    "completion_tokens": 488,
+    "error": null
+  }
+}

@@ -327,6 +327,9 @@ func stageToolCall(call toolCall, st *staged, existing []string, truncated bool)
 	if problems := apiPathProblems(valid.Content, knownTables(existing, st)); len(problems) > 0 {
 		return fmt.Sprintf(`Ditulis, TAPI ada masalah di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(problems, "; "))
 	}
+	if problems := htmlProblems(valid.Path, valid.Content); len(problems) > 0 {
+		return fmt.Sprintf(`Ditulis, TAPI ada masalah kualitas di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(problems, "; "))
+	}
 	return fmt.Sprintf(`OK: "%s" ditulis (%d karakter).`, valid.Path, jsconv.Len(valid.Content))
 }
 

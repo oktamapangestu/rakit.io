@@ -1,0 +1,23 @@
+{
+  "model": "gpt-6-sol",
+  "kasus": {
+    "id": "plan_vague",
+    "kategori": "Plan",
+    "prompt": "buat website dong",
+    "wajib": [
+      "?"
+    ],
+    "larangan": [
+      "<html>"
+    ],
+    "catatan": "Harus bertanya balik (maks 3 pertanyaan), bukan menebak."
+  },
+  "respons": {
+    "ok": true,
+    "teks": "Bisa! Mau website seperti apa—portofolio, toko online, company profile, atau landing page?\n\nKalau belum ada gambaran, kirim saja:\n1. Nama website\n2. Tujuan website\n3. Warna atau gaya yang disukai\n4. Fitur yang dibutuhkan\n\nNanti aku bantu buatkan kode yang siap dicoba.",
+    "durasi_s": 3.2,
+    "prompt_tokens": 159,
+    "completion_tokens": 78,
+    "error": null
+  }
+}

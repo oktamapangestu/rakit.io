@@ -1,0 +1,29 @@
+{
+  "model": "deepseek-v4-pro",
+  "kasus": {
+    "id": "plan_landing",
+    "kategori": "Plan",
+    "prompt": "Saya mau bikin website untuk warung kopi kecil di Pekanbaru. Isinya: halaman depan dengan menu, foto-foto, alamat, dan formulir pesan. Bisa terima pesanan online juga. Tolong rencanakan dulu.",
+    "wajib": [
+      "index",
+      "menu",
+      "formulir",
+      "warna",
+      "tabel",
+      "alamat"
+    ],
+    "larangan": [
+      "<html>",
+      "```html"
+    ],
+    "catatan": "Plan harus konkret: file, tabel DB, tampilan. Tanpa kode penuh."
+  },
+  "respons": {
+    "ok": true,
+    "teks": "Siap, Bang. Saya bantu rencanakan dulu sebelum kita eksekusi. Ini bukan sekadar \"bikin website\", tapi website yang bisa bantu warung kopi Bang dapat pelanggan dan terima pesanan online. Berikut rencananya:\n\n---\n\n## 1. Tujuan Website\n- Menampilkan menu dan foto warung kopi agar menarik pelanggan.\n- Memberikan informasi lokasi, jam buka, dan kontak.\n- Menerima pesanan online (take away / delivery).\n- Meningkatkan kepercayaan dan jangkauan pelanggan di Pekanbaru.\n\n---\n\n## 2. Halaman yang Dibutuhkan\n\n### a. Halaman Depan (Home)\n- **Hero Section**: Foto suasana warung / kopi andalan, nama warung, tagline singkat.\n- **Tentang Singkat**: Cerita singkat warung kopi.\n- **Menu Unggulan**: 3–4 menu terlaris dengan foto dan harga.\n- **Testimoni Singkat** (opsional): Kata-kata pelanggan.\n- **CTA (Call to Action)**: Tombol \"Pesan Sekarang\" atau \"Lihat Menu\".\n\n### b. Halaman Menu\n- Daftar menu lengkap dengan kategori:\n  - Kopi (espresso, latte, manual brew, dll)\n  - Non-Kopi (coklat, matcha, teh)\n  - Makanan ringan / pendamping\n- Setiap item: foto, nama, deskripsi singkat, harga.\n- Filter kategori (opsional).\n\n### c. Halaman Galeri / Foto\n- Foto suasana warung, proses pembuatan kopi, interior, dll.\n- Ditata rapi dalam grid.\n\n### d. Halaman Kontak & Lokasi\n- Alamat lengkap (kelurahan, kecamatan, Pekanbaru).\n- Jam buka.\n- Nomor WA / telepon.\n- Google Maps embed.\n- Formulir kontak / pertanyaan.\n\n### e. Halaman Pesan Online (bisa jadi bagian dari menu atau halaman tersendiri)\n- Pilih menu + jumlah.\n- Masukkan nama, nomor WA, alamat (untuk delivery) atau pilih take away.\n- Metode pembayaran (opsional: transfer / bayar di tempat).\n- Tombol kirim pesanan ke WhatsApp atau admin.\n\n---\n\n## 3. Fitur Pesanan Online\n- **Keranjang sederhana**: pilih menu, tambah jumlah.\n- **Form pengiriman**: nama, alamat, no HP, catatan.\n- **Integrasi WhatsApp**: pesanan langsung masuk ke WA admin warung.\n- **Opsional**: integrasi pembayaran QRIS / transfer manual.\n\n---\n\n## 4. Desain & Kesan\n- Tema: hangat, kopi, warna coklat/krem.\n- Font mudah dibaca, mobile friendly.\n- Foto-foto asli warung kalau ada.\n\n---\n\n## 5. Teknis Website\n- **Platform**: Website statis atau WordPress? Untuk warung kecil, WordPress + plugin toko bisa lebih mudah dikelola.\n- **Hosting & Domain**: domain contoh: warungkopiBang.com / kopipekanbaru.id\n- **Kecepatan**: gambar dioptimalkan.\n- **SEO dasar**: kata kunci \"warung kopi Pekanbaru\", \"kopi enak Pekanbaru\".\n\n---\n\n## 6. Konten yang Perlu Disiapkan\n- Nama warung, tagline.\n- Daftar menu + harga + foto tiap menu.\n- Foto warung (minimal 5–10 foto).\n- Alamat lengkap + titik Google Maps.\n- Nomor WA untuk pesanan.\n- Jam buka.\n\n---\n\n## 7. Langkah Pengerjaan (Roadmap)\n\n| Tahap | Kegiatan |\n|-------|----------|\n| 1 | Kumpulkan konten: menu, foto, alamat, jam buka |\n| 2 | Tentukan platform & desain |\n| 3 | Buat struktur halaman & desain awal |\n| 4 | Input konten & pasang formulir pesanan |\n| 5 | Integrasi WhatsApp / Google Maps |\n| 6 | Uji coba di HP & desktop |\n| 7 | Publikasi + pendaftaran Google Bisnisku |\n| 8 | Pemeliharaan & update menu |\n\n---\n\n## 8. Estimasi Biaya Awal (opsional)\n- Domain: Rp100–200 ribu/tahun\n- Hosting: Rp50–100 ribu/bulan (jika WordPress)\n- Tema premium (opsional): Rp0–1 juta\n- Total awal: bisa mulai dari Rp500 ribuan.\n\n---\n\nKalau Bang sudah setuju dengan rencana ini, langkah berikutnya saya bisa bantu:\n- Buat daftar menu contoh,\n- Susun teks untuk website,\n- Atau langsung mulai desain struktur halaman.\n\nMau lanjut ke mana dulu?",
+    "durasi_s": 14.7,
+    "prompt_tokens": 206,
+    "completion_tokens": 1078,
+    "error": null
+  }
+}

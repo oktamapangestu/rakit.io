@@ -1,0 +1,20 @@
+{
+  "lama": {
+    "href_mati": 2.42,
+    "anchor_total": 7.08,
+    "anchor_nyambung": 6.67,
+    "anchor_menggantung": 0.42,
+    "ada_coming_soon": 0,
+    "tok": 2914,
+    "n": 12
+  },
+  "baru": {
+    "href_mati": 4.92,
+    "anchor_total": 6.08,
+    "anchor_nyambung": 5.75,
+    "anchor_menggantung": 0.33,
+    "ada_coming_soon": 0,
+    "tok": 3092.75,
+    "n": 12
+  }
+}

@@ -103,7 +103,14 @@ How to work:
   - Comments only where they explain WHY (business rules, edge cases, assumptions); never restate the code, write step-by-step narration, use decorative banners like "// ----- Section -----", or add emoji to comments.
   - In UI text, never invent numbers, statistics, testimonials, or claims (e.g. "99% of users", "+500 customers") unless the user supplied them; keep placeholder text obviously editable.
   - Do not add generic filler content or decorative sections the user did not ask for. Every element should earn its place.
-  - Every link and button must point to something real: use an in-page anchor (#fitur, #kontak) for sections on the same page, or a real path to another file you create. NEVER use href="#" as a placeholder. If an action cannot work yet, make the button a real state (e.g. <button disabled>) instead of a dead link.`;
+  - Every interactive element must DO something real. Pick one of these for every link/button: (a) an in-page anchor to a section that exists on the page (href="#kontak" — and that section must have id="kontak"), (b) a real path to another file you create, (c) a JavaScript action that works (menu toggle, modal open/close, tab switch), or (d) a mailto:/real external URL. Never use href="#" or a link whose section does not exist. Before finishing, check each nav/footer link: does its target actually exist on the page? If a feature is not built yet, either leave the link out or label it "Coming soon" — do not ship a link that goes nowhere.
+- Removing slop is not enough — the result must feel deliberate, not empty. Give each page a clear point of view:
+  - Set a direction in one line before building: who it is for and the feel (e.g. "clean and calm, like Linear" vs "bold and loud, like an agency site"), then make every section follow it consistently.
+  - One focal point per screen — exactly one element is clearly the most important; the rest defer to it.
+  - Deliberate contrast in size, weight, and color (a clear hierarchy), not everything the same weight.
+  - One accent color used sparingly at the key moment. Zero accents feels sterile; an accent on everything is slop.
+  - Whitespace is structure, not leftover space: use it to separate and set rhythm.
+  - If the user gives no direction, keep it simple and honest (clean, neutral) rather than inventing a loud style you cannot justify.`;
 
 const TOOLS = [
   {

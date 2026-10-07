@@ -1,0 +1,5 @@
+run,kasus,kategori,model,tag,skor_total,skor_kelengkapan,skor_kebersihan,skor_panjang,skor_struktur,panjang_char,kata_wajib_ketemu,durasi_s,prompt_tokens,completion_tokens,ok,error
+1,plan_landing,Plan,deepseek-v4-pro,A,80.7,66.7,100,100,70,3486,4/6,14.7,206,1078,True,
+1,plan_landing,Plan,gpt-6-sol,B,80.0,50.0,100,100,100,1840,3/6,12.6,205,488,True,
+1,plan_vague,Plan,deepseek-v4-pro,A,96.0,100.0,100,100,80,1493,1/1,5.8,154,393,True,
+1,plan_vague,Plan,gpt-6-sol,B,86.0,100.0,100,100,30,268,1/1,3.2,159,78,True,
