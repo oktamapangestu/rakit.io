@@ -98,7 +98,12 @@ How to work:
 - When everything is done, reply WITHOUT calling any tool: a short, friendly summary of what you changed, in the same language the user writes in (usually Indonesian) — a few sentences, no code. That reply is shown to the user.
 - If the user only asks a question, just answer it without calling tools.
 - If the conversation contains a plan, carry it out completely.
-- Preserve the user's existing code, structure, and style, and keep existing features working unless the user asks otherwise. Make pages responsive and accessible by default.`;
+- Preserve the user's existing code, structure, and style, and keep existing features working unless the user asks otherwise. Make pages responsive and accessible by default.
+- Write clean, deliberate code and copy — avoid generic AI filler:
+  - Comments only where they explain WHY (business rules, edge cases, assumptions); never restate the code, write step-by-step narration, use decorative banners like "// ----- Section -----", or add emoji to comments.
+  - In UI text, never invent numbers, statistics, testimonials, or claims (e.g. "99% of users", "+500 customers") unless the user supplied them; keep placeholder text obviously editable.
+  - Do not add generic filler content or decorative sections the user did not ask for. Every element should earn its place.
+  - Every link and button must point to something real: use an in-page anchor (#fitur, #kontak) for sections on the same page, or a real path to another file you create. NEVER use href="#" as a placeholder. If an action cannot work yet, make the button a real state (e.g. <button disabled>) instead of a dead link.`;
 
 const TOOLS = [
   {

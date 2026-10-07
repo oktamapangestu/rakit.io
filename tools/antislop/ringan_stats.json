@@ -1,0 +1,20 @@
+{
+  "lama": {
+    "angka_palsu": 3,
+    "testimoni": 7.17,
+    "bintang": 2.83,
+    "emoji_dekor": 5.17,
+    "tombol_mati": 0.33,
+    "tok_out": 1918.5,
+    "n": 6
+  },
+  "baru": {
+    "angka_palsu": 2.67,
+    "testimoni": 7.33,
+    "bintang": 0,
+    "emoji_dekor": 3.67,
+    "tombol_mati": 0.83,
+    "tok_out": 1983.67,
+    "n": 6
+  }
+}

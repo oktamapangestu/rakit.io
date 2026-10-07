@@ -1,0 +1,20 @@
+{
+  "lama": {
+    "href_mati": 7.5,
+    "anchor_valid": 3.62,
+    "tautan_nyata": 0,
+    "angka_palsu": 2.75,
+    "bintang": 0,
+    "tok": 3274.12,
+    "n": 8
+  },
+  "baru": {
+    "href_mati": 7.62,
+    "anchor_valid": 2.62,
+    "tautan_nyata": 0,
+    "angka_palsu": 1.75,
+    "bintang": 0,
+    "tok": 2969.12,
+    "n": 8
+  }
+}

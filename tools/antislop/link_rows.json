@@ -1,0 +1,162 @@
+[
+  {
+    "task": "landing",
+    "cond": "A",
+    "href_mati": 8,
+    "anchor_valid": 5,
+    "tautan_nyata": 0,
+    "angka_palsu": 5,
+    "bintang": 0,
+    "tok": 3656
+  },
+  {
+    "task": "landing",
+    "cond": "A",
+    "href_mati": 18,
+    "anchor_valid": 0,
+    "tautan_nyata": 0,
+    "angka_palsu": 3,
+    "bintang": 0,
+    "tok": 3210
+  },
+  {
+    "task": "landing",
+    "cond": "A",
+    "href_mati": 8,
+    "anchor_valid": 4,
+    "tautan_nyata": 0,
+    "angka_palsu": 3,
+    "bintang": 0,
+    "tok": 3022
+  },
+  {
+    "task": "landing",
+    "cond": "A",
+    "href_mati": 12,
+    "anchor_valid": 7,
+    "tautan_nyata": 0,
+    "angka_palsu": 5,
+    "bintang": 0,
+    "tok": 3896
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "href_mati": 17,
+    "anchor_valid": 4,
+    "tautan_nyata": 0,
+    "angka_palsu": 4,
+    "bintang": 0,
+    "tok": 4379
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "href_mati": 6,
+    "anchor_valid": 5,
+    "tautan_nyata": 0,
+    "angka_palsu": 4,
+    "bintang": 0,
+    "tok": 3287
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "href_mati": 9,
+    "anchor_valid": 0,
+    "tautan_nyata": 0,
+    "angka_palsu": 1,
+    "bintang": 0,
+    "tok": 2623
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "href_mati": 19,
+    "anchor_valid": 0,
+    "tautan_nyata": 0,
+    "angka_palsu": 1,
+    "bintang": 0,
+    "tok": 2910
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "href_mati": 5,
+    "anchor_valid": 5,
+    "tautan_nyata": 0,
+    "angka_palsu": 2,
+    "bintang": 0,
+    "tok": 3772
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "href_mati": 0,
+    "anchor_valid": 3,
+    "tautan_nyata": 0,
+    "angka_palsu": 1,
+    "bintang": 0,
+    "tok": 2361
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "href_mati": 3,
+    "anchor_valid": 3,
+    "tautan_nyata": 0,
+    "angka_palsu": 1,
+    "bintang": 0,
+    "tok": 2792
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "href_mati": 6,
+    "anchor_valid": 2,
+    "tautan_nyata": 0,
+    "angka_palsu": 2,
+    "bintang": 0,
+    "tok": 3484
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "href_mati": 3,
+    "anchor_valid": 1,
+    "tautan_nyata": 0,
+    "angka_palsu": 0,
+    "bintang": 0,
+    "tok": 2102
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "href_mati": 3,
+    "anchor_valid": 2,
+    "tautan_nyata": 0,
+    "angka_palsu": 2,
+    "bintang": 0,
+    "tok": 2971
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "href_mati": 2,
+    "anchor_valid": 3,
+    "tautan_nyata": 0,
+    "angka_palsu": 1,
+    "bintang": 0,
+    "tok": 2743
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "href_mati": 2,
+    "anchor_valid": 6,
+    "tautan_nyata": 0,
+    "angka_palsu": 1,
+    "bintang": 0,
+    "tok": 2738
+  }
+]

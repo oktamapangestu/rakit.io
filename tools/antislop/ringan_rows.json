@@ -1,0 +1,134 @@
+[
+  {
+    "task": "landing",
+    "cond": "A",
+    "angka_palsu": 6,
+    "testimoni": 20,
+    "bintang": 15,
+    "emoji_dekor": 5,
+    "tombol_mati": 1,
+    "tok_out": 3205,
+    "len": 12638
+  },
+  {
+    "task": "landing",
+    "cond": "A",
+    "angka_palsu": 7,
+    "testimoni": 23,
+    "bintang": 0,
+    "emoji_dekor": 7,
+    "tombol_mati": 1,
+    "tok_out": 3050,
+    "len": 12389
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "angka_palsu": 5,
+    "testimoni": 16,
+    "bintang": 0,
+    "emoji_dekor": 7,
+    "tombol_mati": 0,
+    "tok_out": 2574,
+    "len": 8549
+  },
+  {
+    "task": "landing",
+    "cond": "B",
+    "angka_palsu": 7,
+    "testimoni": 28,
+    "bintang": 0,
+    "emoji_dekor": 6,
+    "tombol_mati": 5,
+    "tok_out": 3719,
+    "len": 15034
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "angka_palsu": 2,
+    "testimoni": 0,
+    "bintang": 0,
+    "emoji_dekor": 8,
+    "tombol_mati": 0,
+    "tok_out": 1717,
+    "len": 6016
+  },
+  {
+    "task": "toko",
+    "cond": "A",
+    "angka_palsu": 3,
+    "testimoni": 0,
+    "bintang": 2,
+    "emoji_dekor": 11,
+    "tombol_mati": 0,
+    "tok_out": 2167,
+    "len": 6393
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "angka_palsu": 1,
+    "testimoni": 0,
+    "bintang": 0,
+    "emoji_dekor": 7,
+    "tombol_mati": 0,
+    "tok_out": 1537,
+    "len": 4404
+  },
+  {
+    "task": "toko",
+    "cond": "B",
+    "angka_palsu": 3,
+    "testimoni": 0,
+    "bintang": 0,
+    "emoji_dekor": 2,
+    "tombol_mati": 0,
+    "tok_out": 2651,
+    "len": 7691
+  },
+  {
+    "task": "filler",
+    "cond": "A",
+    "angka_palsu": 0,
+    "testimoni": 0,
+    "bintang": 0,
+    "emoji_dekor": 0,
+    "tombol_mati": 0,
+    "tok_out": 659,
+    "len": 1987
+  },
+  {
+    "task": "filler",
+    "cond": "A",
+    "angka_palsu": 0,
+    "testimoni": 0,
+    "bintang": 0,
+    "emoji_dekor": 0,
+    "tombol_mati": 0,
+    "tok_out": 713,
+    "len": 2139
+  },
+  {
+    "task": "filler",
+    "cond": "B",
+    "angka_palsu": 0,
+    "testimoni": 0,
+    "bintang": 0,
+    "emoji_dekor": 0,
+    "tombol_mati": 0,
+    "tok_out": 684,
+    "len": 2037
+  },
+  {
+    "task": "filler",
+    "cond": "B",
+    "angka_palsu": 0,
+    "testimoni": 0,
+    "bintang": 0,
+    "emoji_dekor": 0,
+    "tombol_mati": 0,
+    "tok_out": 737,
+    "len": 2132
+  }
+]
