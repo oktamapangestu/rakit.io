@@ -368,6 +368,52 @@
         h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { class: 'empty-row', colspan: '8' }, 'Belum ada pemakaian token di periode ini.')))), { lead: 1, wide: [2] })));
   }
 
+  // Ranking per aksi: request AI editor dengan token terbanyak, siapa yang menjalankan, dan apa yang diminta.
+  // Server mengirim gabungan 20 teratas menurut total, input, dan output, jadi urutan bisa diganti di sini.
+  const ACTIONS = { build: 'Builder', plan: 'Plan', diagram: 'Diagram' };
+  const SORTS = { total: ['Total', (a) => a.inTokens + a.outTokens], in: ['Input', (a) => a.inTokens], out: ['Output', (a) => a.outTokens] };
+  let actionSort = 'total';
+  function tokenActionsCard(st) {
+    const body = h('div', {});
+    const switcher = h('div', { class: 'range', role: 'radiogroup', 'aria-label': 'Urutkan menurut' });
+    const draw = () => {
+      const by = SORTS[actionSort][1];
+      const list = [...(st.tokenRanking.actions ?? [])].sort((a, b) => by(b) - by(a)).slice(0, 20);
+      const numCell = (key, content) => h('td', { class: key === actionSort ? 'num sorted' : 'num' }, content);
+      switcher.replaceChildren(...Object.entries(SORTS).map(([key, [label]]) => h('button', {
+        type: 'button', role: 'radio', 'aria-checked': String(key === actionSort), onclick: () => { actionSort = key; draw(); },
+      }, label)));
+      body.replaceChildren(h('div', { class: 'table-wrap' }, stack(h('table', { class: 'action-ranking' },
+        h('thead', {}, h('tr', {},
+          h('th', { class: 'rank' }, '#'), h('th', {}, 'Aksi'), h('th', {}, 'Pengguna'),
+          h('th', { class: 'num' }, 'Input'), h('th', { class: 'num' }, 'Output'), h('th', { class: 'num' }, 'Total'), h('th', {}, 'Model'))),
+        h('tbody', {}, list.length
+          ? list.map((a, i) => h('tr', { class: i < 3 ? `rank-top rank-${i + 1}` : null },
+            h('td', { class: 'rank' }, h('span', { class: 'rank-no' }, String(i + 1))),
+            h('td', {}, h('div', { class: 'action-cell' },
+              h('span', {}, h('span', { class: `act act-${a.action || 'none'}` }, ACTIONS[a.action] ?? 'AI'),
+                a.detail ? h('span', { class: 'act-detail', title: a.detail }, a.detail) : muted(a.action ? '—' : 'aksi belum tercatat')),
+              h('span', { class: 'muted' },
+                a.project ? h('a', { href: a.projectUrl, target: '_blank', rel: 'noopener' }, a.project) : 'project tidak diketahui',
+                ' · ', h('span', { title: dateTime(a.at) }, shortTime(a.at))))),
+            h('td', {}, h('div', { class: 'who' }, userLink(a), h('span', { class: 'muted' }, a.email))),
+            numCell('in', num(a.inTokens)),
+            numCell('out', num(a.outTokens)),
+            numCell('total', h('strong', {}, compact(a.inTokens + a.outTokens))),
+            h('td', {}, h('span', { class: 'mono small' }, a.model),
+              a.status !== 'ok' ? h('div', {}, h('span', { class: 'pill failed' }, STATUS[a.status]?.label ?? a.status)) : null)))
+          : h('tr', {}, h('td', { class: 'empty-row', colspan: '7' }, 'Belum ada request AI editor di periode ini.')))), { lead: 1 })));
+    };
+    draw();
+    return h('section', { class: 'card' },
+      h('div', { class: 'card-head' },
+        h('div', {},
+          h('h2', {}, 'Aksi AI dengan token terbanyak'),
+          h('p', { class: 'sub' }, `20 request AI editor teratas (Builder, Plan, diagram) · ${st.days} hari terakhir`)),
+        switcher),
+      body);
+  }
+
   // Kredit per pengguna: semua akun, bisa dicari; ditampilkan bertahap supaya tabel tidak terlalu panjang.
   let creditQuery = '';
   let creditLimit = 25;
@@ -424,6 +470,7 @@
     $('#tab-pengguna').replaceChildren(
       h('p', { class: 'meta' }, `Diperbarui ${dateTime(st.generatedAt)} · waktu WIB`),
       tokenRankingCard(st),
+      tokenActionsCard(st),
       h('div', { class: 'grid two' }, active, signups),
       creditUsersCard(st));
   }

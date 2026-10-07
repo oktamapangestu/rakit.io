@@ -288,6 +288,17 @@ td .small { font-size: 11.5px; }
 .rank-2 .rank-no { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--silver-text); }
 .rank-3 .rank-no { background: color-mix(in srgb, var(--serious) 18%, transparent); color: var(--bronze-text); }
 .share-cell { width: 34%; min-width: 160px; }
+.action-cell { display: grid; gap: 3px; min-width: 0; max-width: 520px; line-height: 1.35; }
+.action-cell > .muted { font-size: 12px; }
+.act { display: inline-block; margin-right: 8px; padding: 1px 7px; border-radius: 6px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 700; vertical-align: 1px; }
+.act-build { background: color-mix(in srgb, var(--series-ai) 20%, transparent); color: var(--white); }
+.act-plan { background: color-mix(in srgb, var(--series-ai-out) 20%, transparent); color: var(--white); }
+.act-diagram { background: color-mix(in srgb, var(--series-assistant) 20%, transparent); color: var(--white); }
+.act-detail { overflow-wrap: anywhere; }
+.action-ranking td { vertical-align: middle; }
+.action-ranking .rank { width: 40px; }
+.action-ranking td.sorted { color: var(--white); font-weight: 700; }
+.mono.small { font-family: var(--mono); font-size: 12px; }
 .tokenbar { display: flex; gap: 1px; width: 100%; height: 10px; border-radius: 999px; overflow: hidden; background: var(--panel-2); }
 .tokenbar .seg { height: 100%; }
 

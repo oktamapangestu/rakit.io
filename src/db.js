@@ -152,6 +152,10 @@ if (!hasColumn('ai_messages', 'attachments')) db.exec('ALTER TABLE ai_messages A
 // Terakhir aktif (ms): diperbarui saat akun memakai aplikasi, paling sering 5 menit sekali.
 if (!hasColumn('users', 'last_seen_at')) db.exec('ALTER TABLE users ADD COLUMN last_seen_at INTEGER');
 if (!hasColumn('ai_threads', 'project_id')) db.exec('ALTER TABLE ai_threads ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE');
+// Aksi tiap request AI untuk ranking token di dashboard owner (diisi server Go; lihat go/internal/store/schema.go).
+if (!hasColumn('ai_requests', 'action')) db.exec("ALTER TABLE ai_requests ADD COLUMN action TEXT NOT NULL DEFAULT ''");
+if (!hasColumn('ai_requests', 'project_id')) db.exec('ALTER TABLE ai_requests ADD COLUMN project_id INTEGER');
+if (!hasColumn('ai_requests', 'detail')) db.exec("ALTER TABLE ai_requests ADD COLUMN detail TEXT NOT NULL DEFAULT ''");
 // Dulu 1 akun = 1 website di <username>.rakit.io: jadikan itu project pertamanya (URL tetap sama).
 db.exec(`
   INSERT INTO projects (user_id, slug, name, created_at)

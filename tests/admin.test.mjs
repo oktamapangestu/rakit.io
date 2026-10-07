@@ -256,3 +256,30 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
   assert.deepEqual(Object.keys(s.queue).sort(), ['active', 'currentLimit', 'maxConcurrent', 'maxWaitMs', 'medianWaitMs', 'queueMax', 'queueTimeoutSeconds', 'queued', 'queuedTotal', 'rejectedFull', 'retries', 'served', 'timedOut']);
   assert.deepEqual([s.queue.active, s.queue.queued, s.queue.maxConcurrent, s.queue.currentLimit, s.queue.queueMax, s.queue.queueTimeoutSeconds], [0, 0, 4, 4, 30, 120]);
 });
+
+test('ranking per aksi: request AI editor dengan token terbanyak, aksinya, dan siapa yang menjalankan', { skip: !process.env.RAKIT_SERVER_CMD?.includes('go/bin/rakit') && 'fitur khusus server Go' }, async () => {
+  const own = await startStack({ AI_BONUS_CREDITS: '10' });
+  try {
+    const owner = await own.admin();
+    const user = await own.register('aksi-a');
+    const usage = (prompt_tokens, completion_tokens) => ({ prompt_tokens, completion_tokens });
+    own.ai.script.push({ text: 'ok', usage: usage(5000, 100) });
+    await user.build('Buat   halaman menu\nkue');
+    own.ai.script.push({ text: 'rencana', usage: usage(100, 3000) });
+    await user.prompt('x'.repeat(200), { mode: 'plan' });
+    own.ai.script.push({ text: '```mermaid\nerDiagram\n  tamu {\n    number id PK\n  }\n```', usage: usage(300, 300) });
+    assert.equal((await user.post('/api/diagrams/generate', { kind: 'erd' })).status, 200);
+
+    const { actions } = (await owner.get('/api/admin/stats?days=7')).body.tokenRanking;
+    const project = own.db().prepare('SELECT name, slug FROM projects WHERE user_id = ?').get(user.userId);
+    const who = { username: 'aksi-a', email: 'aksi-a@test.local', siteUrl: `http://aksi-a.${own.origin.slice(7)}`, project: project.name, projectUrl: `http://${project.slug}.${own.origin.slice(7)}`, model: 'mock-main', status: 'ok' };
+    assert.deepEqual(actions.map(({ at, ...a }) => a), [
+      { ...who, action: 'build', detail: 'Buat halaman menu kue', inTokens: 5000, outTokens: 100 },
+      { ...who, action: 'plan', detail: `${'x'.repeat(139)}…`, inTokens: 100, outTokens: 3000 },
+      { ...who, action: 'diagram', detail: 'erd', inTokens: 300, outTokens: 300 },
+    ]);
+    assert.ok(actions.every((a) => Math.abs(Date.parse(a.at) - Date.now()) < 60_000));
+  } finally {
+    await own.stop();
+  }
+});

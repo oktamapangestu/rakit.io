@@ -288,6 +288,13 @@ Website user memakainya lewat API otomatis di domainnya sendiri:
 yang gagal per status dan pemakaian token), kredit terjual, pengguna paling aktif, transaksi dan
 pendaftar terbaru, serta ukuran penyimpanan. Periode bisa dipilih 7/30/90 hari (waktu WIB).
 
+Tab *Pengguna* berisi ranking token per pengguna dan kartu *Aksi AI dengan token terbanyak*: 20 request AI
+editor teratas (bisa diurutkan menurut total, input, atau output token) beserta aksinya (Builder, Plan, atau
+diagram), cuplikan prompt (maks. 140 karakter) atau jenis diagram, project, model, status, dan pengguna yang
+menjalankannya. Aksi dicatat di kolom `action`/`project_id`/`detail` tabel `ai_requests` (hanya server Go);
+request yang tercatat sebelum kolom itu ada tampil sebagai "aksi belum tercatat". Prediksi kode, Baca Alur
+Kode, dan asisten website tidak masuk ranking ini karena pemakaiannya dicatat per hari, bukan per request.
+
 Hanya akun dengan email di `ADMIN_EMAILS` (dipisah koma) yang bisa membukanya; link-nya muncul di
 menu avatar editor. Pengguna lain diarahkan kembali ke editor, dan API `/api/admin/*` menolak dengan 403.
 

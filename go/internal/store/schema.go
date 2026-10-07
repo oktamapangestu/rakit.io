@@ -294,6 +294,11 @@ func (s *Store) Migrate() error {
 		{"projects", "published_at", "INTEGER"},
 		// Terakhir aktif (ms): diperbarui saat akun memakai aplikasi, paling sering 5 menit sekali.
 		{"users", "last_seen_at", "INTEGER"},
+		// Aksi tiap request AI untuk ranking token di dashboard owner: action = build/plan/diagram,
+		// detail = cuplikan prompt atau jenis diagram. project_id tanpa FK: riwayat tetap ada walau project dihapus.
+		{"ai_requests", "action", "TEXT NOT NULL DEFAULT ''"},
+		{"ai_requests", "project_id", "INTEGER"},
+		{"ai_requests", "detail", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := addColumn(c[0], c[1], c[2]); err != nil {
 			return err

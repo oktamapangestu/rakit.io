@@ -314,8 +314,11 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 		}
 	}()
 	defer func() {
-		s.db.Exec("INSERT INTO ai_requests (user_id, created_at, model, status, input_tokens, output_tokens) VALUES (?, ?, ?, ?, ?, ?)",
-			user.ID, time.Now().UnixMilli(), usedModel, status, inTokens, outTokens)
+		detail := kind
+		if fixing {
+			detail += " (perbaiki)"
+		}
+		s.logRequest(user.ID, project.ID, "diagram", detail, usedModel, status, inTokens, outTokens)
 	}()
 
 	if err != nil {

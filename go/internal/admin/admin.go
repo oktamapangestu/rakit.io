@@ -348,10 +348,29 @@ type TokenUser struct {
 	SiteURL           string `json:"siteUrl"`
 }
 
+// TokenAction: satu request AI editor beserta aksinya (Builder/Plan/diagram), untuk ranking per aksi.
+type TokenAction struct {
+	At         string  `json:"at"`
+	Username   string  `json:"username"`
+	Email      string  `json:"email"`
+	SiteURL    string  `json:"siteUrl"`
+	Action     string  `json:"action"` // build | plan | diagram | "" (tercatat sebelum aksi dicatat)
+	Detail     string  `json:"detail"`
+	Project    *string `json:"project"`
+	ProjectURL *string `json:"projectUrl"`
+	Model      string  `json:"model"`
+	Status     string  `json:"status"`
+	InTokens   int64   `json:"inTokens"`
+	OutTokens  int64   `json:"outTokens"`
+}
+
 type TokenRanking struct {
 	EditorTokens    int64       `json:"editorTokens"`
 	AssistantTokens int64       `json:"assistantTokens"`
 	Users           []TokenUser `json:"users"`
+	// Actions: gabungan 20 request teratas menurut total, input, dan output token (maks. 60 baris), supaya
+	// dashboard bisa mengurutkan menurut ketiganya tanpa meminta ulang.
+	Actions []TokenAction `json:"actions"`
 }
 
 // ActiveUser: akun yang terakhir aktif — waktu terakhir memakai aplikasi (users.last_seen_at), request AI,
@@ -564,6 +583,29 @@ func (s *Service) Stats(days int) (*Stats, error) {
 		WHERE COALESCE(e.inTokens, 0) + COALESCE(e.outTokens, 0) + COALESCE(a.tokens, 0) > 0
 		ORDER BY COALESCE(e.inTokens, 0) + COALESCE(e.outTokens, 0) + COALESCE(a.tokens, 0) DESC, u.username
 		LIMIT 20`, since, dayList[0]))
+	rank.Actions = []TokenAction{}
+	keep(s.each(func(rows *sql.Rows) error {
+		var a TokenAction
+		var at int64
+		var userSlug, projectSlug *string
+		err := rows.Scan(&at, &a.Username, &a.Email, &userSlug, &a.Action, &a.Detail, &a.Model, &a.Status, &a.InTokens, &a.OutTokens, &a.Project, &projectSlug)
+		a.At = plans.ISO(at)
+		a.SiteURL = s.siteURL(userSlug, a.Username)
+		if projectSlug != nil {
+			url := s.cfg.SiteURL(*projectSlug)
+			a.ProjectURL = &url
+		}
+		rank.Actions = append(rank.Actions, a)
+		return err
+	}, `
+		SELECT r.created_at, u.username, u.email, `+primarySlug+`, r.action, r.detail, r.model, r.status,
+		       r.input_tokens, r.output_tokens, p.name, p.slug
+		FROM ai_requests r JOIN users u ON u.id = r.user_id LEFT JOIN projects p ON p.id = r.project_id
+		WHERE r.input_tokens + r.output_tokens > 0 AND r.id IN (
+			SELECT id FROM (SELECT id FROM ai_requests WHERE created_at >= ? ORDER BY input_tokens + output_tokens DESC, id DESC LIMIT 20)
+			UNION SELECT id FROM (SELECT id FROM ai_requests WHERE created_at >= ? ORDER BY input_tokens DESC, id DESC LIMIT 20)
+			UNION SELECT id FROM (SELECT id FROM ai_requests WHERE created_at >= ? ORDER BY output_tokens DESC, id DESC LIMIT 20))
+		ORDER BY r.input_tokens + r.output_tokens DESC, r.id DESC`, since, since, since))
 
 	out.RecentUsers = []RecentUser{}
 	keep(s.each(func(rows *sql.Rows) error {

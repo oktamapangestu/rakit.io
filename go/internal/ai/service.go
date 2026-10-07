@@ -615,6 +615,22 @@ type jobInput struct {
 	blocks                   []blocks.Block
 }
 
+// logRequest mencatat satu request AI (statistik & ranking token di dashboard owner).
+func (s *Service) logRequest(userID, projectID int64, action, detail, model, status string, inTokens, outTokens int) {
+	s.db.Exec(`INSERT INTO ai_requests (user_id, created_at, model, status, input_tokens, output_tokens, action, project_id, detail)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		userID, time.Now().UnixMilli(), model, status, inTokens, outTokens, action, projectID, detail)
+}
+
+// excerpt: prompt dipendekkan jadi satu baris untuk dashboard owner.
+func excerpt(prompt string) string {
+	text := strings.Join(strings.Fields(prompt), " ")
+	if jsconv.Len(text) > 140 {
+		text = strings.TrimSpace(jsconv.Slice(text, 139)) + "…"
+	}
+	return text
+}
+
 func (s *Service) runJob(j *job, in jobInput) {
 	send := j.emit
 	status := "error"
@@ -826,8 +842,11 @@ func (s *Service) runJob(j *job, in jobInput) {
 	s.mu.Lock()
 	delete(s.running, in.user.ID)
 	s.mu.Unlock()
-	s.db.Exec("INSERT INTO ai_requests (user_id, created_at, model, status, input_tokens, output_tokens) VALUES (?, ?, ?, ?, ?, ?)",
-		in.user.ID, time.Now().UnixMilli(), usedModel, status, inTokens, outTokens)
+	detail := excerpt(in.prompt)
+	if n := len(in.images); n > 0 {
+		detail = fmt.Sprintf("[%d gambar] %s", n, detail)
+	}
+	s.logRequest(in.user.ID, in.project.ID, in.mode, detail, usedModel, status, inTokens, outTokens)
 	j.finish() // tanda selesai untuk stream yang tersambung
 	j.cancel()
 	// Beri waktu editor menyambung ulang.
