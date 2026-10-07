@@ -399,6 +399,11 @@ a.chip-btn svg { width: 14px; height: 14px; }
 .row .chev.open svg { transform: rotate(90deg); }
 .row .name { overflow: hidden; text-overflow: ellipsis; }
 .row.dirty .name::after { content: " •"; color: var(--warn); }
+/* Label frontend/backend di ujung kanan baris; tombol ⋯ muncul di sebelahnya saat disorot. */
+.row .side { margin-left: auto; padding: 0 5px; border-radius: 5px; font: 700 9.5px/16px var(--mono); letter-spacing: 0.03em; flex-shrink: 0; }
+.row .side.fe { color: var(--info-text); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.row .side.be { color: var(--warn-text); background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.row .side + .row-more { margin-left: 0; }
 .tree .empty { padding: 16px 8px; color: var(--muted); line-height: 1.6; white-space: normal; text-align: center; }
 
 .ficon {

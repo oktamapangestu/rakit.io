@@ -173,6 +173,15 @@
     return h('span', { class: `ficon ${ext}` }, label);
   }
 
+  // Frontend/backend: folder functions/ dijalankan di server dan tidak pernah dikirim ke browser (sama dengan
+  // hidden() di go/internal/sites/sites.go); file lain disajikan apa adanya ke pengunjung.
+  const isBackend = (p) => /^functions(\/|$)/i.test(p);
+  function sideLabel(entry) {
+    if (isBackend(entry.path)) return h('span', { class: 'side be', title: 'Backend: berjalan di server (fungsi /api/fn), kodenya tidak bisa dilihat pengunjung' }, 'BE');
+    if (entry.type === 'dir') return null;
+    return h('span', { class: 'side fe', title: 'Frontend: dikirim ke browser, kodenya bisa dilihat pengunjung' }, 'FE');
+  }
+
   function childrenOf(dir) {
     return state.entries
       .filter((e) => parentOf(e.path) === dir)
@@ -196,6 +205,7 @@
         h('span', { class: `chev${open ? ' open' : ''}` }, isDir ? svg(ICON.chevron) : null),
         fileIcon(entry, open),
         h('span', { class: 'name' }, entry.name),
+        sideLabel(entry),
         h('button', { type: 'button', class: 'row-more', title: 'Menu', 'aria-label': `Menu ${entry.name}` }, '⋯')));
         if (isDir && open) walk(entry.path, depth + 1);
       }
