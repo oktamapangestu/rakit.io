@@ -452,16 +452,17 @@ func (s *Service) projectContext(ctx context.Context, slug, activePath string, p
 // ---------- Blok terpilih ----------
 
 // outsideBlocks: file HTML yang diubah AI di luar blok terpilih — bagian lain halaman yang memuat blok,
-// atau halaman lain. CSS/JS boleh berubah (gaya & perilaku blok ada di sana).
+// atau halaman lain. CSS/JS boleh berubah (gaya & perilaku blok ada di sana), begitu juga file sumber blok
+// (komponen yang dimuat dari file lain).
 func (s *Service) outsideBlocks(slug string, list []blocks.Block, changes []change) []string {
 	if len(list) == 0 {
 		return nil
 	}
-	pages := blocks.Pages(list)
+	pages, sources := blocks.Pages(list), blocks.SourceFiles(list)
 	root := s.cfg.SiteRoot(slug)
 	var out []string
 	for _, c := range changes {
-		if c.Action == "table" || !strings.HasSuffix(strings.ToLower(c.Path), ".html") {
+		if c.Action == "table" || !strings.HasSuffix(strings.ToLower(c.Path), ".html") || (sources[c.Path] && c.Action != "delete") {
 			continue
 		}
 		selectors, picked := pages[c.Path]
@@ -477,22 +478,34 @@ func (s *Service) outsideBlocks(slug string, list []blocks.Block, changes []chan
 	return out
 }
 
-// scripts: isi semua file .js project (untuk mencari baris yang menyebut blok terpilih).
-func (s *Service) scripts(slug string) map[string]string {
+// findBlockCode mengisi blok terpilih dengan file sumbernya (bila markup-nya ada di file lain, mis. komponen
+// yang dimuat JavaScript) dan baris JS yang menyebutnya, dari isi file .html/.js project.
+func (s *Service) findBlockCode(slug string, list []blocks.Block) {
 	root := s.cfg.SiteRoot(slug)
 	entries, err := files.ListTree(root)
-	out := map[string]string{}
 	if err != nil {
-		return out
+		return
 	}
+	scripts, site := map[string]string{}, map[string]string{}
 	for _, e := range entries {
-		if !e.Dir && strings.HasSuffix(strings.ToLower(e.Path), ".js") {
-			if content, err := files.ReadText(root, e.Path); err == nil {
-				out[e.Path] = content
-			}
+		lower := strings.ToLower(e.Path)
+		isJS, isHTML := strings.HasSuffix(lower, ".js"), strings.HasSuffix(lower, ".html")
+		if e.Dir || !(isJS || isHTML) {
+			continue
+		}
+		content, err := files.ReadText(root, e.Path)
+		if err != nil {
+			continue
+		}
+		if isJS {
+			scripts[e.Path] = content
+		}
+		if !strings.HasPrefix(e.Path, "functions/") { // kode server tidak menghasilkan markup halaman
+			site[e.Path] = content
 		}
 	}
-	return out
+	blocks.FindSources(list, site)
+	blocks.FindJS(list, scripts)
 }
 
 func outsideNote(paths []string) string {
@@ -675,7 +688,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 		}
 
 		if len(in.blocks) > 0 {
-			blocks.FindJS(in.blocks, s.scripts(slug))
+			s.findBlockCode(slug, in.blocks)
 			ask += "\n\n" + blocks.Instructions(in.blocks)
 		}
 		projectContext, err := s.projectContext(j.ctx, slug, in.activePath, blocks.Related(in.blocks))

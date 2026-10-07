@@ -150,3 +150,52 @@ func TestCSSdanJS(t *testing.T) {
 		}
 	}
 }
+
+func TestFindSources(t *testing.T) {
+	index := `<!doctype html><html><body>
+  <div id="navbar"></div>
+  <section class="hero"><h1>Selamat datang di toko kami</h1></section>
+  <section class="produk"><h2>Produk pilihan minggu ini</h2><div id="grid"></div></section>
+  <script src="main.js"></script>
+</body></html>`
+	navbar := `<nav class="menu"><a class="logo" href="/">Toko Kue Enak</a><ul class="menu-list"><li>Beranda kami</li></ul></nav>`
+	site := map[string]string{
+		"index.html":             index,
+		"components/navbar.html": navbar,
+		"main.js": "fetch('/components/navbar.html').then((r) => r.text()).then((h) => { document.getElementById('navbar').innerHTML = h; });\n" +
+			"grid.innerHTML = items.map((p) => `<article class=\"kartu-produk\"><h3 class=\"nama-produk\">${p.nama}</h3><button class=\"beli\">Beli</button></article>`).join('');\n" +
+			"document.querySelector('.hero').classList.add('active');",
+		"style.css": ".menu { display: flex } .menu-list { gap: 1rem } .logo { font-weight: 700 }",
+	}
+	list := []Block{
+		// Wadah kosong di index.html, isinya dimuat dari components/navbar.html.
+		{Page: "index.html", Selector: "body > div:nth-of-type(1)", HTML: `<div id="navbar">` + navbar + `</div>`},
+		// Elemen di dalam komponen: tidak ada sama sekali di index.html.
+		{Page: "index.html", Selector: "body > div:nth-of-type(1) > nav:nth-of-type(1)", HTML: navbar},
+		// Ditulis di index.html; class "active" dari JS bukan tanda sumber lain.
+		{Page: "index.html", Selector: "body > section:nth-of-type(1)", HTML: `<section class="hero active"><h1>Selamat datang di toko kami</h1></section>`},
+		// Sebagian isinya dibuat template string di main.js.
+		{Page: "index.html", Selector: "body > section:nth-of-type(2)", HTML: `<section class="produk"><h2>Produk pilihan minggu ini</h2><div id="grid">` +
+			`<article class="kartu-produk"><h3 class="nama-produk">Brownies</h3><button class="beli">Beli</button></article></div></section>`},
+	}
+	FindSources(list, site)
+	want := []struct {
+		inPage  bool
+		sources string
+	}{{true, "components/navbar.html"}, {false, "components/navbar.html"}, {true, ""}, {true, "main.js"}}
+	for i, w := range want {
+		if got := strings.Join(list[i].Sources, ","); list[i].InPage != w.inPage || got != w.sources {
+			t.Errorf("blok %d: InPage=%v Sources=%q, mau %v %q", i, list[i].InPage, got, w.inPage, w.sources)
+		}
+	}
+	if r := Related(list[:1]); strings.Join(r, ",") != "components/navbar.html,index.html" {
+		t.Errorf("Related = %v", r)
+	}
+	if !SourceFiles(list)["components/navbar.html"] || SourceFiles(list)["index.html"] {
+		t.Errorf("SourceFiles = %v", SourceFiles(list))
+	}
+	text := Instructions(list[1:2])
+	if !strings.Contains(text, "NOT written in index.html's source; it is loaded/generated at runtime from components/navbar.html. Make the change in components/navbar.html") {
+		t.Errorf("instruksi:\n%s", text)
+	}
+}

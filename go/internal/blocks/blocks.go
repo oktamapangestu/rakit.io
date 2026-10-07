@@ -41,6 +41,10 @@ type Block struct {
 	HTML     string   `json:"-"`
 	CSS      []CSS    `json:"-"` // aturan CSS yang mengenai blok, dicatat browser saat dipilih
 	JS       []string `json:"-"` // "script.js:12: …" baris JS yang menyebut id/class blok (diisi FindJS)
+	// Sources: file lain tempat markup blok ditulis bila tidak (utuh) ada di HTML sumber Page, mis.
+	// komponen yang dimuat JavaScript dari components/header.html (diisi FindSources).
+	Sources []string `json:"-"`
+	InPage  bool     `json:"-"` // elemen blok ada di HTML sumber Page (bisa sebagai wadah kosong)
 }
 
 // CSS: aturan dari satu sumber. File kosong = <style> di dalam halaman.
@@ -151,6 +155,9 @@ func Related(blocks []Block) []string {
 		}
 	}
 	for _, b := range blocks {
+		for _, src := range b.Sources {
+			add(src)
+		}
 		add(b.Page)
 		for _, c := range b.CSS {
 			add(c.File)
@@ -231,6 +238,158 @@ func FindJS(list []Block, scripts map[string]string) {
 	}
 }
 
+// ---------- File sumber blok ----------
+
+// Penanda markup di sebuah file: nilai atribut class/id (juga `el.className = '…'` dan template string di JS).
+var markupAttrRE = regexp.MustCompile("\\b(?:class|id|className)\\s*=\\s*[\"'`]([^\"'`]*)[\"'`]")
+
+func markupNames(src string) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range markupAttrRE.FindAllStringSubmatch(src, -1) {
+		for _, name := range strings.Fields(m[1]) {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// texts: potongan teks di dalam blok yang cukup panjang untuk jadi penanda (dicari apa adanya di file).
+func texts(code string) []string {
+	nodes, err := html.ParseFragment(strings.NewReader(code), &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body})
+	if err != nil {
+		return nil
+	}
+	var out []string
+	var walk func(n *html.Node)
+	walk = func(n *html.Node) {
+		if len(out) >= 10 {
+			return
+		}
+		if n.Type == html.TextNode {
+			t := strings.TrimSpace(spacesRE.ReplaceAllString(n.Data, " "))
+			// Karakter yang di-escape berbeda-beda di sumber (&amp;, &quot;) dilewati.
+			if jsconv.Len(t) >= 12 && !strings.ContainsAny(t, "&<>\"'`") {
+				out = append(out, t)
+			}
+		}
+		if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "style") {
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	for _, n := range nodes {
+		walk(n)
+	}
+	return out
+}
+
+// FindSources mengisi Block.InPage dan Block.Sources. Blok yang dipilih di preview bisa saja tidak ditulis
+// di HTML halamannya: dimuat JavaScript dari file lain (fetch('components/header.html')) atau dibuat dari
+// template string di .js — di HTML halaman hanya ada wadah kosong, atau tidak ada sama sekali. Penanda
+// blok (class/id dan potongan teks) yang tidak ada di HTML sumber halaman dicari di file .html/.js lain
+// (path -> isi); file yang paling banyak memuatnya (maks. 2) menjadi sumber blok.
+func FindSources(list []Block, sources map[string]string) {
+	paths := make([]string, 0, len(sources))
+	for p := range sources {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	norm := map[string]string{} // isi file dengan spasi dirapatkan, untuk mencari potongan teks
+	for p, content := range sources {
+		norm[p] = spacesRE.ReplaceAllString(content, " ")
+	}
+	for i := range list {
+		b := &list[i]
+		var inPage string // markup blok di HTML sumber halaman ("" bila tidak ada)
+		if steps, err := parseSelector(b.Selector); err == nil {
+			if doc, err := html.Parse(strings.NewReader(sources[b.Page])); err == nil {
+				if n := find(doc, steps); n != nil {
+					var out strings.Builder
+					if html.Render(&out, n) == nil {
+						b.InPage, inPage = true, out.String()
+					}
+				}
+			}
+		}
+		pageNames := markupNames(inPage)
+		pageText := spacesRE.ReplaceAllString(inPage, " ")
+		// Bobot: nama class/id 1, potongan teks 2 (lebih khas).
+		var missNames, missTexts []string
+		total := 0
+		for name := range markupNames(b.HTML) {
+			if len(name) >= 3 {
+				total++
+				if !pageNames[name] {
+					missNames = append(missNames, name)
+				}
+			}
+		}
+		blockTexts := texts(b.HTML)
+		total += 2 * len(blockTexts)
+		for _, t := range blockTexts {
+			if !strings.Contains(pageText, t) {
+				missTexts = append(missTexts, t)
+			}
+		}
+		// Selisih kecil (mis. class "active" yang ditambah JS, teks dari database) bukan tanda blok ditulis di
+		// file lain.
+		if missing := len(missNames) + 2*len(missTexts); missing < 2 || missing*10 < total*3 {
+			continue
+		}
+		type hit struct {
+			path  string
+			score int
+		}
+		var hits []hit
+		for _, p := range paths {
+			if p == b.Page {
+				continue
+			}
+			names, score := markupNames(sources[p]), 0
+			for _, name := range missNames {
+				if names[name] {
+					score++
+				}
+			}
+			for _, t := range missTexts {
+				if strings.Contains(norm[p], t) {
+					score += 2 // teks lebih khas daripada nama class
+				}
+			}
+			if score >= 2 {
+				hits = append(hits, hit{p, score})
+			}
+		}
+		// Skor sama: file .html (potongan komponen) didahulukan daripada .js.
+		sort.SliceStable(hits, func(x, y int) bool {
+			if hits[x].score != hits[y].score {
+				return hits[x].score > hits[y].score
+			}
+			return strings.HasSuffix(hits[x].path, ".html") && !strings.HasSuffix(hits[y].path, ".html")
+		})
+		for _, h := range hits {
+			// File kedua hanya bila penandanya hampir sebanyak file pertama (bukan kebetulan satu class).
+			if len(b.Sources) == 2 || (len(b.Sources) == 1 && h.score*2 < hits[0].score) {
+				break
+			}
+			b.Sources = append(b.Sources, h.path)
+		}
+	}
+}
+
+// SourceFiles: file sumber blok (selain halamannya) yang boleh diubah AI sebagai bagian dari blok.
+func SourceFiles(blocks []Block) map[string]bool {
+	out := map[string]bool{}
+	for _, b := range blocks {
+		for _, src := range b.Sources {
+			out[src] = true
+		}
+	}
+	return out
+}
+
 // Pages: file HTML yang memuat blok-blok ini, beserta selectornya.
 func Pages(blocks []Block) map[string][]string {
 	out := map[string][]string{}
@@ -251,6 +410,14 @@ func Instructions(blocks []Block) string {
 	b.WriteString("Selected blocks (the user picked these parts of the page in the preview):\n")
 	for i, blk := range blocks {
 		fmt.Fprintf(&b, "%d. %q in %s (CSS path: %s)\n", i+1, blk.Label, blk.Page, blk.Selector)
+		if len(blk.Sources) > 0 {
+			where := strings.Join(blk.Sources, " and ")
+			if blk.InPage {
+				fmt.Fprintf(&b, "Its content is NOT written in %s's source (there it is only an empty container or partly filled); it is inserted at runtime from %s. Make the change in %s, not in %s.\n", blk.Page, where, where, blk.Page)
+			} else {
+				fmt.Fprintf(&b, "This block is NOT written in %s's source; it is loaded/generated at runtime from %s. Make the change in %s, not in %s.\n", blk.Page, where, where, blk.Page)
+			}
+		}
 		if blk.HTML != "" {
 			fmt.Fprintf(&b, "<block>\n%s\n</block>\n", blk.HTML)
 		}
