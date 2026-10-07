@@ -1,6 +1,7 @@
 package api
 
 import (
+	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/userdb"
 )
 
@@ -72,11 +73,9 @@ func (h *Handler) database(q *request) error {
 
 	case q.is("POST", "tables", ":", "upload"):
 		// Pemilik mengupload gambar untuk kolom bertipe image (dari tab Data).
-		var buf []byte
-		if !isJSON(q.r) {
-			if buf, err = readLimited(q.w, q.r, uploadLimit); err != nil {
-				return err
-			}
+		buf, err := httpx.ReadUpload(q.w, q.r, uploadLimit)
+		if err != nil {
+			return err
 		}
 		column, _ := q.param("column")
 		location, err := h.userdb.UploadImage(ctx, slug, name, column, buf, false)

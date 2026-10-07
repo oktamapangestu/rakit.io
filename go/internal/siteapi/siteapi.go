@@ -160,7 +160,7 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, slug string) {
 
 	var body []userdb.Field
 	var isObject bool
-	if !isUpload || isJSON(r) {
+	if !isUpload {
 		if body, isObject, err = jsonBody(w, r); err != nil {
 			httpx.Fail(w, err)
 			return
@@ -227,10 +227,8 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, slug string) {
 			return
 		}
 		var buf []byte
-		if !isJSON(r) {
-			if buf, err = readLimited(w, r, uploadLimit); err != nil {
-				break
-			}
+		if buf, err = httpx.ReadUpload(w, r, uploadLimit); err != nil {
+			break
 		}
 		var location string
 		status = http.StatusCreated
