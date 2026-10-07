@@ -1,0 +1,16 @@
+{"model": "claude-sonnet-5.5", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 3.01, "avg_out_tokens": 434.0, "vision": {"ok": 0, "fail": 1, "out": 506, "err": null}, "format_json": "gagal"}
+{"model": "claude-opus-5.5", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 4.07, "avg_out_tokens": 442.0, "vision": {"ok": 0, "fail": 1, "out": 331, "err": null}, "format_json": "lulus"}
+{"model": "gpt-6.1-sol", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 7.61, "avg_out_tokens": 316.0, "vision": {"ok": 0, "fail": 1, "out": 55, "err": null}, "format_json": "gagal"}
+{"model": "gpt-6-astra", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 9.84, "avg_out_tokens": 370.0, "vision": {"ok": 0, "fail": 1, "out": 62, "err": null}, "format_json": "gagal"}
+{"model": "gemini-3.7-flash", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 4.81, "avg_out_tokens": 781.0, "vision": {"ok": 0, "fail": 1, "out": 169, "err": null}, "format_json": "lulus"}
+{"model": "gpt-5.6-sol", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 6.67, "avg_out_tokens": 368.0, "vision": {"ok": 0, "fail": 1, "out": 141, "err": null}, "format_json": "gagal"}
+{"model": "gemini-3.1-pro", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 24.74, "avg_out_tokens": 3154.0, "vision": {"ok": 0, "fail": 1, "out": 866, "err": null}, "format_json": "lulus"}
+{"model": "kimi-k2.7-code", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 12.55, "avg_out_tokens": 998.0, "vision": {"ok": 0, "fail": 1, "out": 607, "err": null}, "format_json": "lulus"}
+{"model": "glm-5.3-flash", "score": 100.0, "ok": 4, "fail": 0, "err": 2, "avg_latency": 23.78, "avg_out_tokens": 1263.0, "vision": {"ok": 0, "fail": 1, "out": 465, "err": null}, "format_json": "lulus"}
+{"model": "kimi-k3", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 37.97, "avg_out_tokens": 727.0, "vision": {"ok": 0, "fail": 1, "out": 952, "err": null}, "format_json": "lulus"}
+{"model": "qwen3.8-max", "score": 100.0, "ok": 1, "fail": 0, "err": 5, "avg_latency": 28.62, "avg_out_tokens": 2607.0, "vision": {"ok": 0, "fail": 1, "out": null, "err": "HTTPError: HTTP Error 400: Bad Request"}, "format_json": "gagal"}
+{"model": "deepseek-v4-pro", "score": 84.6, "ok": 5, "fail": 1, "err": 0, "avg_latency": 3.49, "avg_out_tokens": 308.0, "vision": {"ok": 0, "fail": 1, "out": null, "err": "HTTPError: HTTP Error 400: Bad Request"}, "format_json": "lulus"}
+{"model": "deepseek-v4.1-flash", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 3.7, "avg_out_tokens": 695.0, "vision": {"ok": 0, "fail": 1, "out": 372, "err": null}, "format_json": "lulus"}
+{"model": "glm-5.3", "score": 100.0, "ok": 6, "fail": 0, "err": 0, "avg_latency": 53.92, "avg_out_tokens": 1625.0, "vision": {"ok": 0, "fail": 1, "out": null, "err": "HTTPError: HTTP Error 400: Bad Request"}, "format_json": "lulus"}
+{"model": "atria-dawn", "score": 100.0, "ok": 1, "fail": 0, "err": 5, "avg_latency": 59.75, "avg_out_tokens": 300.0, "vision": {"ok": 0, "fail": 1, "out": null, "err": "HTTPError: HTTP Error 400: Bad Request"}, "format_json": "lulus"}
+{"model": "hy4", "score": 0, "ok": 0, "fail": 0, "err": 6, "avg_latency": 0, "avg_out_tokens": 0, "vision": {"ok": 0, "fail": 1, "out": 637, "err": null}, "format_json": "gagal"}

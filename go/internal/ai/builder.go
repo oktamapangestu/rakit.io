@@ -360,15 +360,52 @@ type buildResult struct {
 }
 
 // runBuilder: mode Builder — ulangi permintaan sampai model selesai memanggil tool dan menulis ringkasan.
+// slimContext membuang blok isi file (<file path="...">…</file>) dari konteks project.
+// Dipakai pada putaran lanjut runBuilder: konteks penuh hanya perlu sekali, putaran
+// berikutnya cukup struktur/daftar file supaya biaya token input tidak membengkak berulang.
+func slimContext(content string) string {
+	if !strings.Contains(content, "<file") {
+		return content
+	}
+	return blankLinesRE.ReplaceAllString(fileBlockRE.ReplaceAllString(content, ""), "\n\n")
+}
+
+// messageText mengambil isi teks sebuah pesan (kosong bila bukan string).
+func messageText(m message) string {
+	s, _ := m["content"].(string)
+	return s
+}
+
+// withText mengembalikan salinan pesan dengan isi teks diganti.
+func withText(m message, content string) message {
+	out := make(message, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	out["content"] = content
+	return out
+}
+
 func (s *Service) runBuilder(messages []message, existing []string, h hooks) (*buildResult, error) {
 	convo := append([]message(nil), messages...)
+	// Pesan terakhir berisi konteks project + permintaan. Konteks penuh hanya dikirim di
+	// putaran pertama; putaran lanjut memakai versi ringkas. Pesan setelahnya (jawaban &
+	// hasil tool) selalu ikut utuh.
+	ctxIdx := len(convo) - 1
+	hasContext := ctxIdx >= 0 && strings.Contains(messageText(convo[ctxIdx]), "<file")
 	st := &staged{items: map[string]change{}}
 	out := &buildResult{}
 	text := ""
 	truncatedRounds := 0
 
 	for round := 0; round < maxBuildRounds; round++ {
-		r, err := s.callAI(request{messages: convo, tools: true}, h)
+		payload := convo
+		if round > 0 && hasContext {
+			payload = make([]message, len(convo))
+			copy(payload, convo)
+			payload[ctxIdx] = withText(payload[ctxIdx], slimContext(messageText(payload[ctxIdx])))
+		}
+		r, err := s.callAI(request{messages: payload, tools: true}, h)
 		if err != nil {
 			return nil, err
 		}

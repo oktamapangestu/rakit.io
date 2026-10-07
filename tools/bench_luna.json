@@ -1,0 +1,166 @@
+{
+  "gpt-6-luna": {
+    "lru": {
+      "status": "ok",
+      "passed": 7,
+      "total": 7,
+      "all_pass": true,
+      "latency_s": 2.51,
+      "out_tokens": 150
+    },
+    "roman": {
+      "status": "ok",
+      "passed": 10,
+      "total": 10,
+      "all_pass": true,
+      "latency_s": 20.64,
+      "out_tokens": 445
+    },
+    "bugfix": {
+      "status": "ok",
+      "passed": 6,
+      "total": 6,
+      "all_pass": true,
+      "latency_s": 6.21,
+      "out_tokens": 88
+    },
+    "jsonflat": {
+      "status": "ok",
+      "passed": 6,
+      "total": 6,
+      "all_pass": true,
+      "latency_s": 11.48,
+      "out_tokens": 180
+    },
+    "tokenbucket": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 7.55,
+      "out_tokens": 237
+    },
+    "dag": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 2.41,
+      "out_tokens": 154
+    },
+    "median": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 4.1,
+      "out_tokens": 310
+    },
+    "expr": {
+      "status": "ok",
+      "passed": 10,
+      "total": 10,
+      "all_pass": true,
+      "latency_s": 11.25,
+      "out_tokens": 541
+    },
+    "interval": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 3.0,
+      "out_tokens": 102
+    },
+    "wordbreak": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 17.61,
+      "out_tokens": 301
+    }
+  },
+  "gpt-5.6-luna": {
+    "lru": {
+      "status": "ok",
+      "passed": 7,
+      "total": 7,
+      "all_pass": true,
+      "latency_s": 9.75,
+      "out_tokens": 176
+    },
+    "roman": {
+      "status": "ok",
+      "passed": 10,
+      "total": 10,
+      "all_pass": true,
+      "latency_s": 9.89,
+      "out_tokens": 1123
+    },
+    "bugfix": {
+      "status": "ok",
+      "passed": 6,
+      "total": 6,
+      "all_pass": true,
+      "latency_s": 4.31,
+      "out_tokens": 113
+    },
+    "jsonflat": {
+      "status": "ok",
+      "passed": 6,
+      "total": 6,
+      "all_pass": true,
+      "latency_s": 11.17,
+      "out_tokens": 739
+    },
+    "tokenbucket": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 8.72,
+      "out_tokens": 400
+    },
+    "dag": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 4.98,
+      "out_tokens": 410
+    },
+    "median": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 7.92,
+      "out_tokens": 940
+    },
+    "expr": {
+      "status": "ok",
+      "passed": 10,
+      "total": 10,
+      "all_pass": true,
+      "latency_s": 8.58,
+      "out_tokens": 443
+    },
+    "interval": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 5.39,
+      "out_tokens": 613
+    },
+    "wordbreak": {
+      "status": "ok",
+      "passed": 8,
+      "total": 8,
+      "all_pass": true,
+      "latency_s": 7.22,
+      "out_tokens": 648
+    }
+  }
+}

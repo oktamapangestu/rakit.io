@@ -547,16 +547,35 @@ function stageToolCall(call, staged, existingTables, truncated) {
 
 const MAX_BUILD_ROUNDS = 8;
 
+// Konteks project hanya perlu dikirim penuh di putaran pertama; putaran lanjut cukup
+// ringkasannya (daftar file & tabel) supaya biaya token input tidak membengkak berulang.
+// Blok <file path="...">isi...</file> dibuang, keterangan struktur tetap dipertahankan.
+function slimContext(content) {
+  return content
+    .replace(/<file path="[^"]*">[\s\S]*?<\/file>\s*/g, '')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 // Mode Builder: ulangi permintaan sampai model selesai memanggil tool dan menulis ringkasan.
 async function runBuilder({ messages, existingTables, hooks }) {
   const convo = [...messages];
+  // Pesan pembuka (indeks 0..ctxIdx) berisi konteks project + request. Blok isi file hanya
+  // perlu dikirim di putaran pertama; putaran lanjut cukup ringkasannya supaya token input
+  // tidak membengkak berulang. Pesan setelah ctxIdx (jawaban & hasil tool) selalu ikut utuh.
+  const ctxIdx = convo.length - 1;
+  const hasContext = typeof convo[ctxIdx]?.content === 'string' && convo[ctxIdx].content.includes('<file path=');
   const staged = new Map();
   const usage = { input_tokens: 0, output_tokens: 0 };
   let message = '';
   let truncatedRounds = 0;
 
   for (let round = 0; round < MAX_BUILD_ROUNDS; round++) {
-    const reply = await callAI({ messages: convo, tools: TOOLS }, hooks);
+    let payload = convo;
+    if (round > 0 && hasContext) {
+      // Salin ulang tiap putaran agar pertumbuhan convo (jawaban + hasil tool) tetap terbawa.
+      payload = convo.map((m, i) => (i === ctxIdx ? { ...m, content: slimContext(m.content) } : m));
+    }
+    const reply = await callAI({ messages: payload, tools: TOOLS }, hooks);
     usage.input_tokens += reply.usage?.prompt_tokens ?? 0;
     usage.output_tokens += reply.usage?.completion_tokens ?? 0;
     if (process.env.AI_DEBUG) {

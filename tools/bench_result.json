@@ -1,0 +1,256 @@
+{
+  "summary": {
+    "deepseek-v4-pro": {
+      "solved": 10,
+      "n_cases": 10,
+      "tests_passed": 79,
+      "tests_total": 79,
+      "avg_latency_s": 3.08
+    },
+    "deepseek-v4.1-flash": {
+      "solved": 10,
+      "n_cases": 10,
+      "tests_passed": 79,
+      "tests_total": 79,
+      "avg_latency_s": 3.17
+    }
+  },
+  "results": {
+    "deepseek-v4-pro": {
+      "lru": {
+        "status": "ok",
+        "passed": 7,
+        "total": 7,
+        "all_pass": true,
+        "latency_s": 3.66,
+        "in_tokens": 285,
+        "out_tokens": 146,
+        "code": "from collections import OrderedDict\n\nclass LRUCache:\n\n    def __init__(self, capacity: int):\n        self.capacity = capacity\n        self.cache = OrderedDict()\n\n    def get(self, key: int) -> int:\n        if key not in self.cache:\n            return -1\n        self.cache.move_to_end(key)\n        return self.cache[key]\n\n    def put(self, key: int, value: int) -> None:\n        if key in self.cache:\n            self.cache.move_to_end(key)\n        self.cache[key] = value\n        if len(self.cache) > self.capacity:\n            self.cache.popitem(last=False)",
+        "raw_out": "TEST PASS get1\nTEST PASS evict2\nTEST PASS has3\nTEST PASS evict1\nTEST PASS has4\nTEST PASS has3b\nTEST PASS overwrite\n"
+      },
+      "roman": {
+        "status": "ok",
+        "passed": 10,
+        "total": 10,
+        "all_pass": true,
+        "latency_s": 3.38,
+        "in_tokens": 266,
+        "out_tokens": 373,
+        "code": "def to_roman(n: int) -> str:\n    if not 1 <= n <= 3999:\n        raise ValueError(\"n must be between 1 and 3999\")\n    \n    val = [\n        1000, 900, 500, 400,\n        100, 90, 50, 40,\n        10, 9, 5, 4,\n        1\n    ]\n    syms = [\n        \"M\", \"CM\", \"D\", \"CD\",\n        \"C\", \"XC\", \"L\", \"XL\",\n        \"X\", \"IX\", \"V\", \"IV\",\n        \"I\"\n    ]\n    \n    roman = []\n    for v, s in zip(val, syms):\n        while n >= v:\n            roman.append(s)\n            n -= v\n    return \"\".join(roman)\n\n\ndef from_roman(s: str) -> int:\n    if not s or not s.isupper():\n        raise ValueError(\"Invalid Roman numeral\")\n    \n    values = {\n        'I': 1,\n        'V': 5,\n        'X': 10,\n        'L': 50,\n        'C': 100,\n        'D': 500,\n        'M': 1000\n    }\n    \n    total = 0\n    prev_value = 0\n    \n    for ch in reversed(s):\n        if ch not in values:\n            raise ValueError(\"Invalid Roman numeral\")\n        curr_value = values[ch]\n        if curr_value < prev_value:\n            total -= curr_value\n        else:\n            total += curr_value\n        prev_value = curr_value\n    \n    # Optional validation: ensure conversion back matches\n    if to_roman(total) != s:\n        raise ValueError(\"Invalid Roman numeral\")\n    \n    return total",
+        "raw_out": "TEST PASS r1\nTEST PASS r4\nTEST PASS r9\nTEST PASS r58\nTEST PASS r1994\nTEST PASS r3999\nTEST PASS f1\nTEST PASS f4\nTEST PASS f1994\nTEST PASS roundtrip\n"
+      },
+      "bugfix": {
+        "status": "ok",
+        "passed": 6,
+        "total": 6,
+        "all_pass": true,
+        "latency_s": 2.04,
+        "in_tokens": 321,
+        "out_tokens": 57,
+        "code": "def two_sum(nums, target):\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i\n    return []",
+        "raw_out": "TEST PASS basic\nTEST PASS dup_same_index\nTEST PASS nosol_selfpair\nTEST PASS neg\nTEST PASS zero_pair\nTEST PASS nosol\n"
+      },
+      "jsonflat": {
+        "status": "ok",
+        "passed": 6,
+        "total": 6,
+        "all_pass": true,
+        "latency_s": 2.45,
+        "in_tokens": 324,
+        "out_tokens": 154,
+        "code": "def flatten(obj, sep='.'):\n    def helper(current, prefix):\n        if not isinstance(current, dict):\n            return {prefix: current}\n        if not current:\n            return {prefix: current}\n        result = {}\n        for key, value in current.items():\n            new_prefix = f\"{prefix}{sep}{key}\" if prefix else key\n            if isinstance(value, dict):\n                if not value:\n                    result[new_prefix] = {}\n                else:\n                    result.update(helper(value, new_prefix))\n            else:\n                result[new_prefix] = value\n        return result\n\n    if not isinstance(obj, dict):\n        return {obj: obj}\n    if not obj:\n        return {}\n    return helper(obj, \"\")",
+        "raw_out": "TEST PASS basic\nTEST PASS deep\nTEST PASS empty_inner\nTEST PASS sep\nTEST PASS top_empty\nTEST PASS mixed\n"
+      },
+      "tokenbucket": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 2.69,
+        "in_tokens": 356,
+        "out_tokens": 224,
+        "code": "class TokenBucket:\n    def __init__(self, rate: float, capacity: int, now: float = 0.0):\n        self.rate = rate\n        self.capacity = capacity\n        self._last_time = now\n        self._tokens = float(capacity)\n\n    def _refill(self, now: float) -> None:\n        if now > self._last_time:\n            elapsed = now - self._last_time\n            self._tokens = min(float(self.capacity), self._tokens + elapsed * self.rate)\n            self._last_time = now\n        elif now < self._last_time:\n            self._last_time = now\n\n    def tokens_at(self, now: float) -> float:\n        self._refill(now)\n        return self._tokens\n\n    def allow(self, now: float) -> bool:\n        self._refill(now)\n        if self._tokens >= 1.0:\n            self._tokens -= 1.0\n            return True\n        return False",
+        "raw_out": "TEST PASS startfull\nTEST PASS allow1\nTEST PASS allow2\nTEST PASS allow3_false\nTEST PASS refill1s\nTEST PASS refill1s_b\nTEST PASS cap\nTEST PASS nonneg\n"
+      },
+      "dag": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 2.88,
+        "in_tokens": 281,
+        "out_tokens": 156,
+        "code": "def topo_sort(n: int, edges: list) -> list:\n    from collections import deque, defaultdict\n\n    adj = defaultdict(list)\n    indegree = [0] * n\n\n    for u, v in edges:\n        adj[u].append(v)\n        indegree[v] += 1\n\n    queue = deque([i for i in range(n) if indegree[i] == 0])\n    result = []\n\n    while queue:\n        u = queue.popleft()\n        result.append(u)\n        for v in adj[u]:\n            indegree[v] -= 1\n            if indegree[v] == 0:\n                queue.append(v)\n\n    if len(result) == n:\n        return result\n    return None",
+        "raw_out": "TEST PASS linear\nTEST PASS diamond\nTEST PASS cycle\nTEST PASS selfloop\nTEST PASS empty\nTEST PASS isolated\nTEST PASS partial_cycle\nTEST PASS disconnected\n"
+      },
+      "median": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 3.35,
+        "in_tokens": 289,
+        "out_tokens": 282,
+        "code": "def find_median_sorted(a: list, b: list) -> float:\n    if not a and not b:\n        return 0.0\n\n    if len(a) > len(b):\n        a, b = b, a\n\n    m, n = len(a), len(b)\n    total = m + n\n    half = total // 2\n\n    left, right = 0, m\n\n    while left <= right:\n        i = (left + right) // 2\n        j = half - i\n\n        a_left = a[i - 1] if i > 0 else float(\"-inf\")\n        a_right = a[i] if i < m else float(\"inf\")\n        b_left = b[j - 1] if j > 0 else float(\"-inf\")\n        b_right = b[j] if j < n else float(\"inf\")\n\n        if a_left <= b_right and b_left <= a_right:\n            if total % 2 == 1:\n                return float(min(a_right, b_right))\n            else:\n                return (max(a_left, b_left) + min(a_right, b_right)) / 2.0\n        elif a_left > b_right:\n            right = i - 1\n        else:\n            left = i + 1\n\n    return 0.0",
+        "raw_out": "TEST PASS odd\nTEST PASS even\nTEST PASS empty_a\nTEST PASS empty_b\nTEST PASS both_empty\nTEST PASS single\nTEST PASS diff_len\nTEST PASS overlap\n"
+      },
+      "expr": {
+        "status": "ok",
+        "passed": 10,
+        "total": 10,
+        "all_pass": true,
+        "latency_s": 4.74,
+        "in_tokens": 277,
+        "out_tokens": 377,
+        "code": "def evaluate(expr: str) -> float:\n    def parse_number(i):\n        start = i\n        while i < len(expr) and (expr[i].isdigit() or expr[i] == '.'):\n            i += 1\n        return float(expr[start:i]), i\n\n    def parse_factor(i):\n        if i >= len(expr):\n            raise ValueError(\"Unexpected end\")\n        if expr[i] == '(':\n            val, i = parse_expr(i + 1)\n            if i >= len(expr) or expr[i] != ')':\n                raise ValueError(\"Missing )\")\n            return val, i + 1\n        if expr[i] == '-':\n            val, i = parse_factor(i + 1)\n            return -val, i\n        if expr[i] == '+':\n            return parse_factor(i + 1)\n        return parse_number(i)\n\n    def parse_term(i):\n        val, i = parse_factor(i)\n        while i < len(expr) and expr[i] in '*/':\n            op = expr[i]\n            rhs, i = parse_factor(i + 1)\n            if op == '*':\n                val *= rhs\n            else:\n                val /= rhs\n        return val, i\n\n    def parse_expr(i):\n        val, i = parse_term(i)\n        while i < len(expr) and expr[i] in '+-':\n            op = expr[i]\n            rhs, i = parse_term(i + 1)\n            if op == '+':\n                val += rhs\n            else:\n                val -= rhs\n        return val, i\n\n    expr = expr.replace(' ', '')\n    result, index = parse_expr(0)\n    if index != len(expr):\n        raise ValueError(\"Unexpected character\")\n    return result",
+        "raw_out": "TEST PASS add\nTEST PASS prec\nTEST PASS paren\nTEST PASS minus\nTEST PASS unary_mul\nTEST PASS nested\nTEST PASS div\nTEST PASS decimal\nTEST PASS space\nTEST PASS double_neg\n"
+      },
+      "interval": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 3.2,
+        "in_tokens": 306,
+        "out_tokens": 239,
+        "code": "def merge_intervals(intervals: list) -> list:\n    \"\"\"\n    Menggabungkan interval yang tumpang tindih atau bersentuhan.\n\n    Interval tertutup [start, end] digabung jika saling tumpang tindih\n    atau bersentuhan (end >= start berikutnya). Input tidak diurutkan\n    dan tidak dimodifikasi.\n    \"\"\"\n    if not intervals:\n        return []\n\n    # Salin dan urutkan berdasarkan start, lalu end\n    sorted_intervals = sorted(intervals, key=lambda x: (x[0], x[1]))\n\n    merged = []\n    current_start, current_end = sorted_intervals[0]\n\n    for start, end in sorted_intervals[1:]:\n        if start <= current_end:  # tumpang tindih atau bersentuhan\n            # Gabungkan dengan memperluas akhir jika perlu\n            current_end = max(current_end, end)\n        else:\n            merged.append([current_start, current_end])\n            current_start, current_end = start, end\n\n    merged.append([current_start, current_end])\n    return merged",
+        "raw_out": "TEST PASS basic\nTEST PASS touching\nTEST PASS nested\nTEST PASS unsorted\nTEST PASS single\nTEST PASS empty\nTEST PASS no_merge\nTEST PASS no_mutate\n"
+      },
+      "wordbreak": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 2.4,
+        "in_tokens": 311,
+        "out_tokens": 186,
+        "code": "def word_break(s: str, words: list) -> str:\n    if not s:\n        return \"\"\n    \n    word_set = set(words)\n    n = len(s)\n    dp = [False] * (n + 1)\n    dp[0] = True\n    \n    for i in range(1, n + 1):\n        for j in range(i):\n            if dp[j] and s[j:i] in word_set:\n                dp[i] = True\n                break\n    \n    if not dp[n]:\n        return \"\"\n    \n    result = []\n    i = n\n    while i > 0:\n        for j in range(i - 1, -1, -1):\n            if dp[j] and s[j:i] in word_set:\n                result.append(s[j:i])\n                i = j\n                break\n    \n    return \" \".join(reversed(result))",
+        "raw_out": "TEST PASS basic\nTEST PASS simple\nTEST PASS none\nTEST PASS empty_s\nTEST PASS repeat\nTEST PASS overlap_choice\nTEST PASS no_words\nTEST PASS single_word\n"
+      }
+    },
+    "deepseek-v4.1-flash": {
+      "lru": {
+        "status": "ok",
+        "passed": 7,
+        "total": 7,
+        "all_pass": true,
+        "latency_s": 2.7,
+        "in_tokens": 114,
+        "out_tokens": 481,
+        "code": "from collections import OrderedDict\n\n\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.capacity = capacity\n        self._data = OrderedDict()  # menyimpan key -> value, urut dari paling lama ke paling baru\n\n    def get(self, key: int) -> int:\n        if key not in self._data:\n            return -1\n        # tandai sebagai baru dipakai\n        self._data.move_to_end(key)\n        return self._data[key]\n\n    def put(self, key: int, value: int) -> None:\n        if key in self._data:\n            # perbarui nilai dan tandai sebagai baru dipakai\n            self._data.move_to_end(key)\n        self._data[key] = value\n\n        # buang item yang paling lama tidak dipakai\n        if len(self._data) > self.capacity:\n            self._data.popitem(last=False)",
+        "raw_out": "TEST PASS get1\nTEST PASS evict2\nTEST PASS has3\nTEST PASS evict1\nTEST PASS has4\nTEST PASS has3b\nTEST PASS overwrite\n"
+      },
+      "roman": {
+        "status": "ok",
+        "passed": 10,
+        "total": 10,
+        "all_pass": true,
+        "latency_s": 5.52,
+        "in_tokens": 95,
+        "out_tokens": 1180,
+        "code": "def to_roman(n: int) -> str:\n    \"\"\"\n    Mengubah bilangan bulat (1 <= n <= 3999) menjadi angka Romawi standar.\n    Menangani aturan subtractive (IV, IX, XL, XC, CD, CM).\n    \"\"\"\n    if not isinstance(n, int):\n        raise TypeError(\"n harus berupa int\")\n    if not 1 <= n <= 3999:\n        raise ValueError(\"n harus dalam rentang 1..3999\")\n\n    # Nilai dipetakan dari besar ke kecil, termasuk bentuk subtractive.\n    table = [\n        (1000, \"M\"), (900, \"CM\"),\n        (500,  \"D\"), (400, \"CD\"),\n        (100,  \"C\"), (90,  \"XC\"),\n        (50,   \"L\"), (40,  \"XL\"),\n        (10,   \"X\"), (9,   \"IX\"),\n        (5,    \"V\"), (4,   \"IV\"),\n        (1,    \"I\"),\n    ]\n\n    result = []\n    for value, symbol in table:\n        if n == 0:\n            break\n        count, n = divmod(n, value)\n        result.append(symbol * count)\n    return \"\".join(result)\n\n\ndef from_roman(s: str) -> int:\n    \"\"\"\n    Mengubah angka Romawi valid menjadi bilangan bulat.\n    Menangani aturan subtractive (IV, IX, XL, XC, CD, CM).\n    \"\"\"\n    if not isinstance(s, str) or not s:\n        raise ValueError(\"s harus berupa string angka Romawi yang tidak kosong\")\n    if s != s.upper():\n        # opsional: terima hanya huruf kapital agar konsisten\n        s = s.upper()\n\n    values = {\n        \"I\": 1, \"V\": 5, \"X\": 10, \"L\": 50,\n        \"C\": 100, \"D\": 500, \"M\": 1000,\n    }\n\n    total = 0\n    prev = 0\n    # Iterasi dari kanan ke kiri: jika nilai sekarang < nilai sebelumnya,\n    # berarti bentuk subtractive → kurangkan; selain itu tambahkan.\n    for ch in reversed(s):\n        if ch not in values:\n            raise ValueError(f\"Karakter tidak valid: {ch!r}\")\n        val = values[ch]\n        if val < prev:\n            total -= val\n        else:\n            total += val\n            prev = val\n    return total",
+        "raw_out": "TEST PASS r1\nTEST PASS r4\nTEST PASS r9\nTEST PASS r58\nTEST PASS r1994\nTEST PASS r3999\nTEST PASS f1\nTEST PASS f4\nTEST PASS f1994\nTEST PASS roundtrip\n"
+      },
+      "bugfix": {
+        "status": "ok",
+        "passed": 6,
+        "total": 6,
+        "all_pass": true,
+        "latency_s": 1.05,
+        "in_tokens": 150,
+        "out_tokens": 57,
+        "code": "def two_sum(nums, target):\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i\n    return []",
+        "raw_out": "TEST PASS basic\nTEST PASS dup_same_index\nTEST PASS nosol_selfpair\nTEST PASS neg\nTEST PASS zero_pair\nTEST PASS nosol\n"
+      },
+      "jsonflat": {
+        "status": "ok",
+        "passed": 6,
+        "total": 6,
+        "all_pass": true,
+        "latency_s": 3.61,
+        "in_tokens": 153,
+        "out_tokens": 660,
+        "code": "def flatten(obj, sep='.'):\n    # Dict kosong di root -> {}\n    if not obj:\n        return {}\n\n    result = {}\n\n    def _walk(value, prefix):\n        if isinstance(value, dict):\n            if not value:\n                # Dict kosong DI DALAM -> simpan apa adanya\n                result[prefix] = {}\n                return\n            for key, sub in value.items():\n                new_prefix = f\"{prefix}{sep}{key}\" if prefix else str(key)\n                _walk(sub, new_prefix)\n        else:\n            # Nilai non-dict dipertahankan apa adanya\n            result[prefix] = value\n\n    for key, value in obj.items():\n        _walk(value, str(key))\n\n    return result",
+        "raw_out": "TEST PASS basic\nTEST PASS deep\nTEST PASS empty_inner\nTEST PASS sep\nTEST PASS top_empty\nTEST PASS mixed\n"
+      },
+      "tokenbucket": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 3.43,
+        "in_tokens": 185,
+        "out_tokens": 601,
+        "code": "class TokenBucket:\n    def __init__(self, rate: float, capacity: int, now: float = 0.0):\n        if rate < 0:\n            raise ValueError(\"rate must be non-negative\")\n        if capacity < 0:\n            raise ValueError(\"capacity must be non-negative\")\n        self.rate = float(rate)\n        self.capacity = float(capacity)\n        # Bucket begins full.\n        self._tokens = float(capacity)\n        # Last time we updated; used to accrue tokens continuously.\n        self._last = float(now)\n\n    def _refill(self, now: float) -> None:\n        # Only ever move time forward. If `now` went backwards, ignore the\n        # rewind so tokens never decrease or go negative.\n        if now > self._last:\n            elapsed = now - self._last\n            self._tokens = min(\n                self.capacity,\n                self._tokens + elapsed * self.rate,\n            )\n            self._last = now\n        # If now <= self._last, do nothing (keep current tokens and _last).\n\n    def allow(self, now: float) -> bool:\n        self._refill(now)\n        if self._tokens >= 1.0:\n            self._tokens -= 1.0\n            return True\n        return False\n\n    def tokens_at(self, now: float) -> float:\n        # Use a non-mutating peek so calling tokens_at doesn't consume tokens.\n        # (It may still advance the internal clock, which is harmless.)\n        last = self._last\n        tokens = self._tokens\n        if now > last:\n            elapsed = now - last\n            tokens = min(self.capacity, tokens + elapsed * self.rate)\n            last = now\n        # Store the peeked state back so future calls stay consistent.\n        self._tokens = tokens\n        self._last = last\n        return tokens",
+        "raw_out": "TEST PASS startfull\nTEST PASS allow1\nTEST PASS allow2\nTEST PASS allow3_false\nTEST PASS refill1s\nTEST PASS refill1s_b\nTEST PASS cap\nTEST PASS nonneg\n"
+      },
+      "dag": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 2.9,
+        "in_tokens": 110,
+        "out_tokens": 423,
+        "code": "from collections import deque\n\n\ndef topo_sort(n: int, edges: list) -> list:\n    \"\"\"\n    Mengembalikan urutan topologis dari graf berarah dengan simpul 0..n-1.\n    edges berisi pasangan (u, v) yang berarti u harus muncul sebelum v.\n    Mengembalikan None jika terdapat siklus.\n    \"\"\"\n    # Bangun adjacency list dan hitung in-degree setiap simpul\n    adj = [[] for _ in range(n)]\n    in_degree = [0] * n\n\n    for u, v in edges:\n        adj[u].append(v)\n        in_degree[v] += 1\n\n    # Mulai dari semua simpul dengan in-degree 0\n    queue = deque(i for i in range(n) if in_degree[i] == 0)\n    order = []\n\n    while queue:\n        u = queue.popleft()\n        order.append(u)\n        for v in adj[u]:\n            in_degree[v] -= 1\n            if in_degree[v] == 0:\n                queue.append(v)\n\n    # Jika tidak semua simpul diproses, berarti ada siklus\n    if len(order) != n:\n        return None\n\n    return order",
+        "raw_out": "TEST PASS linear\nTEST PASS diamond\nTEST PASS cycle\nTEST PASS selfloop\nTEST PASS empty\nTEST PASS isolated\nTEST PASS partial_cycle\nTEST PASS disconnected\n"
+      },
+      "median": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 4.21,
+        "in_tokens": 118,
+        "out_tokens": 865,
+        "code": "def find_median_sorted(a: list, b: list) -> float:\n    \"\"\"\n    Mengembalikan median gabungan dua array terurut menaik.\n    Kompleksitas: O(log(min(len(a), len(b))))\n    \"\"\"\n    # Pastikan a adalah array yang lebih pendek (untuk binary search optimal)\n    if len(a) > len(b):\n        a, b = b, a\n\n    m, n = len(a), len(b)\n\n    # Kasus kedua array kosong\n    if m == 0 and n == 0:\n        return 0\n\n    # Kasus salah satu array kosong -> ambil median langsung dari array lain\n    if m == 0:\n        if n % 2 == 1:\n            return float(b[n // 2])\n        return (b[n // 2 - 1] + b[n // 2]) / 2.0\n\n    total = m + n\n    half = total // 2\n\n    # Binary search pada array a untuk menemukan titik partisi yang benar\n    lo, hi = 0, m\n\n    while lo <= hi:\n        i = (lo + hi) // 2          # jumlah elemen a di kiri partisi\n        j = half - i                # jumlah elemen b di kiri partisi\n\n        # Nilai batas kiri/kanan (pakai -inf/+inf bila di luar batas)\n        a_left  = a[i - 1] if i > 0 else float('-inf')\n        a_right = a[i]     if i < m else float('inf')\n        b_left  = b[j - 1] if j > 0 else float('-inf')\n        b_right = b[j]     if j < n else float('inf')\n\n        # Partisi valid: semua elemen kiri <= semua elemen kanan\n        if a_left <= b_right and b_left <= a_right:\n            if total % 2 == 1:\n                # Ganjil: median = elemen terkecil di sisi kanan\n                return float(min(a_right, b_right))\n            # Genap: rata-rata dua elemen tengah\n            return (max(a_left, b_left) + min(a_right, b_right)) / 2.0\n        elif a_left > b_right:\n            # i terlalu besar -> geser ke kiri\n            hi = i - 1\n        else:\n            # b_left > a_right -> i terlalu kecil -> geser ke kanan\n            lo = i + 1\n\n    # Tidak seharusnya sampai sini untuk input valid\n    raise ValueError(\"Input tidak valid\")",
+        "raw_out": "TEST PASS odd\nTEST PASS even\nTEST PASS empty_a\nTEST PASS empty_b\nTEST PASS both_empty\nTEST PASS single\nTEST PASS diff_len\nTEST PASS overlap\n"
+      },
+      "expr": {
+        "status": "ok",
+        "passed": 10,
+        "total": 10,
+        "all_pass": true,
+        "latency_s": 3.71,
+        "in_tokens": 106,
+        "out_tokens": 815,
+        "code": "def evaluate(expr: str) -> float:\n    \"\"\"\n    Evaluate an arithmetic expression with +, -, *, /, parentheses,\n    integers/decimals, and unary minus. Spaces are ignored.\n    Division uses normal float division. Expression is assumed valid.\n    \"\"\"\n    tokens = []\n    i = 0\n    n = len(expr)\n    while i < n:\n        c = expr[i]\n        if c.isspace():\n            i += 1\n            continue\n        if c in '+-*/()':\n            tokens.append(c)\n            i += 1\n        elif c.isdigit() or c == '.':\n            j = i\n            while j < n and (expr[j].isdigit() or expr[j] == '.'):\n                j += 1\n            tokens.append(expr[i:j])\n            i = j\n        else:\n            raise ValueError(f\"Unexpected character: {c!r}\")\n\n    pos = 0\n\n    def peek():\n        return tokens[pos] if pos < len(tokens) else None\n\n    def consume():\n        nonlocal pos\n        t = tokens[pos]\n        pos += 1\n        return t\n\n    def parse_number_or_paren():\n        \"\"\"Parse a primary: number, unary minus applied to primary, or parenthesized expr.\"\"\"\n        t = peek()\n        if t == '-':\n            consume()\n            # unary minus binds to the next primary (right associativity of unary)\n            return -parse_number_or_paren()\n        if t == '+':\n            consume()\n            return parse_number_or_paren()\n        if t == '(':\n            consume()\n            val = parse_expr()\n            if peek() != ')':\n                raise ValueError(\"Missing closing parenthesis\")\n            consume()\n            return val\n        if t is None:\n            raise ValueError(\"Unexpected end of expression\")\n        # otherwise must be a number literal\n        consume()\n        return float(t)\n\n    def parse_term():\n        \"\"\"Handle *, / with left associativity.\"\"\"\n        val = parse_number_or_paren()\n        while True:\n            t = peek()\n            if t == '*':\n                consume()\n                val *= parse_number_or_paren()\n            elif t == '/':\n                consume()\n                val /= parse_number_or_paren()\n            else:\n                break\n        return val\n\n    def parse_expr():\n        \"\"\"Handle +, - with left associativity.\"\"\"\n        val = parse_term()\n        while True:\n            t = peek()\n            if t == '+':\n                consume()\n                val += parse_term()\n            elif t == '-':\n                consume()\n                val -= parse_term()\n            else:\n                break\n        return val\n\n    result = parse_expr()\n    if pos != len(tokens):\n        raise ValueError(\"Unexpected trailing tokens\")\n    return result\n\n\nif __name__ == '__main__':\n    tests = [\n        (\"1+2\", 3.0),\n        (\"2*3+4\", 10.0),\n        (\"2+3*4\", 14.0),\n        (\"(2+3)*4\", 20.0),\n        (\"-3+2\", -1.0),\n        (\"2*-3\", -6.0),\n        (\"-2*-3\", 6.0),\n        (\"10/4\", 2.5),\n        (\"1 - -2\", 3.0),\n        (\"2*(3+4)/(1+1)\", 7.0),\n        (\"- ( 3 + 2 ) * -2\", 10.0),\n        (\"1.5*2\", 3.0),\n    ]\n    for e, expected in tests:\n        got = evaluate(e)\n        status = \"OK\" if abs(got - expected) < 1e-9 else \"FAIL\"\n        print(f\"{status}: {e!r} = {got} (expected {expected})\")",
+        "raw_out": "OK: '1+2' = 3.0 (expected 3.0)\nOK: '2*3+4' = 10.0 (expected 10.0)\nOK: '2+3*4' = 14.0 (expected 14.0)\nOK: '(2+3)*4' = 20.0 (expected 20.0)\nOK: '-3+2' = -1.0 (expected -1.0)\nOK: '2*-3' = -6.0 (expected -6.0)\nOK: '-2*-3' = 6.0 (expected 6.0)\nOK: '10/4' = 2.5 (expected 2.5)\nOK: '1 - -2' = 3.0 (expected 3.0)\nOK: '2*(3+4)/(1+1)' = 7.0 (expected 7.0)\nOK: '- ( 3 + 2 ) * -2' = 10.0 (expected 10.0)\nOK: '1.5*2' = 3.0 (expected 3.0)\nTEST PASS add\nTEST PASS prec\nTEST PASS paren\nTEST PASS minus\nTEST PASS unary_mul\nTEST PASS nested\nTEST PASS div\nTEST PASS decimal\nTEST PASS space\nTEST PASS double_neg\n"
+      },
+      "interval": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 2.42,
+        "in_tokens": 135,
+        "out_tokens": 372,
+        "code": "def merge_intervals(intervals: list) -> list:\n    \"\"\"\n    Menggabungkan daftar interval tertutup [start, end] yang saling\n    tumpang tindih atau bersentuhan, lalu mengembalikan daftar terurut menaik.\n\n    Interval yang bersentuhan (mis. [1,3] dan [3,5]) digabung menjadi [1,5].\n    Interval bersarang (mis. [2,3] di dalam [1,10]) ditelan oleh interval luar.\n    List masukan tidak dimodifikasi.\n\n    Kompleksitas waktu: O(n log n) didominasi oleh pengurutan.\n    Kompleksitas ruang : O(n) untuk hasil dan salinan terurut.\n    \"\"\"\n    # Salin input agar list masukan tidak dimodifikasi.\n    # Setiap interval juga disalin agar aman.\n    items = [list(iv) for iv in intervals]\n\n    if not items:\n        return []\n\n    # Urutkan berdasarkan start (lalu end, agar deterministik).\n    items.sort(key=lambda iv: (iv[0], iv[1]))\n\n    merged = [items[0]]\n\n    for start, end in items[1:]:\n        last_start, last_end = merged[-1]\n\n        # Tumpang tindih atau bersentuhan bila start <= last_end\n        if start <= last_end:\n            # Perluas akhir bila interval saat ini menjulur lebih jauh\n            # (menangani juga kasus interval bersarang).\n            if end > last_end:\n                merged[-1][1] = end\n        else:\n            # Ada celah -> mulai interval baru\n            merged.append([start, end])\n\n    return merged",
+        "raw_out": "TEST PASS basic\nTEST PASS touching\nTEST PASS nested\nTEST PASS unsorted\nTEST PASS single\nTEST PASS empty\nTEST PASS no_merge\nTEST PASS no_mutate\n"
+      },
+      "wordbreak": {
+        "status": "ok",
+        "passed": 8,
+        "total": 8,
+        "all_pass": true,
+        "latency_s": 2.19,
+        "in_tokens": 140,
+        "out_tokens": 348,
+        "code": "def word_break(s: str, words: list) -> str:\n    if not s:\n        return ''  # string kosong -> tidak ada yang perlu dipenggal\n    \n    word_set = set(words)\n    n = len(s)\n    \n    # memo[i] menyimpan cara memenggal s[i:] (None = belum dihitung)\n    memo = {}\n    \n    def solve(i: int):\n        if i == n:\n            return ''          # base case: berhasil sampai akhir\n        if i in memo:\n            return memo[i]\n        \n        for j in range(i + 1, n + 1):\n            chunk = s[i:j]\n            if chunk in word_set:\n                rest = solve(j)\n                if rest is not None:          # ada solusi untuk sisa\n                    result = chunk if rest == '' else chunk + ' ' + rest\n                    memo[i] = result\n                    return result\n        \n        memo[i] = None       # tidak ada cara memenggal dari i\n        return None\n    \n    ans = solve(0)\n    return ans if ans is not None else ''",
+        "raw_out": "TEST PASS basic\nTEST PASS simple\nTEST PASS none\nTEST PASS empty_s\nTEST PASS repeat\nTEST PASS overlap_choice\nTEST PASS no_words\nTEST PASS single_word\n"
+      }
+    }
+  },
+  "cases": [
+    "lru",
+    "roman",
+    "bugfix",
+    "jsonflat",
+    "tokenbucket",
+    "dag",
+    "median",
+    "expr",
+    "interval",
+    "wordbreak"
+  ]
+}
