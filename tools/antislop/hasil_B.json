@@ -1,0 +1,33 @@
+{
+  "code": "// Class Keranjang untuk mengelola item belanjaan\nclass Keranjang {\n  constructor() {\n    // Muat data dari localStorage saat inisialisasi\n    this.items = this.muat();\n  }\n\n  // Menambah item baru ke keranjang\n  tambah(item) {\n    // Validasi item memiliki properti yang dibutuhkan\n    if (!item || !item.id || !item.nama || !item.harga || !item.jumlah) {\n      throw new Error('Item tidak valid');\n    }\n\n    // Cek apakah item dengan id sama sudah ada\n    const existing = this.items.find((i) => i.id === item.id);\n    if (existing) {\n      // Jika ada, tambahkan jumlahnya\n      existing.jumlah += item.jumlah;\n    } else {\n      // Jika belum ada, tambahkan item baru\n      this.items.push({ ...item });\n    }\n\n    this.simpan();\n  }\n\n  // Menghapus item berdasarkan id\n  hapus(id) {\n    this.items = this.items.filter((item) => item.id !== id);\n    this.simpan();\n  }\n\n  // Menghitung subtotal sebelum diskon\n  subtotal() {\n    return this.items.reduce(\n      (sum, item) => sum + item.harga * item.jumlah,\n      0\n    );\n  }\n\n  // Menghitung total setelah diskon\n  total() {\n    const sub = this.subtotal();\n    // Diskon 10% jika subtotal lebih dari 500000\n    return sub > 500000 ? sub * 0.9 : sub;\n  }\n\n  // Mengembalikan daftar item\n  daftar() {\n    return [...this.items];\n  }\n\n  // Menyimpan data ke localStorage\n  simpan() {\n    localStorage.setItem('keranjang', JSON.stringify(this.items));\n  }\n\n  // Memuat data dari localStorage\n  muat() {\n    const data = localStorage.getItem('keranjang');\n    try {\n      return data ? JSON.parse(data) : [];\n    } catch {\n      return [];\n    }\n  }\n}",
+  "usage": {
+    "in": 297,
+    "out": 448,
+    "sec": 5.1
+  },
+  "slop_patterns": [
+    [
+      "label kosong",
+      1
+    ]
+  ],
+  "comments": 14,
+  "judge": {
+    "slop_score": 5,
+    "useful_score": 6,
+    "jumlah_komentar": 13,
+    "contoh_slop": [
+      "// Class Keranjang untuk mengelola item belanjaan",
+      "// Menambah item baru ke keranjang",
+      "// Menghapus item berdasarkan id",
+      "// Menghitung subtotal sebelum diskon",
+      "// Menghitung total setelah diskon",
+      "// Mengembalikan daftar item",
+      "// Menyimpan data ke localStorage",
+      "// Memuat data dari localStorage",
+      "// Jika ada, tambahkan jumlahnya",
+      "// Jika belum ada, tambahkan item baru"
+    ]
+  },
+  "raw": "```javascript\n// Class Keranjang untuk mengelola item belanjaan\nclass Keranjang {\n  constructor() {\n    // Muat data dari localStorage saat inisialisasi\n    this.items = this.muat();\n  }\n\n  // Menambah item baru ke keranjang\n  tambah(item) {\n    // Validasi item memiliki properti yang dibutuhkan\n    if (!item || !item.id || !item.nama || !item.harga || !item.jumlah) {\n      throw new Error('Item tidak valid');\n    }\n\n    // Cek apakah item dengan id sama sudah ada\n    const existing = this.items.find((i) => i.id === item.id);\n    if (existing) {\n      // Jika ada, tambahkan jumlahnya\n      existing.jumlah += item.jumlah;\n    } else {\n      // Jika belum ada, tambahkan item baru\n      this.items.push({ ...item });\n    }\n\n    this.simpan();\n  }\n\n  // Menghapus item berdasarkan id\n  hapus(id) {\n    this.items = this.items.filter((item) => item.id !== id);\n    this.simpan();\n  }\n\n  // Menghitung subtotal sebelum diskon\n  subtotal() {\n    return this.items.reduce(\n      (sum, item) => sum + item.harga * item.jumlah,\n      0\n    );\n  }\n\n  // Menghitung total setelah diskon\n  total() {\n    const sub = this.subtotal();\n    // Diskon 10% jika subtotal lebih dari 500000\n    return sub > 500000 ? sub * 0.9 : sub;\n  }\n\n  // Mengembalikan daftar item\n  daftar() {\n    return [...this.items];\n  }\n\n  // Menyimpan data ke localStorage\n  simpan() {\n    localStorage.setItem('keranjang', JSON.stringify(this.items));\n  }\n\n  // Memuat data dari localStorage\n  muat() {\n    const data = localStorage.getItem('keranjang');\n    try {\n      return data ? JSON.parse(data) : [];\n    } catch {\n      return [];\n    }\n  }\n}\n```"
+}

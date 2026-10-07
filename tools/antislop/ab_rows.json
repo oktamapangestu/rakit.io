@@ -1,0 +1,371 @@
+[
+  {
+    "model": "deepseek-v4-pro",
+    "task": "keranjang.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 236
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "keranjang.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 264
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "keranjang.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 1,
+    "n_biz": 0,
+    "tok_out": 322
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "keranjang.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 295
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "keranjang.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 5,
+    "n_biz": 1,
+    "tok_out": 398
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "keranjang.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 1,
+    "n_biz": 0,
+    "tok_out": 400
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "auth.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 9,
+    "n_biz": 1,
+    "tok_out": 495
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "auth.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 211
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "auth.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 2,
+    "n_biz": 0,
+    "tok_out": 323
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "auth.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 213
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "auth.js",
+    "cond": "B",
+    "slop_jenis": [
+      "restate"
+    ],
+    "n_slop": 1,
+    "n_comments": 10,
+    "n_biz": 2,
+    "tok_out": 432
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "auth.js",
+    "cond": "B",
+    "slop_jenis": [
+      "restate"
+    ],
+    "n_slop": 1,
+    "n_comments": 2,
+    "n_biz": 1,
+    "tok_out": 321
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "format.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 222
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "format.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 237
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "format.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 3,
+    "n_biz": 0,
+    "tok_out": 281
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "format.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 215
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "format.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 183
+  },
+  {
+    "model": "deepseek-v4-pro",
+    "task": "format.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 268
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "keranjang.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 259
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "keranjang.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 17,
+    "n_biz": 0,
+    "tok_out": 1411
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "keranjang.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 412
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "keranjang.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 1,
+    "n_biz": 0,
+    "tok_out": 470
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "keranjang.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 411
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "keranjang.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 395
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "auth.js",
+    "cond": "A",
+    "slop_jenis": [
+      "banner",
+      "restate"
+    ],
+    "n_slop": 2,
+    "n_comments": 22,
+    "n_biz": 5,
+    "tok_out": 1556
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "auth.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 1,
+    "n_biz": 0,
+    "tok_out": 600
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "auth.js",
+    "cond": "A",
+    "slop_jenis": [
+      "banner"
+    ],
+    "n_slop": 1,
+    "n_comments": 28,
+    "n_biz": 1,
+    "tok_out": 1952
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "auth.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 6,
+    "n_biz": 2,
+    "tok_out": 720
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "auth.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 6,
+    "n_biz": 1,
+    "tok_out": 1209
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "auth.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 12,
+    "n_biz": 2,
+    "tok_out": 1012
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "format.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 6,
+    "n_biz": 0,
+    "tok_out": 670
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "format.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 0,
+    "n_biz": 0,
+    "tok_out": 355
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "format.js",
+    "cond": "A",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 6,
+    "n_biz": 0,
+    "tok_out": 966
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "format.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 5,
+    "n_biz": 0,
+    "tok_out": 672
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "format.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 2,
+    "n_biz": 0,
+    "tok_out": 487
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "task": "format.js",
+    "cond": "B",
+    "slop_jenis": [],
+    "n_slop": 0,
+    "n_comments": 5,
+    "n_biz": 0,
+    "tok_out": 643
+  }
+]
