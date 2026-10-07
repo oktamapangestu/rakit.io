@@ -2920,20 +2920,34 @@
 
   function dbSnippets(t) {
     const url = `/api/db/${t.name}`;
-    const example = { text: 'teks', number: 1, boolean: true, date: '2026-12-31' };
-    const sample = Object.fromEntries(t.columns.map((c) => [c.name, example[c.type]]));
-    const listCode = `// Ambil data, terbaru dulu\nconst res = await fetch('${url}?sort=-created_at');\nconst { rows } = await res.json();`;
-    const createCode = `// Tambah data\nawait fetch('${url}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify(${JSON.stringify(sample)}),\n});`;
-    const block = (title, code, op) => h('div', { class: 'db-snippet' },
+    const columns = t.columns.filter((c) => !c.system);
+    const example = { text: 'teks', number: 1, boolean: true, date: '2026-12-31', reference: 1, image: '/uploads/contoh.jpg' };
+    const sample = Object.fromEntries(columns.map((c) => [c.name, example[c.type]]));
+    // body: objek data, atau teks kode JS untuk isi JSON.stringify(...)
+    const send = (method, path, body) => `fetch('${path}', {\n  method: '${method}',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify(${typeof body === 'string' ? body : JSON.stringify(body)}),\n});`;
+    const first = columns[0];
+    const textCol = columns.find((c) => c.type === 'text');
+    const imageCol = columns.find((c) => c.type === 'image');
+    const refCol = columns.find((c) => c.type === 'reference');
+
+    // ops: akses yang dibutuhkan kode ini; peringatan muncul bila tidak ada satu pun yang publik.
+    const block = (title, code, ops = []) => h('div', { class: 'db-snippet' },
       h('div', { class: 'db-snippet-head' },
         h('span', {}, title),
-        t.rules[op] !== 'public' ? h('span', { class: 'db-warn', title: 'Buka akses di atas supaya kode ini berfungsi' }, 'Akses belum publik') : null,
+        ops.length && !ops.some((op) => t.rules[op] === 'public') ? h('span', { class: 'db-warn', title: 'Buka akses di atas supaya kode ini berfungsi' }, 'Akses belum publik') : null,
         h('button', { type: 'button', class: 'db-copy', onclick: () => copyText(code, 'Kode disalin') }, 'Salin')),
       h('pre', {}, h('code', {}, code)));
+
     return [
-      block('Membaca data', listCode, 'list'),
-      block('Menambah data', createCode, 'create'),
-      h('p', { class: 'db-section-desc' }, `Filter: ${url}?nama=Budi · Urutkan: ?sort=-created_at · Halaman: ?limit=20&offset=20`),
+      block('Membaca data', `// Ambil data, terbaru dulu (20 per halaman)\nconst res = await fetch('${url}?sort=-created_at&limit=20');\nconst { rows, total } = await res.json();`, ['list']),
+      block('Membaca satu data', `// Ambil satu data berdasarkan id\nconst res = await fetch('${url}/1');\nconst row = await res.json();`, ['view']),
+      block('Menambah data', `// Tambah data; balasannya data baru lengkap dengan id\nconst res = await ${send('POST', url, sample)}\nconst row = await res.json();`, ['create']),
+      block('Mengubah data', `// Ubah data dengan id 1 (cukup kirim kolom yang diubah)\nawait ${send('PATCH', `${url}/1`, first ? { [first.name]: example[first.type] } : {})}`, ['update']),
+      block('Menghapus data', `// Hapus data dengan id 1\nawait fetch('${url}/1', { method: 'DELETE' });`, ['delete']),
+      imageCol ? block('Upload gambar', `// 1. Upload file dari <input type="file" id="file-${imageCol.name}">\nconst file = document.querySelector('#file-${imageCol.name}').files[0];\nconst up = await fetch('${url}/upload?column=${imageCol.name}', { method: 'POST', body: file });\nconst { url } = await up.json(); // mis. "/uploads/${t.name}/xxxx.jpg"\n// 2. Simpan alamatnya di kolom ${imageCol.name} (bersama kolom lain)\nawait ${send('POST', url, `{ ...data, ${imageCol.name}: url }`)}`, ['create', 'update']) : null,
+      refCol ? block('Data relasi', `// Sertakan data dari tabel ${refCol.refTable} (kolom ${refCol.name})\nconst res = await fetch('${url}?expand=${refCol.name}');\nconst { rows } = await res.json();\n// rows[0].${refCol.name}__ref berisi data ${refCol.refTable} yang ditunjuk`, ['list', 'view']) : null,
+      block('Menangani error', `const res = await fetch('${url}');\nif (!res.ok) {\n  // Pesan dari server, mis. akses ditolak atau kolom wajib belum diisi\n  const { error } = await res.json();\n  alert(error);\n}`),
+      h('p', { class: 'db-section-desc' }, `Filter: ${url}?${textCol ? `${textCol.name}=Budi` : 'kolom=nilai'} · Urutkan: ?sort=-created_at (tanda - = menurun) · Halaman: ?limit=20&offset=20 · Ganti 1 dengan id datanya.`),
     ];
   }
 
