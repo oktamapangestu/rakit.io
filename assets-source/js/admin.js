@@ -564,7 +564,7 @@
     $('#plans').replaceChildren(form);
   }
 
-  // ---------- Model AI editor: utama & cadangan ----------
+  // ---------- Model AI editor: utama & daftar cadangan ----------
   async function aiModelsApi(method, body) {
     const res = await fetch('/api/admin/ai-models', {
       method,
@@ -592,22 +592,50 @@
     const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, h('small', {}, hint));
     const inputs = {
       model: modelInput(data.models.model, 'id model di gateway', true),
-      fallback: modelInput(data.models.fallback, 'kosong = tanpa cadangan'),
       vision: modelInput(data.models.vision, 'kosong = lampiran gambar dimatikan'),
-      visionFallback: modelInput(data.models.visionFallback, 'kosong = tanpa cadangan'),
     };
+
+    // Daftar cadangan: dicoba berurutan dari atas saat model sebelumnya gangguan.
+    const fallbackList = (models, label) => {
+      const list = h('ol', { class: 'fallback-list' });
+      const addBtn = h('button', { type: 'button', class: 'ghost-btn small', onclick: () => { add('').focus(); changed(); } }, '+ Tambah model cadangan');
+      const changed = () => {
+        addBtn.hidden = list.children.length >= data.maxFallbacks;
+        list.hidden = !list.children.length;
+        form.dispatchEvent(new Event('input'));
+      };
+      const add = (value) => {
+        const input = modelInput(value, 'id model di gateway');
+        input.setAttribute('aria-label', label);
+        const row = h('li', {}, input,
+          h('button', { type: 'button', class: 'icon-btn', title: 'Hapus', 'aria-label': `Hapus ${label}`, onclick: () => { row.remove(); changed(); } }, '✕'));
+        list.append(row);
+        return input;
+      };
+      models.forEach(add);
+      addBtn.hidden = models.length >= data.maxFallbacks;
+      list.hidden = !models.length;
+      return {
+        el: h('div', { class: 'fallbacks' }, h('span', { class: 'fallbacks-label' }, label), list, addBtn),
+        read: () => [...list.querySelectorAll('input')].map((el) => el.value.trim()).filter(Boolean),
+      };
+    };
+    const fallbacks = fallbackList(data.models.fallbacks, 'Model cadangan');
+    const visionFallbacks = fallbackList(data.models.visionFallbacks, 'Model gambar cadangan');
 
     const form = h('form', { class: 'card plans-card', novalidate: true },
       h('div', { class: 'plans-title' },
         h('div', {},
           h('h2', {}, 'Model AI editor'),
-          h('p', { class: 'sub' }, `Bila model utama gangguan (error, sibuk terus, atau tidak merespons), permintaan otomatis diulang dengan model cadangan. Model yang gangguan dilewati ${num(data.cooldownMinutes)} menit, lalu dicoba lagi.`)),
+          h('p', { class: 'sub' }, `Bila model utama gangguan (error, sibuk terus, atau tidak merespons), permintaan otomatis diulang dengan model cadangan — berurutan dari atas sampai ada yang berhasil (maks. ${num(data.maxFallbacks)}). Model yang gangguan dilewati ${num(data.cooldownMinutes)} menit, lalu dicoba lagi.`)),
         h('div', { class: 'plans-actions' }, status, saveBtn)),
       h('div', { class: 'ai-model-grid' },
-        field('Model utama', inputs.model, 'Dipakai untuk Builder & Plan.'),
-        field('Model cadangan', inputs.fallback, 'Dipakai saat model utama gangguan.'),
-        field('Model gambar (vision)', inputs.vision, 'Membaca gambar yang dilampirkan di prompt.'),
-        field('Model gambar cadangan', inputs.visionFallback, 'Dipakai saat model gambar gangguan.')),
+        h('div', { class: 'ai-model-group' },
+          field('Model utama', inputs.model, 'Dipakai untuk Builder & Plan.'),
+          fallbacks.el),
+        h('div', { class: 'ai-model-group' },
+          field('Model gambar (vision)', inputs.vision, 'Membaca gambar yang dilampirkan di prompt.'),
+          visionFallbacks.el)),
       h('h3', { class: 'sub-title' }, 'Keadaan model'),
       h('div', { class: 'table-wrap' }, stack(h('table', {},
         h('thead', {}, h('tr', {}, ['Model', 'Status', 'Gangguan', 'Error terakhir'].map((t) => h('th', {}, t)))),
@@ -628,7 +656,7 @@
       status.textContent = 'Menyimpan…';
       status.className = 'save-status';
       try {
-        const saved = await aiModelsApi('PUT', Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value.trim()])));
+        const saved = await aiModelsApi('PUT', { model: inputs.model.value.trim(), fallbacks: fallbacks.read(), vision: inputs.vision.value.trim(), visionFallbacks: visionFallbacks.read() });
         renderAiModels(saved);
         const done = $('#aiModels .save-status');
         done.textContent = 'Tersimpan ✓';

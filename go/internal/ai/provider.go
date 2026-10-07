@@ -256,13 +256,13 @@ func isOutage(err error, ctx context.Context) bool {
 }
 
 // callAI memanggil AI dengan strategi cadangan: coba model utama; bila gangguan, ulangi permintaan
-// yang sama dengan model cadangan. Model yang gangguan dilewati beberapa menit (lihat paket aimodels),
+// yang sama dengan model cadangan berikutnya, dan seterusnya. Model yang gangguan dilewati beberapa menit (lihat paket aimodels),
 // jadi putaran berikutnya langsung memakai cadangan.
 func (s *Service) callAI(req request, h hooks) (*reply, error) {
 	models := s.models.Get()
-	order := s.models.Order(models.Model, models.Fallback)
+	order := s.models.Order(models.Model, models.Fallbacks)
 	if req.vision {
-		order = s.models.Order(models.Vision, models.VisionFallback)
+		order = s.models.Order(models.Vision, models.VisionFallbacks)
 	}
 	for i, model := range order {
 		hasNext := i < len(order)-1

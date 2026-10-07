@@ -1,4 +1,4 @@
-// Model AI editor: pengaturan owner, model cadangan saat model utama gangguan, dan antrean.
+// Model AI editor: pengaturan owner, daftar model cadangan saat model utama gangguan, dan antrean.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { startStack } from './helpers/harness.mjs';
@@ -6,7 +6,7 @@ import { startStack } from './helpers/harness.mjs';
 const MODELS = '/api/admin/ai-models';
 
 test('pengaturan model: hanya owner, divalidasi, default dari .env', async () => {
-  const stack = await startStack({ AI_FALLBACK_MODEL: 'env-cadangan' });
+  const stack = await startStack({ AI_FALLBACK_MODEL: 'env-cadangan, env-cadangan-2' });
   try {
     const admin = await stack.admin();
     const user = await stack.register();
@@ -15,20 +15,24 @@ test('pengaturan model: hanya owner, divalidasi, default dari .env', async () =>
     assert.equal((await stack.client().get(MODELS)).status, 401);
 
     const view = (await admin.get(MODELS)).body;
-    assert.deepEqual(view.models, { model: 'mock-main', fallback: 'env-cadangan', vision: 'mock-vision', visionFallback: '' });
-    assert.deepEqual([view.cooldownMinutes, view.fallbackUsed], [5, 0]);
+    assert.deepEqual(view.models, { model: 'mock-main', fallbacks: ['env-cadangan', 'env-cadangan-2'], vision: 'mock-vision', visionFallbacks: [] });
+    assert.deepEqual([view.cooldownMinutes, view.maxFallbacks, view.fallbackUsed], [5, 5, 0]);
     assert.deepEqual(view.health.map((h) => [h.model, h.down, h.failures, h.lastError, h.lastFailureAt, h.retryInSeconds]), [
-      ['mock-main', false, 0, '', null, 0], ['env-cadangan', false, 0, '', null, 0], ['mock-vision', false, 0, '', null, 0],
+      ['mock-main', false, 0, '', null, 0], ['env-cadangan', false, 0, '', null, 0], ['env-cadangan-2', false, 0, '', null, 0], ['mock-vision', false, 0, '', null, 0],
     ]);
 
     for (const [body, message] of [
       [{ model: '' }, 'Model utama wajib diisi'],
       [{}, 'Model utama wajib diisi'],
       [{ model: 'ada spasi' }, 'Model utama: ID model tidak valid'],
-      [{ model: 'a', fallback: '-x' }, 'Model cadangan: ID model tidak valid'],
+      [{ model: 'a', fallbacks: ['b', '-x'] }, 'Model cadangan 2: ID model tidak valid'],
+      [{ model: 'a', fallbacks: ['b', 'a'] }, 'Model cadangan harus berbeda dari model utama'],
+      [{ model: 'a', fallbacks: ['b', 'c', 'b'] }, 'Model cadangan "b" tercantum dua kali'],
+      [{ model: 'a', fallbacks: ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'] }, 'Model cadangan maksimal 5'],
+      [{ model: 'a', visionFallbacks: ['b'] }, 'Isi model gambar dulu sebelum model gambar cadangan'],
+      [{ model: 'a', vision: 'v', visionFallbacks: ['w', 'v'] }, 'Model gambar cadangan harus berbeda dari model gambar'],
+      // Bentuk lama (satu cadangan berupa teks) tetap diterima.
       [{ model: 'a', fallback: 'a' }, 'Model cadangan harus berbeda dari model utama'],
-      [{ model: 'a', visionFallback: 'b' }, 'Isi model gambar dulu sebelum model gambar cadangan'],
-      [{ model: 'a', vision: 'v', visionFallback: 'v' }, 'Model gambar cadangan harus berbeda dari model gambar'],
     ]) {
       const res = await admin.put(MODELS, body);
       assert.deepEqual([res.status, res.body.error], [400, message], JSON.stringify(body));
@@ -37,8 +41,8 @@ test('pengaturan model: hanya owner, divalidasi, default dari .env', async () =>
 
     // Mengosongkan model gambar mematikan lampiran gambar di prompt.
     assert.deepEqual((await user.credits()).images, { cost: 2, max: 3 });
-    const saved = await admin.put(MODELS, { model: ' org/model-baru:1 ', fallback: '', vision: '', visionFallback: '' });
-    assert.deepEqual([saved.status, saved.body.models], [200, { model: 'org/model-baru:1', fallback: '', vision: '', visionFallback: '' }]);
+    const saved = await admin.put(MODELS, { model: ' org/model-baru:1 ', fallbacks: [' x ', ''], vision: '', visionFallbacks: [] });
+    assert.deepEqual([saved.status, saved.body.models], [200, { model: 'org/model-baru:1', fallbacks: ['x'], vision: '', visionFallbacks: [] }]);
     assert.equal((await user.credits()).images, null);
     await user.prompt('pakai model baru');
     assert.equal(stack.ai.requests.at(-1).model, 'org/model-baru:1');
@@ -53,7 +57,7 @@ test('model utama gangguan → pindah ke model cadangan, lalu model utama dilewa
   try {
     const admin = await stack.admin();
     const user = await stack.register();
-    await admin.put(MODELS, { model: 'mock-main', fallback: 'mock-cadangan', vision: 'mock-vision', visionFallback: 'mock-vision-2' });
+    await admin.put(MODELS, { model: 'mock-main', fallbacks: ['mock-cadangan'], vision: 'mock-vision', visionFallbacks: ['mock-vision-2'] });
     const seen = () => stack.ai.requests.map((r) => r.model);
 
     stack.ai.respond = (body) => (body.model === 'mock-main' ? { status: 500 } : { text: `dari ${body.model}` });
@@ -85,6 +89,34 @@ test('model utama gangguan → pindah ke model cadangan, lalu model utama dilewa
     stack.ai.respond = (body) => ({ text: `dari ${body.model}` });
     assert.equal((await user.prompt('empat')).final.message.content, 'dari mock-main');
     assert.equal((await admin.get(MODELS)).body.health.find((h) => h.model === 'mock-main').down, false);
+  } finally {
+    await stack.stop();
+  }
+});
+
+test('beberapa model cadangan dicoba berurutan; pengaturan lama (satu cadangan) tetap terbaca', async () => {
+  const stack = await startStack({ AI_BONUS_CREDITS: '20' });
+  try {
+    const admin = await stack.admin();
+    const user = await stack.register();
+    // Pengaturan yang disimpan sebelum cadangan bisa lebih dari satu.
+    stack.db().prepare("INSERT INTO settings (key, value, updated_at) VALUES ('ai_models', ?, ?)")
+      .run(JSON.stringify({ model: 'mock-main', fallback: 'lama', vision: 'mock-vision', visionFallback: '' }), Date.now());
+    assert.deepEqual((await admin.get(MODELS)).body.models, { model: 'mock-main', fallbacks: ['lama'], vision: 'mock-vision', visionFallbacks: [] });
+
+    await admin.put(MODELS, { model: 'mock-main', fallbacks: ['cadangan-1', 'cadangan-2', 'cadangan-3'], vision: 'mock-vision', visionFallbacks: [] });
+    const seen = () => stack.ai.requests.map((r) => r.model);
+    stack.ai.respond = (body) => (['mock-main', 'cadangan-1'].includes(body.model) ? { status: 500 } : { text: `dari ${body.model}` });
+    assert.equal((await user.prompt('satu')).final.message.content, 'dari cadangan-2');
+    assert.deepEqual(seen(), ['mock-main', 'cadangan-1', 'cadangan-2']);
+
+    // Yang gangguan dilewati; urutan cadangan tetap: cadangan-2 dulu, baru cadangan-3.
+    await user.prompt('dua');
+    assert.deepEqual(seen().slice(3), ['cadangan-2']);
+    const view = (await admin.get(MODELS)).body;
+    assert.equal(view.fallbackUsed, 1);
+    assert.deepEqual(view.health.map((h) => [h.model, h.down]),
+      [['mock-main', true], ['cadangan-1', true], ['cadangan-2', false], ['cadangan-3', false], ['mock-vision', false]]);
   } finally {
     await stack.stop();
   }

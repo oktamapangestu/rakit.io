@@ -318,7 +318,7 @@ function isOutage(err, signal) {
  */
 async function callAI({ vision = false, ...request }, hooks) {
   const models = aiModels();
-  const order = vision ? modelOrder(models.vision, models.visionFallback) : modelOrder(models.model, models.fallback);
+  const order = vision ? modelOrder(models.vision, models.visionFallbacks) : modelOrder(models.model, models.fallbacks);
   for (let i = 0; ; i++) {
     const model = order[i];
     const hasNext = i < order.length - 1;

@@ -72,7 +72,7 @@ func (s *Service) completeModels() []string {
 		return []string{s.cfg.AI.CompleteModel}
 	}
 	m := s.models.Get()
-	for _, list := range [][]string{s.models.Order(m.Vision, m.VisionFallback), s.models.Order(m.Model, m.Fallback)} {
+	for _, list := range [][]string{s.models.Order(m.Vision, m.VisionFallbacks), s.models.Order(m.Model, m.Fallbacks)} {
 		if len(list) > 0 {
 			return list
 		}

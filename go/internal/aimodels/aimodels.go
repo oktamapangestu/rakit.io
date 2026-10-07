@@ -1,6 +1,7 @@
 // Package aimodels: model AI editor (Builder/Plan & pembaca gambar), diatur owner di dashboard. Tiap
-// peran punya model utama dan model cadangan: bila model utama gangguan, permintaan dialihkan ke
-// cadangan (lihat callAI di paket ai). Nilai di .env hanya default sebelum owner pernah menyimpan.
+// peran punya model utama dan daftar model cadangan: bila model utama gangguan, permintaan dialihkan ke
+// cadangan berikutnya sesuai urutan (lihat callAI di paket ai). Nilai di .env hanya default sebelum owner
+// pernah menyimpan.
 // Padanan src/aimodels.js.
 package aimodels
 
@@ -22,14 +23,46 @@ import (
 // langsung memakai cadangan tanpa menunggu model utama gagal lagi. Setelah itu dicoba kembali.
 const cooldown = 5 * time.Minute
 
+// MaxFallbacks: batas model cadangan per peran.
+const MaxFallbacks = 5
+
 var modelRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$`)
 
-// Models: string kosong = tidak dipakai.
+// Models: string kosong = tidak dipakai. Cadangan dicoba sesuai urutan daftar.
 type Models struct {
-	Model          string `json:"model"`
-	Fallback       string `json:"fallback"`
-	Vision         string `json:"vision"`
-	VisionFallback string `json:"visionFallback"`
+	Model           string   `json:"model"`
+	Fallbacks       []string `json:"fallbacks"`
+	Vision          string   `json:"vision"`
+	VisionFallbacks []string `json:"visionFallbacks"`
+}
+
+// SplitList: "a, b,,c" → [a b c]; untuk .env (AI_FALLBACK_MODEL=a,b).
+func SplitList(s string) []string {
+	out := []string{}
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// list: nilai JSON berupa daftar teks, atau satu teks (pengaturan lama sebelum cadangan bisa lebih dari
+// satu). ok = false bila bukan keduanya.
+func list(v any) (out []string, ok bool) {
+	switch v := v.(type) {
+	case string:
+		return SplitList(v), true
+	case []any:
+		out = []string{}
+		for _, item := range v {
+			if s := strings.TrimSpace(jsconv.String(item)); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out, true
+	}
+	return nil, false
 }
 
 type health struct {
@@ -54,19 +87,31 @@ func New(cfg *config.Config, db *store.Store) *Service {
 }
 
 func (s *Service) Get() Models {
-	m := Models{Model: s.cfg.AI.Model, Fallback: s.cfg.AI.FallbackModel, Vision: s.cfg.AI.VisionModel, VisionFallback: s.cfg.AI.VisionFallbackModel}
+	m := Models{Model: s.cfg.AI.Model, Fallbacks: SplitList(s.cfg.AI.FallbackModel), Vision: s.cfg.AI.VisionModel, VisionFallbacks: SplitList(s.cfg.AI.VisionFallbackModel)}
 	raw, ok := s.db.Setting("ai_models")
 	if !ok {
 		return m
 	}
-	// Pengaturan rusak: pakai default. Hanya nilai teks yang dipakai.
+	// Pengaturan rusak: pakai default. Hanya nilai bertipe benar yang dipakai.
 	var saved map[string]any
 	if json.Unmarshal([]byte(raw), &saved) != nil {
 		return m
 	}
-	for key, field := range map[string]*string{"model": &m.Model, "fallback": &m.Fallback, "vision": &m.Vision, "visionFallback": &m.VisionFallback} {
+	for key, field := range map[string]*string{"model": &m.Model, "vision": &m.Vision} {
 		if v, isString := saved[key].(string); isString {
 			*field = v
+		}
+	}
+	// Pengaturan lama menyimpan satu cadangan di "fallback"/"visionFallback".
+	for _, f := range []struct {
+		keys  [2]string
+		field *[]string
+	}{{[2]string{"fallbacks", "fallback"}, &m.Fallbacks}, {[2]string{"visionFallbacks", "visionFallback"}, &m.VisionFallbacks}} {
+		for _, key := range f.keys {
+			if v, ok := list(saved[key]); ok {
+				*f.field = v
+				break
+			}
 		}
 	}
 	return m
@@ -75,24 +120,46 @@ func (s *Service) Get() Models {
 // Save menyimpan pengaturan model dari dashboard owner (divalidasi).
 func (s *Service) Save(input map[string]any) (Models, error) {
 	clean := func(key string) string { return strings.TrimSpace(jsconv.String(input[key])) }
-	m := Models{Model: clean("model"), Fallback: clean("fallback"), Vision: clean("vision"), VisionFallback: clean("visionFallback")}
+	// Cadangan: daftar "fallbacks"; satu teks "fallback" (bentuk lama) juga diterima.
+	cleanList := func(keys ...string) []string {
+		for _, key := range keys {
+			if v, ok := list(input[key]); ok {
+				return v
+			}
+		}
+		return []string{}
+	}
+	m := Models{Model: clean("model"), Fallbacks: cleanList("fallbacks", "fallback"), Vision: clean("vision"), VisionFallbacks: cleanList("visionFallbacks", "visionFallback")}
 	if m.Model == "" {
 		return m, httpx.Errorf(400, "Model utama wajib diisi")
 	}
-	for _, f := range []struct{ label, value string }{
-		{"Model utama", m.Model}, {"Model cadangan", m.Fallback}, {"Model gambar", m.Vision}, {"Model gambar cadangan", m.VisionFallback},
-	} {
+	for _, f := range []struct{ label, value string }{{"Model utama", m.Model}, {"Model gambar", m.Vision}} {
 		if f.value != "" && !modelRE.MatchString(f.value) {
 			return m, httpx.Errorf(400, "%s: ID model tidak valid", f.label)
 		}
 	}
-	switch {
-	case m.Fallback == m.Model:
-		return m, httpx.Errorf(400, "Model cadangan harus berbeda dari model utama")
-	case m.VisionFallback != "" && m.Vision == "":
+	if len(m.VisionFallbacks) > 0 && m.Vision == "" {
 		return m, httpx.Errorf(400, "Isi model gambar dulu sebelum model gambar cadangan")
-	case m.VisionFallback != "" && m.VisionFallback == m.Vision:
-		return m, httpx.Errorf(400, "Model gambar cadangan harus berbeda dari model gambar")
+	}
+	for _, f := range []struct {
+		label, primaryLabel, primary string
+		list                         []string
+	}{{"Model cadangan", "model utama", m.Model, m.Fallbacks}, {"Model gambar cadangan", "model gambar", m.Vision, m.VisionFallbacks}} {
+		if len(f.list) > MaxFallbacks {
+			return m, httpx.Errorf(400, "%s maksimal %d", f.label, MaxFallbacks)
+		}
+		seen := map[string]bool{}
+		for i, model := range f.list {
+			switch {
+			case !modelRE.MatchString(model):
+				return m, httpx.Errorf(400, "%s %d: ID model tidak valid", f.label, i+1)
+			case model == f.primary:
+				return m, httpx.Errorf(400, "%s harus berbeda dari %s", f.label, f.primaryLabel)
+			case seen[model]:
+				return m, httpx.Errorf(400, "%s \"%s\" tercantum dua kali", f.label, model)
+			}
+			seen[model] = true
+		}
 	}
 	raw, err := json.Marshal(m)
 	if err != nil {
@@ -109,12 +176,14 @@ func (s *Service) isDown(model string) bool {
 	return h != nil && h.downUntil.After(time.Now())
 }
 
-// Order: urutan model yang dicoba — yang sehat dulu; bila semuanya sedang gangguan, tetap urutan
-// utama → cadangan.
-func (s *Service) Order(primary, fallback string) []string {
+// Order: urutan model yang dicoba — yang sehat dulu (utama, lalu cadangan sesuai urutan); yang sedang
+// gangguan di belakang dengan urutan yang sama.
+func (s *Service) Order(primary string, fallbacks []string) []string {
 	var list []string
-	for _, m := range []string{primary, fallback} {
-		if m != "" && (len(list) == 0 || list[0] != m) {
+	seen := map[string]bool{}
+	for _, m := range append([]string{primary}, fallbacks...) {
+		if m != "" && !seen[m] {
+			seen[m] = true
 			list = append(list, m)
 		}
 	}
@@ -171,6 +240,7 @@ type ModelHealth struct {
 type View struct {
 	Models          Models        `json:"models"`
 	CooldownMinutes int           `json:"cooldownMinutes"`
+	MaxFallbacks    int           `json:"maxFallbacks"`
 	FallbackUsed    int           `json:"fallbackUsed"`
 	Health          []ModelHealth `json:"health"`
 }
@@ -180,10 +250,11 @@ func (s *Service) View() View {
 	models := s.Get()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	view := View{Models: models, CooldownMinutes: int(cooldown.Minutes()), FallbackUsed: s.fallbackUsed, Health: []ModelHealth{}}
+	view := View{Models: models, CooldownMinutes: int(cooldown.Minutes()), MaxFallbacks: MaxFallbacks, FallbackUsed: s.fallbackUsed, Health: []ModelHealth{}}
 	seen := map[string]bool{}
 	now := time.Now()
-	for _, model := range []string{models.Model, models.Fallback, models.Vision, models.VisionFallback} {
+	all := append(append(append([]string{models.Model}, models.Fallbacks...), models.Vision), models.VisionFallbacks...)
+	for _, model := range all {
 		if model == "" || seen[model] {
 			continue
 		}

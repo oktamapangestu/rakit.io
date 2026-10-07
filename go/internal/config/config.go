@@ -48,7 +48,8 @@ type AI struct {
 	Enabled bool
 	BaseURL string
 	APIKey  string
-	// Model editor & cadangannya: default sebelum owner menyimpan di dashboard (lihat paket aimodels).
+	// Model editor & cadangannya (dipisah koma bila lebih dari satu): default sebelum owner menyimpan di
+	// dashboard (lihat paket aimodels).
 	Model, FallbackModel string
 	MaxTokens            int
 	// Antrean: jumlah panggilan ke provider yang boleh berjalan bersamaan, panjang antrean, dan batas tunggu.
