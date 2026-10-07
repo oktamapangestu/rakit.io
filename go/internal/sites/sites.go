@@ -4,6 +4,7 @@ package sites
 
 import (
 	"bytes"
+	"crypto/sha256"
 	_ "embed"
 	"fmt"
 	"html"
@@ -13,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -109,15 +111,63 @@ var pickerJS string
 
 func inFrame(r *http.Request) bool { return r.Header.Get("Sec-Fetch-Dest") == "iframe" }
 
-// withPicker menyisipkan skrip pemilih sebelum </body> terakhir (atau di akhir dokumen).
-func (h *Handler) withPicker(page []byte) []byte {
-	tag := []byte(`<script data-app="` + html.EscapeString(h.cfg.AppOrigin) + `">` + pickerJS + `</script>`)
-	at := bytes.LastIndex(bytes.ToLower(page), []byte("</body>"))
-	if at < 0 {
-		return append(page, tag...)
+// Penangkap log untuk tab Console di editor (lihat console.js). Disisipkan bersama pemilih blok sebagai
+// <script src> satu baris, bukan inline: skrip inline di <head> menggeser nomor baris error di halaman.
+//
+//go:embed console.js
+var consoleJS string
+
+// ConsolePath: alamat skrip console di domain website (/api/ di domain website dicadangkan untuk sistem).
+const ConsolePath = "/api/_console.js"
+
+var consoleVersion = fmt.Sprintf("%x", sha256.Sum256([]byte(consoleJS)))[:12]
+
+// ServeConsole mengirim skrip console. Alamatnya memuat versi isi (?v=), jadi boleh di-cache lama.
+func ServeConsole(w http.ResponseWriter, r *http.Request) {
+	hd := w.Header()
+	hd.Set("Content-Type", "text/javascript; charset=utf-8")
+	hd.Set("X-Content-Type-Options", "nosniff")
+	if r.URL.Query().Get("v") == consoleVersion {
+		hd.Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		hd.Set("Cache-Control", "no-cache")
 	}
-	out := make([]byte, 0, len(page)+len(tag))
-	return append(append(append(out, page[:at]...), tag...), page[at:]...)
+	io.WriteString(w, consoleJS)
+}
+
+// Tempat skrip console: setelah tag pembuka <head>, atau <html>, atau doctype (yang pertama ada, dalam
+// urutan itu). Tidak pernah sebelum doctype: browser bisa masuk quirks mode.
+var headPositions = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)<head(?:\s[^>]*)?>`),
+	regexp.MustCompile(`(?i)<html(?:\s[^>]*)?>`),
+	regexp.MustCompile(`(?i)<!doctype[^>]*>`),
+}
+
+func headEnd(page []byte) int {
+	start := page[:min(len(page), 8192)]
+	for _, re := range headPositions {
+		if loc := re.FindIndex(start); loc != nil {
+			return loc[1]
+		}
+	}
+	return 0
+}
+
+// withPicker menyisipkan skrip console paling awal (sebelum skrip website, supaya log-nya ikut tertangkap)
+// dan skrip pemilih sebelum </body> terakhir (atau di akhir dokumen).
+func (h *Handler) withPicker(page []byte) []byte {
+	app := html.EscapeString(h.cfg.AppOrigin)
+	console := `<script src="` + ConsolePath + `?v=` + consoleVersion + `" data-app="` + app + `"></script>`
+	picker := `<script data-app="` + app + `">` + pickerJS + `</script>`
+	head := headEnd(page)
+	body := bytes.LastIndex(bytes.ToLower(page), []byte("</body>"))
+	if body < head {
+		body = len(page)
+	}
+	out := make([]byte, 0, len(page)+len(console)+len(picker))
+	out = append(append(out, page[:head]...), console...)
+	out = append(append(out, page[head:body]...), picker...)
+	return append(out, page[body:]...)
 }
 
 func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, file *siteFile, status int) {

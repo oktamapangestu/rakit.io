@@ -820,7 +820,9 @@
     window.addEventListener('message', (e) => {
       const m = e.data;
       if (e.source !== $('#previewFrame').contentWindow || e.origin !== siteOrigin() || m?.rakit !== true) return;
-      if (m.type === 'ready') {
+      if (m.type === 'log') {
+        devConsoleAdd({ source: m.source, level: m.level, text: m.text, page: m.page, time: m.time, url: m.url });
+      } else if (m.type === 'ready') {
         // Halaman preview dimuat (ulang/pindah halaman): aktifkan lagi dengan blok milik halaman ini.
         pick.page = m.page;
         if (!pick.on) return;
@@ -1705,6 +1707,15 @@
       terms: [['Versi', 'salinan semua file pada satu waktu'], ['Diff', 'perbedaan antara dua versi'], ['Restore', 'mengembalikan file ke versi tertentu'], ['Git', 'alat riwayat versi yang dipakai programmer di seluruh dunia']],
       tip: 'Biasakan menyimpan versi dengan nama yang jelas sebelum eksperimen, mis. "sebelum ganti desain".',
     },
+    console: {
+      icon: '›_', title: 'Console',
+      what: 'Tempat semua pesan dari websitemu muncul: console.log dan error dari halaman (FE), log fungsi serverless (BE), request jaringan, dan catatan sistem seperti halaman yang dimuat.',
+      analogy: 'Seperti kotak hitam pesawat: mencatat apa yang terjadi di balik layar, sehingga saat ada yang tidak beres kamu tahu persis di mana masalahnya.',
+      why: 'Banyak kesalahan tidak terlihat di tampilan — tombol diam saja, data tidak tersimpan. Console memberi tahu alasannya. Programmer membuka console setiap hari untuk mencari bug.',
+      how: ['Buka preview dan pakai websitemu; log-nya muncul di sini secara langsung.', 'Tulis console.log(nilai) di kode untuk melihat isi sebuah variabel.', 'Saring berdasarkan sumber (FE, BE, Jaringan, Sistem) atau tampilkan error saja.', 'Pada baris error, tekan Perbaiki dengan AI supaya AI mencari penyebabnya.'],
+      terms: [['FE (frontend)', 'kode yang berjalan di browser pengunjung: .html, .css, .js halaman'], ['BE (backend)', 'kode yang berjalan di server: fungsi di folder functions/'], ['Request', 'permintaan halaman ke server, mis. fetch(\'/api/db/produk\')'], ['Status', 'kode hasil request: 2xx berhasil, 4xx salah permintaan, 5xx error server']],
+      tip: 'Kalau sesuatu tidak berjalan, buka Console dulu — biasanya pesan error berwarna merah sudah menunjuk baris yang salah.',
+    },
     files: {
       icon: '▤', title: 'File & folder',
       what: 'Semua bagian websitemu tersimpan sebagai file. index.html adalah halaman utama yang dibuka pertama kali; halaman lain, file CSS, JavaScript, dan gambar bisa dirapikan ke dalam folder.',
@@ -1802,6 +1813,7 @@
     $('#diagramView').hidden = mode !== 'diagram';
     $('#historyView').hidden = mode !== 'history';
     $('#fnView').hidden = mode !== 'fn';
+    $('#consoleView').hidden = mode !== 'console';
     $('#historyBack').onclick = () => setHistoryDetail(false);
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.setAttribute('aria-selected', String(btn.dataset.mode === mode));
@@ -1815,6 +1827,8 @@
     } else if (mode === 'history') {
       setHistoryDetail(false);
       historyLoad();
+    } else if (mode === 'console') {
+      devConsoleOpen();
     } else if (mode === 'ai') {
       renderAiEmpty();
       updateAiComposer();
@@ -4095,6 +4109,184 @@
       editor.onDidChangeCursorPosition(flowSyncFromCursor);
       if (storage.get('rakit.flowOpen', false)) toggleFlow(true);
     }).catch(() => { /* pesan sudah ditampilkan */ });
+  }
+
+  // ---------- Console ----------
+  // Semua log di satu tempat, berlabel sumbernya: FE (console & error halaman di preview, diteruskan skrip
+  // yang disisipkan server — go/internal/sites/console.js), BE (eksekusi fungsi serverless dari log server),
+  // Jaringan (fetch/XHR dan file yang gagal dimuat), dan Sistem (halaman dimuat, catatan lain).
+  const CONSOLE_MAX = 1000;
+  const CONSOLE_SOURCES = [['all', 'Semua'], ['fe', 'FE'], ['be', 'BE'], ['net', 'Jaringan'], ['sys', 'Sistem']];
+  const CONSOLE_LABEL = { fe: 'FE', be: 'BE', net: 'NET', sys: 'SYS' };
+  const CONSOLE_TITLE = { fe: 'Frontend: halaman di preview', be: 'Backend: fungsi serverless', net: 'Jaringan: request & file', sys: 'Sistem' };
+  const devConsole = {
+    entries: [], source: 'all', errorsOnly: false, query: '',
+    unread: 0, beLastId: 0, beLoaded: false, poll: null, beTimer: null, list: null, counts: {},
+  };
+  const consoleCount = (src) => devConsole.entries.filter((e) => src === 'all' || e.source === src).length;
+  function updateConsoleCounts() {
+    for (const [src, el] of Object.entries(devConsole.counts)) el.textContent = String(consoleCount(src));
+  }
+  const consoleActive = () => $('#editorArea').dataset.mode === 'console';
+  const consoleTime = (ms) => new Date(ms).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  function consoleMatches(e) {
+    if (devConsole.source !== 'all' && e.source !== devConsole.source) return false;
+    if (devConsole.errorsOnly && e.level !== 'error') return false;
+    const q = devConsole.query.trim().toLowerCase();
+    return !q || `${e.text}\n${e.page ?? ''}\n${e.logs ?? ''}`.toLowerCase().includes(q);
+  }
+
+  // Permintaan perbaikan untuk satu baris error, beserta konteksnya.
+  function consoleFixPrompt(e) {
+    if (e.source === 'be') return fnFixPrompt(e.fn, { status: e.status, error: e.error, logs: e.logs, trigger: e.trigger });
+    if (e.source === 'net') return `Request dari halaman ${e.page || '/'} gagal:\n${clipText(e.text)}\n\nCari penyebabnya (kode yang memanggilnya, tabel database / akses publik, atau fungsi serverless yang dituju) dan perbaiki.`;
+    return `Ada error di console halaman ${e.page || '/'}:\n${clipText(e.text)}\n\nCari penyebabnya dan perbaiki kodenya.`;
+  }
+
+  function consoleRow(e) {
+    const fixable = e.level === 'error' && e.source !== 'sys';
+    e.countEl = h('span', { class: 'console-count', hidden: e.count < 2 }, String(e.count));
+    return h('div', { class: `console-row ${e.source} ${e.level}`, title: e.page ? `Halaman ${e.page}` : null },
+      h('span', { class: 'console-time' }, consoleTime(e.time)),
+      h('span', { class: `console-src ${e.source}`, title: CONSOLE_TITLE[e.source] }, CONSOLE_LABEL[e.source] ?? e.source),
+      h('div', { class: 'console-msg' },
+        e.countEl,
+        e.source === 'be' ? [h('span', {}, e.text), e.error ? h('pre', { class: 'console-be-error' }, e.error) : null, e.logs ? consoleView(e.logs) : null] : e.text),
+      fixable ? aiButton('Perbaiki', () => consoleFixPrompt(e), { cls: 'console-fix' }) : null);
+  }
+
+  function consoleNearBottom() {
+    const list = devConsole.list;
+    return !list || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+  }
+
+  function devConsoleAdd(raw) {
+    const source = CONSOLE_LABEL[raw.source] ? raw.source : 'sys';
+    const level = ['error', 'warn', 'info', 'debug', 'log'].includes(raw.level) ? raw.level : 'log';
+    const entry = { ...raw, source, level, text: String(raw.text ?? ''), time: Number(raw.time) || Date.now(), count: 1 };
+    // Pesan sama berturut-turut digabung dengan penghitung, seperti console browser.
+    const last = devConsole.entries.at(-1);
+    if (last && source !== 'be' && last.source === source && last.level === level && last.text === entry.text && last.page === entry.page) {
+      last.count += 1;
+      last.time = entry.time;
+      if (last.countEl) { last.countEl.hidden = false; last.countEl.textContent = String(last.count); }
+    } else {
+      devConsole.entries.push(entry);
+      if (devConsole.entries.length > CONSOLE_MAX) devConsole.entries.splice(0, devConsole.entries.length - CONSOLE_MAX);
+      if (consoleActive() && devConsole.list && consoleMatches(entry)) {
+        const stick = consoleNearBottom();
+        devConsole.list.querySelector('.console-empty')?.remove();
+        devConsole.list.append(consoleRow(entry));
+        while (devConsole.list.childElementCount > CONSOLE_MAX) devConsole.list.firstElementChild.remove();
+        if (stick) devConsole.list.scrollTop = devConsole.list.scrollHeight;
+      }
+      if (consoleActive()) updateConsoleCounts();
+    }
+    if (!consoleActive() && level === 'error') {
+      devConsole.unread += 1;
+      renderConsoleBadge();
+    }
+    // Website memanggil fungsi serverless: ambil log eksekusinya (BE) sebentar lagi.
+    if (source === 'net' && /^\/api\/fn\//.test(raw.url ?? '')) {
+      clearTimeout(devConsole.beTimer);
+      devConsole.beTimer = setTimeout(devConsoleLoadBE, 600);
+    }
+  }
+
+  function renderConsoleBadge() {
+    const badge = $('#consoleBadge');
+    badge.hidden = !devConsole.unread;
+    badge.textContent = devConsole.unread > 99 ? '99+' : String(devConsole.unread);
+    badge.title = `${devConsole.unread} error baru`;
+  }
+
+  // Eksekusi fungsi serverless (BE) sejak yang terakhir diambil; pembukaan pertama mengambil 30 terakhir.
+  async function devConsoleLoadBE() {
+    let logs;
+    try {
+      logs = (await api('GET', `/api/functions/logs?limit=${devConsole.beLoaded ? 50 : 30}`)).logs;
+    } catch {
+      return; // mis. project tanpa fungsi atau sesi habis: Console tetap jalan untuk FE
+    }
+    const first = !devConsole.beLoaded;
+    devConsole.beLoaded = true;
+    const TRIGGER = { http: 'pengunjung', cron: 'jadwal', test: 'uji coba' };
+    const fresh = logs.filter((l) => l.id > devConsole.beLastId).reverse();
+    if (!fresh.length) return;
+    devConsole.beLastId = Math.max(devConsole.beLastId, ...fresh.map((l) => l.id));
+    for (const l of fresh) {
+      const level = l.error || l.status >= 500 ? 'error' : l.status >= 400 ? 'warn' : 'info';
+      const trigger = TRIGGER[l.trigger] ?? l.trigger;
+      const entry = {
+        source: 'be', level, time: l.createdAt, fn: l.name, status: l.status, trigger, error: l.error, logs: l.logs,
+        text: `functions/${l.name}.js → ${l.status} (${l.ms} ms) · ${trigger}${l.dev ? ' · dev' : ''}`,
+      };
+      if (first) {
+        devConsole.entries.push({ ...entry, count: 1 });
+      } else {
+        devConsoleAdd(entry);
+      }
+    }
+    if (first) {
+      // Riwayat eksekusi lama diselipkan sesuai waktunya di antara log yang sudah ada.
+      devConsole.entries.sort((a, b) => a.time - b.time);
+      if (consoleActive()) { renderConsoleList(); updateConsoleCounts(); }
+    }
+  }
+
+  function devConsoleOpen() {
+    devConsole.unread = 0;
+    renderConsoleBadge();
+    renderConsole();
+    devConsoleLoadBE();
+    // Selama tab Console terbuka, eksekusi baru (mis. dari jadwal) diambil berkala.
+    clearInterval(devConsole.poll);
+    devConsole.poll = setInterval(() => {
+      if (!consoleActive()) return clearInterval(devConsole.poll);
+      if (document.visibilityState === 'visible') devConsoleLoadBE();
+    }, 5000);
+  }
+
+  function renderConsoleList() {
+    const list = devConsole.list;
+    if (!list) return;
+    const shown = devConsole.entries.filter(consoleMatches);
+    list.replaceChildren(...(shown.length
+      ? shown.map(consoleRow)
+      : [h('div', { class: 'console-empty' },
+        devConsole.entries.length
+          ? 'Tidak ada log yang cocok dengan saringan ini.'
+          : 'Belum ada log. Pakai websitemu di preview — console.log, error, request, dan log fungsi serverless akan muncul di sini.')]));
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function renderConsole() {
+    devConsole.counts = {};
+    const search = h('input', {
+      type: 'search', class: 'console-search', placeholder: 'Cari log…', value: devConsole.query, spellcheck: 'false',
+      oninput: (e) => { devConsole.query = e.target.value; renderConsoleList(); },
+    });
+    devConsole.list = h('div', { class: 'console-list', role: 'log', 'aria-live': 'polite' });
+    $('#consoleView').replaceChildren(
+      h('div', { class: 'console-bar' },
+        h('div', { class: 'seg console-sources' }, CONSOLE_SOURCES.map(([value, label]) => h('button', {
+          type: 'button',
+          class: devConsole.source === value ? 'on owner' : '',
+          title: value === 'all' ? 'Semua sumber' : CONSOLE_TITLE[value],
+          onclick: () => { devConsole.source = value; renderConsole(); },
+        }, label, (devConsole.counts[value] = h('span', { class: 'console-n' }, String(consoleCount(value))))))),
+        h('label', { class: 'console-errors' },
+          h('input', { type: 'checkbox', checked: devConsole.errorsOnly, onchange: (e) => { devConsole.errorsOnly = e.target.checked; renderConsoleList(); } }),
+          'Hanya error'),
+        search,
+        h('button', { type: 'button', class: 'icon-btn', title: 'Muat ulang preview', onclick: reloadPreview }, svg(ICON.refresh)),
+        h('button', {
+          type: 'button', class: 'icon-btn', title: 'Bersihkan log',
+          onclick: () => { devConsole.entries = []; devConsole.unread = 0; renderConsoleBadge(); renderConsole(); },
+        }, svg(ICON.trash))),
+      devConsole.list);
+    renderConsoleList();
   }
 
   // ---------- Riwayat versi ----------

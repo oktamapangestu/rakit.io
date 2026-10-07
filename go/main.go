@@ -141,6 +141,8 @@ func main() {
 			http.Redirect(w, r, cfg.AppOrigin+r.URL.RequestURI(), http.StatusMovedPermanently)
 		case !usernameRE.MatchString(slug):
 			http.Error(w, "Not found", http.StatusNotFound)
+		case r.URL.Path == sites.ConsolePath:
+			sites.ServeConsole(w, r)
 		case siteapi.Matches(r.URL.Path):
 			// Database versi yang sedang dibuka: prod di <slug>, dev di <slug>--dev.
 			key := sub

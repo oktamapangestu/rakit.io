@@ -174,6 +174,11 @@
               <svg viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 1 1-6.14 4.35l.94.33A5.5 5.5 0 1 0 8 2.5c-1.77 0-3.35.84-4.35 2.15H5.5v1H2V2.15h1v1.72A6.48 6.48 0 0 1 8 1.5M7.5 4h1v3.8l2.6 1.5-.5.87-3.1-1.8z"/></svg>
               Riwayat
             </button>
+            <button role="tab" data-mode="console" title="Console: log dari halaman (FE), fungsi serverless (BE), dan request jaringan">
+              <svg viewBox="0 0 16 16"><path d="M1.5 2h13l.5.5v11l-.5.5h-13l-.5-.5v-11zM2 3v10h12V3zm1.6 2.2.7-.7L7.1 8l-2.8 2.5-.7-.7L5.7 8zM8 10h4.5v1H8z"/></svg>
+              Console
+              <span class="console-badge" id="consoleBadge" hidden></span>
+            </button>
           </div>
           <button type="button" class="icon-btn feature-info-btn" id="modeInfo" title="Apa itu fitur ini?" aria-label="Penjelasan fitur ini">
             <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1m0 1a6 6 0 1 0 0 12A6 6 0 0 0 8 2m.5 5v5h-1V7zM8 4.25a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5"/></svg>
@@ -326,6 +331,8 @@
             <aside class="diagram-findings" id="diagramFindings" aria-label="Temuan"></aside>
           </div>
         </div>
+
+        <div class="console-view" id="consoleView" hidden></div>
 
         <div class="history-view" id="historyView" hidden>
           <div class="history-layout" id="historyLayout">
