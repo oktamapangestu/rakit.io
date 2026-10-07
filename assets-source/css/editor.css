@@ -26,7 +26,7 @@
   --info-text: #2f6f80;
   --pink: #b8326e;
   --hover: rgb(26 19 32 / 0.05);
-  --overlay: rgb(26 19 32 / 0.35);
+  --overlay: rgb(26 19 32 / 0.45);
   --shadow: rgb(26 19 32 / 0.14);
   --page-glow-1: rgb(255 202 84 / 0.16);
   --page-glow-2: rgb(79 159 175 / 0.08);
@@ -774,9 +774,16 @@ kbd {
   justify-content: center;
   align-items: center;
   padding: 16px;
+  /* Tanpa backdrop-filter: blur selebar layar dihitung ulang setiap ada yang bergerak di belakangnya
+     (glow tombol Panduan, preview), sehingga popup terasa berat. */
   background: var(--overlay);
-  backdrop-filter: blur(4px);
 }
+/* Animasi di belakang popup tidak terlihat: hentikan supaya tidak terus menggambar ulang. */
+body:has(#modal:not([hidden])) #guideLink,
+body:has(#modal:not([hidden])) .plan-badge::after,
+body:has(#modal:not([hidden])) .layout-switch.attention,
+body:has(#modal:not([hidden])) .layout-switch.attention::before,
+body:has(#modal:not([hidden])) .release-dot { animation-play-state: paused; }
 .modal {
   width: 100%;
   max-width: 420px;

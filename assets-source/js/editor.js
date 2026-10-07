@@ -2516,7 +2516,8 @@
       return new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
     }
     if (column.type === 'boolean') return value ? 'Ya' : 'Tidak';
-    if (column.type === 'image') return h('img', { class: 'db-thumb', src: dbImageSrc(value), alt: column.name, loading: 'lazy' });
+    // decoding async: gambar asli (bisa beberapa MB) di-decode di luar thread utama, tidak menahan UI.
+    if (column.type === 'image') return h('img', { class: 'db-thumb', src: dbImageSrc(value), alt: column.name, loading: 'lazy', decoding: 'async', width: 40, height: 40 });
     return String(value);
   }
 
@@ -2964,7 +2965,10 @@
         tableName = table.name;
         if (message) toast(message);
         renderDbSidebar();
-        dbLoadRows();
+        // Isi baris hanya berubah bila kolom/nama tabel berubah. Akses & tanda kolom cukup menggambar ulang
+        // kepala tabel, tanpa memuat ulang baris (dan semua gambarnya) di belakang popup.
+        if (payload.addColumns || payload.dropColumns || payload.renameColumns || payload.rename) dbLoadRows();
+        else renderDbMain();
       } catch (err) {
         toast(err.message, 'error');
       }
