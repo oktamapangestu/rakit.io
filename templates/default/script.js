@@ -1,8 +1,6 @@
-const button = document.getElementById('btn');
-const count = document.getElementById('count');
-let clicks = 0;
-
-button.addEventListener('click', () => {
-  clicks++;
-  count.textContent = `Kamu sudah klik ${clicks} kali 🎉`;
+// Komponen Alpine.js (https://alpinejs.dev): dipakai di HTML dengan x-data="penghitung".
+document.addEventListener('alpine:init', () => {
+  Alpine.data('penghitung', () => ({
+    klik: 0,
+  }));
 });

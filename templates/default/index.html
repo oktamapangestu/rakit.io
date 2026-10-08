@@ -5,18 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{username}}</title>
   <link rel="stylesheet" href="style.css">
+  <script defer src="script.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
 </head>
 <body>
-  <main class="card">
+  <main class="card" x-data="penghitung">
     <p class="host">{{host}}</p>
     <h1>Halo, dunia! 👋</h1>
     <p>
       Ini website pertamamu. Ubah <code>index.html</code>, <code>style.css</code>,
       dan <code>script.js</code> di editor, simpan, lalu lihat hasilnya langsung.
     </p>
-    <button id="btn">Klik aku</button>
-    <p id="count" class="count"></p>
+    <button type="button" @click="klik++">Klik aku</button>
+    <p class="count"><span x-show="klik > 0" x-cloak>Kamu sudah klik <span x-text="klik"></span> kali 🎉</span></p>
   </main>
-  <script src="script.js"></script>
 </body>
 </html>

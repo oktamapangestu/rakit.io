@@ -56,3 +56,7 @@ button:hover {
   min-height: 1.5em;
   color: #6b7280;
 }
+
+[x-cloak] {
+  display: none !important;
+}

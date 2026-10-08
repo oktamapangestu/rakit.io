@@ -32,6 +32,15 @@ func TestDeadLinkClean(t *testing.T) {
 	}
 }
 
+func TestDeadLinkIgnoresAlpineBindings(t *testing.T) {
+	html := `<template x-for="p in produk"><a :href="'#' + p.slug" x-bind:id="p.slug">Lihat</a></template>
+	<a href="#katalog">Katalog</a><div :id="'katalog'"></div>`
+	got := deadLinkProblems(html)
+	if len(got) != 1 || !strings.Contains(got[0], "#katalog") {
+		t.Fatalf(":href diabaikan, :id tidak dihitung sebagai id statis; dapat: %v", got)
+	}
+}
+
 // Angka rujukan ini sama dengan skills/antislop-human/contrast-check.py dan WCAG 2.x.
 func TestContrastRatio(t *testing.T) {
 	cases := []struct {

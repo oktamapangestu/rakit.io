@@ -27,8 +27,9 @@ func htmlProblems(path, content string) []string {
 }
 
 var (
-	hrefRE    = regexp.MustCompile(`(?is)<a\b[^>]*\bhref\s*=\s*["']([^"']*)["']`)
-	idAttrRE  = regexp.MustCompile(`(?is)\bid\s*=\s*["']([\w-]+)["']`)
+	// Didahului spasi, bukan sekadar batas kata: :href / x-bind:id milik Alpine.js berisi ekspresi JS, bukan URL/id.
+	hrefRE     = regexp.MustCompile(`(?is)<a\b[^>]*\shref\s*=\s*["']([^"']*)["']`)
+	idAttrRE   = regexp.MustCompile(`(?is)\sid\s*=\s*["']([\w-]+)["']`)
 	hexColorRE = regexp.MustCompile(`(?i)#([0-9a-f]{3}|[0-9a-f]{6})\b`)
 	// Deklarasi dalam blok <style>…</style> atau atribut style="…".
 	colorDeclRE = regexp.MustCompile(`(?i)(^|[;{\s])(color|background|background-color)\s*:\s*([^;}"']+)`)
