@@ -1,13 +1,12 @@
-// Package aimodels: model AI editor (Builder/Plan & pembaca gambar), diatur owner di dashboard. Tiap
-// peran punya model utama dan daftar model cadangan: bila model utama gangguan, permintaan dialihkan ke
-// cadangan berikutnya sesuai urutan (lihat callAI di paket ai). Nilai di .env hanya default sebelum owner
-// pernah menyimpan.
+// Package aimodels: provider AI (lihat providers.go) dan model AI editor (Builder/Plan & pembaca gambar),
+// diatur owner di dashboard. Tiap peran punya model utama dan daftar model cadangan: bila model utama
+// gangguan, permintaan dialihkan ke cadangan berikutnya sesuai urutan (lihat callAI di paket ai) — boleh
+// di provider lain. Nilai di .env hanya default sebelum owner pernah menyimpan.
 // Padanan src/aimodels.js.
 package aimodels
 
 import (
 	"encoding/json"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -25,8 +24,6 @@ const cooldown = 5 * time.Minute
 
 // MaxFallbacks: batas model cadangan per peran.
 const MaxFallbacks = 5
-
-var modelRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$`)
 
 // Models: string kosong = tidak dipakai. Cadangan dicoba sesuai urutan daftar.
 type Models struct {
@@ -80,6 +77,10 @@ type Service struct {
 	mu           sync.Mutex
 	health       map[string]*health
 	fallbackUsed int
+
+	// AssistantModels: model asisten website [nama, referensi model] (paket assistant), untuk mencatat
+	// pemakai tiap provider. Dipasang di main.go.
+	AssistantModels func() [][2]string
 }
 
 func New(cfg *config.Config, db *store.Store) *Service {
@@ -134,8 +135,19 @@ func (s *Service) Save(input map[string]any) (Models, error) {
 		return m, httpx.Errorf(400, "Model utama wajib diisi")
 	}
 	for _, f := range []struct{ label, value string }{{"Model utama", m.Model}, {"Model gambar", m.Vision}} {
-		if f.value != "" && !modelRE.MatchString(f.value) {
-			return m, httpx.Errorf(400, "%s: ID model tidak valid", f.label)
+		if f.value == "" {
+			continue
+		}
+		if err := s.CheckRef(f.value); err != nil {
+			return m, httpx.Errorf(400, "%s: %s", f.label, err.Error())
+		}
+	}
+	// Model per tugas (opsional): diperiksa dulu, disimpan bersama model utama.
+	var tasks map[string]TaskModels
+	if raw, ok := input["tasks"]; ok {
+		var err error
+		if tasks, err = s.cleanTasks(raw); err != nil {
+			return m, err
 		}
 	}
 	if len(m.VisionFallbacks) > 0 && m.Vision == "" {
@@ -150,9 +162,10 @@ func (s *Service) Save(input map[string]any) (Models, error) {
 		}
 		seen := map[string]bool{}
 		for i, model := range f.list {
+			if err := s.CheckRef(model); err != nil {
+				return m, httpx.Errorf(400, "%s %d: %s", f.label, i+1, err.Error())
+			}
 			switch {
-			case !modelRE.MatchString(model):
-				return m, httpx.Errorf(400, "%s %d: ID model tidak valid", f.label, i+1)
 			case model == f.primary:
 				return m, httpx.Errorf(400, "%s harus berbeda dari %s", f.label, f.primaryLabel)
 			case seen[model]:
@@ -167,6 +180,15 @@ func (s *Service) Save(input map[string]any) (Models, error) {
 	}
 	if err := s.db.SetSetting("ai_models", string(raw)); err != nil {
 		return m, err
+	}
+	if tasks != nil {
+		raw, err := json.Marshal(tasks)
+		if err != nil {
+			return m, err
+		}
+		if err := s.db.SetSetting("ai_task_models", string(raw)); err != nil {
+			return m, err
+		}
 	}
 	return s.Get(), nil
 }
@@ -238,22 +260,30 @@ type ModelHealth struct {
 }
 
 type View struct {
-	Models          Models        `json:"models"`
-	CooldownMinutes int           `json:"cooldownMinutes"`
-	MaxFallbacks    int           `json:"maxFallbacks"`
-	FallbackUsed    int           `json:"fallbackUsed"`
-	Health          []ModelHealth `json:"health"`
+	Models          Models                `json:"models"`
+	Tasks           map[string]TaskModels `json:"tasks"`    // model khusus per tugas (yang diatur saja)
+	TaskList        []TaskInfo            `json:"taskList"` // tugas yang bisa diatur
+	CooldownMinutes int                   `json:"cooldownMinutes"`
+	MaxFallbacks    int                   `json:"maxFallbacks"`
+	FallbackUsed    int                   `json:"fallbackUsed"`
+	Health          []ModelHealth         `json:"health"`
 }
 
 // View: untuk dashboard owner — pengaturan + keadaan tiap model sejak server dinyalakan.
 func (s *Service) View() View {
 	models := s.Get()
+	tasks := s.Tasks()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	view := View{Models: models, CooldownMinutes: int(cooldown.Minutes()), MaxFallbacks: MaxFallbacks, FallbackUsed: s.fallbackUsed, Health: []ModelHealth{}}
+	view := View{Models: models, Tasks: tasks, TaskList: taskList, CooldownMinutes: int(cooldown.Minutes()), MaxFallbacks: MaxFallbacks, FallbackUsed: s.fallbackUsed, Health: []ModelHealth{}}
 	seen := map[string]bool{}
 	now := time.Now()
 	all := append(append(append([]string{models.Model}, models.Fallbacks...), models.Vision), models.VisionFallbacks...)
+	for _, info := range taskList {
+		if t, ok := tasks[info.Key]; ok {
+			all = append(append(all, t.Model), t.Fallbacks...)
+		}
+	}
 	for _, model := range all {
 		if model == "" || seen[model] {
 			continue

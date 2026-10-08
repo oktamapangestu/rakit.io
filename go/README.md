@@ -57,6 +57,8 @@ Catatan:
 - **Konversi nilai** di `internal/jsconv` dan `internal/userdb` meniru JavaScript (`Number()`, `parseInt`,
   `Date.parse`); `go test ./...` membandingkannya dengan jawaban Node yang direkam di `testdata/js.json`.
 - **Statistik antrean AI** di dashboard owner kini angka asli (antrean ada di server Go).
+- **Provider AI tambahan** (`internal/aimodels/providers.go`), hanya di server Go: model `nama@provider` dikirim ke
+  provider itu. Server Node tidak mengenal akhiran `@` — sebelum kembali ke Node, pindahkan model ke provider bawaan.
 - **Publikasi manual (dev/prod)** per project (`internal/publish`), hanya di server Go. Untuk project dengan mode
   manual, versi publik ada di `data/published/<slug>/` dan `data/db/<slug>@prod.db`; versi dev tetap di
   `data/sites/<slug>/` dan `data/db/<slug>.db`, tampil di `<slug>--dev.<BASE_DOMAIN>`. Sertakan keduanya saat backup.

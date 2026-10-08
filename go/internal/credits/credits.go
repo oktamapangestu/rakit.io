@@ -31,6 +31,7 @@ type Service struct {
 	// apakah lampiran gambar tersedia. Diisi saat perakitan di main.
 	AddAssistantBalance func(q store.Q, userID int64, rupiah int) error
 	VisionEnabled       func() bool
+	AIEnabled           func() bool // ada provider AI (.env atau dashboard); nil = menurut .env
 }
 
 func New(cfg *config.Config, db *store.Store, p *plans.Plans) *Service {
@@ -117,7 +118,7 @@ func (s *Service) Info(userID int64) *Info {
 	}
 	_, resetsAt := plans.WIBDay(time.Now().UnixMilli())
 	info := &Info{
-		Enabled: s.cfg.AI.Enabled, TopupEnabled: s.cfg.Billing.Enabled,
+		Enabled: s.cfg.AI.Enabled || (s.AIEnabled != nil && s.AIEnabled()), TopupEnabled: s.cfg.Billing.Enabled,
 		Limit: freeLimit, Used: used, FreeRemaining: freeRemaining,
 		BonusLimit: bonusLimit, BonusRemaining: bonusLeft, BonusUsed: max(0, bonusLimit-bonusLeft),
 		Purchased: purchased, CostPerPrompt: s.cfg.AI.CreditsPerPrompt, ResetsAt: plans.ISO(resetsAt),

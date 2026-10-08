@@ -611,6 +611,205 @@
     $('#plans').replaceChildren(form);
   }
 
+  // ---------- Provider AI: endpoint kompatibel OpenAI ----------
+  // Model merujuk provider dengan "model@id" (tanpa @ = provider bawaan dari .env). Di form model, provider
+  // dipilih lewat dropdown di samping ID model (modelRef).
+  let providers = [{ id: '', name: 'Bawaan (.env)', builtin: true }];
+  const knownModels = new Map(); // id provider → ID model dari tes koneksi (saran isian model)
+
+  const PRESETS = [
+    { label: 'OpenAI', id: 'openai', baseUrl: 'https://api.openai.com/v1' },
+    { label: 'Anthropic Claude', id: 'anthropic', baseUrl: 'https://api.anthropic.com/v1' },
+    { label: 'Google Gemini', id: 'gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+    { label: 'OpenRouter', id: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1' },
+    { label: 'DeepSeek', id: 'deepseek', baseUrl: 'https://api.deepseek.com/v1' },
+    { label: 'Groq', id: 'groq', baseUrl: 'https://api.groq.com/openai/v1' },
+    { label: 'Ollama (lokal)', id: 'ollama', baseUrl: 'http://localhost:11434/v1' },
+  ];
+
+  async function providersApi(method, path = '', body) {
+    const res = await fetch(`/api/admin/ai-providers${path}`, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
+    return data;
+  }
+
+  async function loadProviders() {
+    try {
+      const data = await providersApi('GET');
+      providers = data.providers;
+      renderProviders(data);
+    } catch (err) {
+      $('#aiProviders').replaceChildren(h('p', { class: 'error' }, `Gagal memuat provider AI: ${err.message}`));
+    }
+  }
+
+  // Saran ID model per provider (dari tes koneksi), lewat <datalist>.
+  const listId = (id) => `models-${id || 'bawaan'}`;
+  function fillDatalist(id, models) {
+    knownModels.set(id, models);
+    let list = document.getElementById(listId(id));
+    if (!list) document.body.append(list = h('datalist', { id: listId(id) }));
+    list.replaceChildren(...models.map((m) => h('option', { value: m })));
+  }
+
+  const splitRef = (ref) => {
+    const at = String(ref ?? '').lastIndexOf('@');
+    return at < 0 ? [String(ref ?? ''), ''] : [ref.slice(0, at), ref.slice(at + 1)];
+  };
+
+  // Isian model: dropdown provider + ID model. read() → "model" atau "model@provider".
+  function modelRef(value, { placeholder = 'id model', required = false, label = 'Model' } = {}) {
+    const [model, pid] = splitRef(value);
+    const select = h('select', { class: 'provider-select', 'aria-label': `Provider ${label}`, title: 'Provider' },
+      providers.map((p) => h('option', { value: p.id, selected: p.id === pid }, p.builtin ? 'Bawaan' : p.name)));
+    if (pid && !providers.some((p) => p.id === pid)) select.append(h('option', { value: pid, selected: true }, `${pid} (tidak ada)`));
+    select.hidden = providers.length < 2 && !pid; // hanya provider bawaan: tidak perlu memilih
+    const input = h('input', { value: model, placeholder, required, class: 'mono', maxlength: '100', spellcheck: 'false', autocomplete: 'off', list: listId(pid), 'aria-label': label });
+    select.addEventListener('change', () => input.setAttribute('list', listId(select.value)));
+    return {
+      el: h('span', { class: 'model-ref' }, select, input),
+      input,
+      read: () => {
+        const m = input.value.trim();
+        return m && select.value ? `${m}@${select.value}` : m;
+      },
+    };
+  }
+
+  function renderProviders(data) {
+    const status = h('span', { class: 'save-status', role: 'status' });
+    const formSlot = h('div', {});
+    const custom = () => data.providers.filter((p) => !p.builtin);
+    const showError = (message) => { status.textContent = message; status.className = 'save-status error-text'; };
+
+    // Simpan seluruh daftar; apiKey kosong = key lama tetap dipakai.
+    async function saveList(list, done) {
+      status.textContent = 'Menyimpan…';
+      status.className = 'save-status';
+      try {
+        const saved = await providersApi('PUT', '', { providers: list });
+        providers = saved.providers;
+        renderProviders(saved);
+        const ok = $('#aiProviders .save-status');
+        ok.textContent = done;
+        ok.className = 'save-status ok';
+        loadAiModels(); // dropdown provider di form model ikut diperbarui
+        loadAssistantAdmin();
+        return true;
+      } catch (err) {
+        showError(err.message);
+        return false;
+      }
+    }
+
+    async function test(body, out) {
+      out.className = 'provider-test';
+      out.textContent = 'Menguji koneksi…';
+      try {
+        const res = await providersApi('POST', '/test', body);
+        if (!res.ok) {
+          out.className = 'provider-test error-text';
+          out.textContent = res.error;
+          return;
+        }
+        if (body.id !== undefined) fillDatalist(body.id, res.models);
+        out.className = 'provider-test ok';
+        out.replaceChildren(`✓ Terhubung · ${num(res.models.length)} model`,
+          res.models.length ? h('span', { class: 'muted' }, ` — mis. ${res.models.slice(0, 6).join(', ')}${res.models.length > 6 ? ', …' : ''}`) : '');
+      } catch (err) {
+        out.className = 'provider-test error-text';
+        out.textContent = err.message;
+      }
+    }
+
+    // Form tambah/ubah. p = provider yang diubah (null = baru).
+    function openForm(p) {
+      const fields = {
+        name: h('input', { value: p?.name ?? '', placeholder: 'mis. OpenAI', maxlength: '60', required: true }),
+        id: h('input', { value: p?.id ?? '', placeholder: 'mis. openai', maxlength: '30', class: 'mono', spellcheck: 'false', readonly: Boolean(p), required: true }),
+        baseUrl: h('input', { value: p?.baseUrl ?? '', placeholder: 'https://api.openai.com/v1', class: 'mono', spellcheck: 'false', required: true }),
+        apiKey: h('input', { type: 'password', placeholder: p?.hasKey ? `kosong = tetap ${p.keyHint}` : 'sk-…', class: 'mono', autocomplete: 'new-password', spellcheck: 'false' }),
+      };
+      let idTouched = Boolean(p);
+      fields.id.addEventListener('input', () => { idTouched = true; });
+      fields.name.addEventListener('input', () => {
+        if (!idTouched) fields.id.value = fields.name.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+      });
+      const preset = p ? null : h('select', { onchange: () => {
+        const pr = PRESETS.find((x) => x.id === preset.value);
+        if (!pr) return;
+        fields.name.value = pr.label;
+        if (!idTouched || !fields.id.value) fields.id.value = pr.id;
+        fields.baseUrl.value = pr.baseUrl;
+        fields.apiKey.focus();
+      } }, h('option', { value: '' }, 'Isi sendiri (kompatibel OpenAI)'), PRESETS.map((pr) => h('option', { value: pr.id }, pr.label)));
+      const result = h('div', { class: 'provider-test' });
+      const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', {}, hint) : null);
+      const values = () => ({ id: fields.id.value.trim().toLowerCase(), name: fields.name.value.trim(), baseUrl: fields.baseUrl.value.trim(), apiKey: fields.apiKey.value.trim() });
+      const form = h('form', { class: 'provider-form', novalidate: true },
+        h('h3', { class: 'sub-title' }, p ? `Ubah ${p.name}` : 'Provider baru'),
+        h('div', { class: 'provider-fields' },
+          preset ? field('Pilih cepat', preset) : null,
+          field('Nama', fields.name),
+          field('ID', fields.id, p ? 'ID tidak bisa diubah (dipakai di model: id-model@id).' : 'Dipakai di model: id-model@id.'),
+          field('Base URL', fields.baseUrl, 'Alamat API kompatibel OpenAI, biasanya diakhiri /v1.'),
+          field('API key', fields.apiKey, p?.hasKey ? 'Biarkan kosong untuk tetap memakai key lama.' : 'Disimpan di server; tidak pernah ditampilkan lagi.')),
+        result,
+        h('div', { class: 'model-actions' },
+          h('button', { type: 'button', class: 'ghost-btn', onclick: () => test({ ...values(), id: p?.id ?? values().id }, result) }, 'Tes koneksi'),
+          h('span', { class: 'spacer' }),
+          h('button', { type: 'button', class: 'ghost-btn', onclick: () => formSlot.replaceChildren() }, 'Batal'),
+          h('button', { type: 'submit', class: 'save-btn' }, p ? 'Simpan perubahan' : 'Tambah provider')));
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const v = values();
+        const list = custom().map((x) => ({ id: x.id, name: x.name, baseUrl: x.baseUrl, apiKey: '' }));
+        if (p) list[list.findIndex((x) => x.id === p.id)] = { ...v, id: p.id };
+        else list.push(v);
+        await saveList(list, p ? 'Provider disimpan ✓' : 'Provider ditambahkan ✓');
+      };
+      formSlot.replaceChildren(form);
+      (p ? fields.name : preset).focus();
+    }
+
+    const rows = data.providers.map((p) => {
+      const result = h('div', { class: 'provider-test' });
+      return h('div', { class: 'provider-row' },
+        h('div', { class: 'provider-main' },
+          h('div', { class: 'provider-name' },
+            h('strong', {}, p.name),
+            p.builtin ? h('span', { class: 'pill pending' }, 'atur di .env') : h('code', {}, `@${p.id}`)),
+          h('div', { class: 'mono small muted' }, p.baseUrl || 'Belum diatur (AI_BASE_URL)'),
+          h('div', { class: 'small muted' }, p.hasKey ? `API key ${p.keyHint}` : 'Tanpa API key'),
+          h('div', { class: 'small' }, p.usedBy.length ? `Dipakai: ${p.usedBy.join(' · ')}` : h('span', { class: 'muted' }, 'Belum dipakai model mana pun')),
+          result),
+        h('div', { class: 'provider-actions' },
+          h('button', { type: 'button', class: 'ghost-btn small', disabled: !p.baseUrl, onclick: () => test(p.builtin ? { builtin: true, id: '' } : { id: p.id, baseUrl: p.baseUrl }, result) }, 'Tes'),
+          p.builtin ? null : h('button', { type: 'button', class: 'ghost-btn small', onclick: () => openForm(p) }, 'Ubah'),
+          p.builtin ? null : h('button', { type: 'button', class: 'ghost-btn small danger', title: p.usedBy.length ? 'Masih dipakai model' : 'Hapus provider', onclick: async () => {
+            if (p.usedBy.length) return showError(`"${p.name}" masih dipakai (${p.usedBy.join(', ')}). Ganti model itu dulu.`);
+            if (!confirm(`Hapus provider "${p.name}"? API key-nya ikut terhapus.`)) return;
+            await saveList(custom().filter((x) => x.id !== p.id).map((x) => ({ id: x.id, name: x.name, baseUrl: x.baseUrl, apiKey: '' })), 'Provider dihapus ✓');
+          } }, 'Hapus')));
+    });
+
+    const addBtn = h('button', { type: 'button', class: 'save-btn', disabled: custom().length >= data.maxProviders, onclick: () => openForm(null) }, '+ Tambah provider');
+    $('#aiProviders').replaceChildren(h('div', { class: 'card plans-card' },
+      h('div', { class: 'plans-title' },
+        h('div', {},
+          h('h2', {}, 'Provider AI'),
+          h('p', { class: 'sub' }, 'Layanan AI yang dipakai editor & asisten website: semua yang kompatibel OpenAI (OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Groq, Ollama, …). Pilih provider di samping tiap model di bawah. Taruh model cadangan di provider lain supaya permintaan tetap jalan saat satu provider gangguan.')),
+        h('div', { class: 'plans-actions' }, status, addBtn)),
+      h('div', { class: 'provider-list' }, rows),
+      formSlot));
+  }
+
   // ---------- Model AI editor: utama & daftar cadangan ----------
   async function aiModelsApi(method, body) {
     const res = await fetch('/api/admin/ai-models', {
@@ -635,11 +834,10 @@
   function renderAiModels(data) {
     const status = h('span', { class: 'save-status', role: 'status' });
     const saveBtn = h('button', { type: 'submit', class: 'save-btn', disabled: true }, 'Simpan model');
-    const modelInput = (value, placeholder, required) => h('input', { value: String(value ?? ''), placeholder, required, class: 'mono', maxlength: '100', spellcheck: 'false', autocomplete: 'off' });
     const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, h('small', {}, hint));
     const inputs = {
-      model: modelInput(data.models.model, 'id model di gateway', true),
-      vision: modelInput(data.models.vision, 'kosong = lampiran gambar dimatikan'),
+      model: modelRef(data.models.model, { placeholder: 'id model', required: true, label: 'Model utama' }),
+      vision: modelRef(data.models.vision, { placeholder: 'kosong = lampiran gambar dimatikan', label: 'Model gambar' }),
     };
 
     // Daftar cadangan: dicoba berurutan dari atas saat model sebelumnya gangguan.
@@ -651,24 +849,46 @@
         list.hidden = !list.children.length;
         form.dispatchEvent(new Event('input'));
       };
+      const refs = new Map(); // <li> → isian model
       const add = (value) => {
-        const input = modelInput(value, 'id model di gateway');
-        input.setAttribute('aria-label', label);
-        const row = h('li', {}, input,
-          h('button', { type: 'button', class: 'icon-btn', title: 'Hapus', 'aria-label': `Hapus ${label}`, onclick: () => { row.remove(); changed(); } }, '✕'));
+        const ref = modelRef(value, { label });
+        const row = h('li', {}, ref.el,
+          h('button', { type: 'button', class: 'icon-btn', title: 'Hapus', 'aria-label': `Hapus ${label}`, onclick: () => { row.remove(); refs.delete(row); changed(); } }, '✕'));
+        refs.set(row, ref);
         list.append(row);
-        return input;
+        return ref.input;
       };
       models.forEach(add);
       addBtn.hidden = models.length >= data.maxFallbacks;
       list.hidden = !models.length;
       return {
         el: h('div', { class: 'fallbacks' }, h('span', { class: 'fallbacks-label' }, label), list, addBtn),
-        read: () => [...list.querySelectorAll('input')].map((el) => el.value.trim()).filter(Boolean),
+        read: () => [...list.children].map((row) => refs.get(row).read()).filter(Boolean),
       };
     };
     const fallbacks = fallbackList(data.models.fallbacks, 'Model cadangan');
     const visionFallbacks = fallbackList(data.models.visionFallbacks, 'Model gambar cadangan');
+
+    // Model per tugas: ikuti default (model utama), atau model khusus + cadangannya sendiri.
+    const tasks = data.taskList.map((t) => {
+      const own = data.tasks[t.key];
+      const ref = modelRef(own?.model ?? '', { placeholder: 'id model', label: `Model ${t.label}` });
+      const extra = fallbackList(own?.fallbacks ?? [], `Cadangan ${t.label}`);
+      const custom = h('div', { class: 'task-custom' }, ref.el, extra.el);
+      const mode = h('select', { class: 'task-mode', 'aria-label': `Model untuk ${t.label}` },
+        h('option', { value: '' }, `Ikuti ${t.default.toLowerCase()}`),
+        h('option', { value: 'own', selected: Boolean(own) }, 'Model khusus'));
+      const sync = () => { custom.hidden = !mode.value; };
+      mode.addEventListener('change', () => { sync(); if (mode.value) ref.input.focus(); });
+      sync();
+      return {
+        key: t.key,
+        el: h('div', { class: 'task-row' },
+          h('div', { class: 'task-head' }, h('strong', {}, t.label), h('small', {}, t.description)),
+          mode, custom),
+        read: () => (mode.value ? { model: ref.read(), fallbacks: extra.read() } : { model: '', fallbacks: [] }),
+      };
+    });
 
     const form = h('form', { class: 'card plans-card', novalidate: true },
       h('div', { class: 'plans-title' },
@@ -678,11 +898,14 @@
         h('div', { class: 'plans-actions' }, status, saveBtn)),
       h('div', { class: 'ai-model-grid' },
         h('div', { class: 'ai-model-group' },
-          field('Model utama', inputs.model, 'Dipakai untuk Builder & Plan.'),
+          field('Model utama', inputs.model.el, 'Dipakai semua tugas yang tidak diberi model khusus (lihat Model per tugas).'),
           fallbacks.el),
         h('div', { class: 'ai-model-group' },
-          field('Model gambar (vision)', inputs.vision, 'Membaca gambar yang dilampirkan di prompt.'),
+          field('Model gambar (vision)', inputs.vision.el, 'Membaca gambar yang dilampirkan di prompt.'),
           visionFallbacks.el)),
+      h('h3', { class: 'sub-title' }, 'Model per tugas'),
+      h('p', { class: 'sub' }, 'Beri tugas tertentu model sendiri — mis. model kecil & cepat untuk prediksi kode, model terkuat untuk Builder. Cadangannya terpisah dari cadangan model utama.'),
+      h('div', { class: 'task-list' }, tasks.map((t) => t.el)),
       h('h3', { class: 'sub-title' }, 'Keadaan model'),
       h('div', { class: 'table-wrap' }, stack(h('table', {},
         h('thead', {}, h('tr', {}, ['Model', 'Status', 'Gangguan', 'Error terakhir'].map((t) => h('th', {}, t)))),
@@ -697,13 +920,17 @@
 
     const markDirty = () => { saveBtn.disabled = false; status.textContent = 'Belum disimpan'; status.className = 'save-status dirty'; };
     form.addEventListener('input', markDirty);
+    form.addEventListener('change', markDirty);
     form.onsubmit = async (e) => {
       e.preventDefault();
       saveBtn.disabled = true;
       status.textContent = 'Menyimpan…';
       status.className = 'save-status';
       try {
-        const saved = await aiModelsApi('PUT', { model: inputs.model.value.trim(), fallbacks: fallbacks.read(), vision: inputs.vision.value.trim(), visionFallbacks: visionFallbacks.read() });
+        const saved = await aiModelsApi('PUT', {
+          model: inputs.model.read(), fallbacks: fallbacks.read(), vision: inputs.vision.read(), visionFallbacks: visionFallbacks.read(),
+          tasks: Object.fromEntries(tasks.map((t) => [t.key, t.read()])),
+        });
         renderAiModels(saved);
         const done = $('#aiModels .save-status');
         done.textContent = 'Tersimpan ✓';
@@ -745,7 +972,7 @@
     const rowsEl = h('tbody', {});
     const rows = [];
 
-    const MODEL_COLS = ['Aktif', 'Kode', 'Nama', 'Label', 'ID model', 'Biaya/1jt token', 'Margin ×', 'Harga jual/jawaban', ''];
+    const MODEL_COLS = ['Aktif', 'Kode', 'Nama', 'Label', 'Provider · ID model', 'Biaya/1jt token', 'Margin ×', 'Harga jual/jawaban', ''];
     const perAnswer = (cost, markup) => ((data.typicalTokens * cost * markup) / 1e6);
     function addRow(m) {
       const input = (value, attrs = {}) => h('input', { value: String(value ?? ''), ...attrs });
@@ -754,7 +981,7 @@
         key: input(m.key, { placeholder: 'kode', maxlength: '30', class: 'mono' }),
         name: input(m.name, { placeholder: 'Nama tampil' }),
         tier: input(m.tier, { placeholder: 'Hemat / Pintar', maxlength: '20' }),
-        model: input(m.model, { placeholder: 'id model di gateway', class: 'mono' }),
+        model: modelRef(m.model, { label: `Model ${m.name || 'asisten'}` }),
         cost: input(m.cost, { type: 'number', min: '0', step: '1' }),
         markup: input(m.markup, { type: 'number', min: '1', max: '20', step: '0.1' }),
         price: h('span', { class: 'num-cell' }),
@@ -770,7 +997,7 @@
       r.markup.addEventListener('input', update);
       update();
       r.tr = h('tr', { class: m.enabled ? '' : 'off' },
-        h('td', {}, r.enabled), h('td', {}, r.key), h('td', {}, r.name), h('td', {}, r.tier), h('td', {}, r.model),
+        h('td', {}, r.enabled), h('td', {}, r.key), h('td', {}, r.name), h('td', {}, r.tier), h('td', {}, r.model.el),
         h('td', {}, r.cost), h('td', {}, r.markup), h('td', {}, r.price),
         h('td', {}, h('button', { type: 'button', class: 'row-del', title: 'Hapus model', onclick: () => {
           rows.splice(rows.indexOf(r), 1);
@@ -793,7 +1020,7 @@
       h('div', { class: 'plans-title' },
         h('div', {},
           h('h2', {}, 'Asisten AI website'),
-          h('p', { class: 'sub' }, `Model yang bisa dipilih pengguna untuk chatbot websitenya. Biaya = Rp per 1 juta token dari gateway; harga jual = biaya × margin. Perkiraan per jawaban memakai ±${num(data.typicalTokens)} token.`)),
+          h('p', { class: 'sub' }, `Model yang bisa dipilih pengguna untuk chatbot websitenya. Biaya = Rp per 1 juta token dari provider; harga jual = biaya × margin. Perkiraan per jawaban memakai ±${num(data.typicalTokens)} token.`)),
         h('div', { class: 'plans-actions' }, status, saveBtn)),
       h('div', { class: 'table-wrap' }, h('table', { class: 'model-table cards' },
         h('thead', {}, h('tr', {}, MODEL_COLS.map((t) => h('th', {}, t)))),
@@ -835,7 +1062,7 @@
       try {
         const saved = await assistantApi('PUT', '', {
           models: rows.map((r) => ({
-            key: r.key.value, name: r.name.value, tier: r.tier.value, model: r.model.value,
+            key: r.key.value, name: r.name.value, tier: r.tier.value, model: r.model.read(),
             cost: Number(r.cost.value), markup: Number(r.markup.value), enabled: r.enabled.checked,
           })),
           trial: Number(trialInput.value),
@@ -880,6 +1107,9 @@
   setDays([7, 30, 90].includes(days) ? days : 30);
   load();
   loadPlans();
-  loadAiModels();
-  loadAssistantAdmin();
+  // Model memakai daftar provider (dropdown), jadi provider dimuat dulu.
+  loadProviders().finally(() => {
+    loadAiModels();
+    loadAssistantAdmin();
+  });
 })();

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/files"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
@@ -504,7 +505,7 @@ func (s *Service) savedExplanation(projectID int64, rel string) (*savedExplanati
 // explainQuota: sisa permintaan hari ini. Error 503 bila fitur mati, 429 bila habis.
 func (s *Service) explainQuota(user *store.User) (day string, remaining int, err error) {
 	limit := s.cfg.AI.ExplainDailyLimit
-	if !s.cfg.AI.Enabled || limit == 0 {
+	if !s.models.Enabled() || limit == 0 {
 		return "", 0, httpx.Errorf(503, "Baca Alur Kode belum tersedia di server ini")
 	}
 	day, _ = plans.WIBDay(time.Now().UnixMilli())
@@ -655,7 +656,7 @@ func (s *Service) Explain(ctx context.Context, user *store.User, project *store.
 	tokens := 0
 	var ex *Explanation
 	for attempt := 0; ; attempt++ {
-		r, err := s.callAI(request{messages: convo, maxTokens: explainMaxTokens}, hooks{ctx: ctx})
+		r, err := s.callAI(request{task: aimodels.TaskExplain, messages: convo, maxTokens: explainMaxTokens}, hooks{ctx: ctx})
 		if err != nil {
 			return nil, explainError(ctx, err, rel)
 		}
@@ -762,7 +763,7 @@ func (s *Service) AskExplain(ctx context.Context, user *store.User, project *sto
 
 	ctx, cancel := context.WithTimeout(ctx, explainAskTimeout)
 	defer cancel()
-	r, err := s.callAI(request{messages: convo, maxTokens: explainAskTokens}, hooks{ctx: ctx})
+	r, err := s.callAI(request{task: aimodels.TaskExplain, messages: convo, maxTokens: explainAskTokens}, hooks{ctx: ctx})
 	if err != nil {
 		return nil, explainError(ctx, err, rel)
 	}

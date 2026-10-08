@@ -86,11 +86,20 @@ func main() {
 	history := versions.New(cfg, db, limits)
 	models := aimodels.New(cfg, db)
 	helper := assistant.New(cfg, db, limits)
+	helper.Providers = models
+	models.AssistantModels = func() [][2]string {
+		var out [][2]string
+		for _, m := range helper.Models() {
+			out = append(out, [2]string{m.Name, m.Model})
+		}
+		return out
+	}
 	functions := fn.New(cfg, db, projectDB, limits)
 	functions.StartScheduler(context.Background())
 	wallet := credits.New(cfg, db, limits)
 	wallet.AddAssistantBalance = helper.AddBalance
 	wallet.VisionEnabled = func() bool { return models.Get().Vision != "" }
+	wallet.AIEnabled = models.Enabled
 	queue := aiqueue.New(cfg)
 	editorAI := ai.New(cfg, db, wallet, limits, projectDB, history, models, queue)
 	editorAI.ResolvePage = site.ResolvePage

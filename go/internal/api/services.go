@@ -181,7 +181,7 @@ func (h *Handler) assistant(q *request) error {
 
 // ---------- /api/admin (owner platform) ----------
 
-// admin: dashboard pemilik platform — statistik, harga langganan & kredit gratis, model AI editor,
+// admin: dashboard pemilik platform — statistik, harga langganan & kredit gratis, provider & model AI editor,
 // model asisten website, dan blokir website. Akses dibatasi ke email di ADMIN_EMAILS.
 func (h *Handler) admin(q *request) error {
 	if err := h.requireAuth(q); err != nil {
@@ -210,6 +210,19 @@ func (h *Handler) admin(q *request) error {
 			if err = dash.SavePlans(q.body); err == nil {
 				out, err = dash.PlansView()
 			}
+		}
+
+	// Provider AI: endpoint kompatibel OpenAI tambahan (selain bawaan .env). Model merujuknya dengan
+	// "model@id". Tes = minta daftar model provider (tanpa biaya token).
+	case q.is("GET", "ai-providers"):
+		out = h.svc.AIModels.ProvidersView()
+	case q.is("PUT", "ai-providers"):
+		if err = q.load(); err == nil {
+			out, err = h.svc.AIModels.SaveProviders(q.body)
+		}
+	case q.is("POST", "ai-providers", "test"):
+		if err = q.load(); err == nil {
+			out = h.svc.AIModels.TestProvider(q.r.Context(), q.body)
 		}
 
 	// Model AI editor: model utama & cadangan (dipakai saat model utama gangguan), juga untuk pembaca gambar.

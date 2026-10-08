@@ -72,8 +72,8 @@ type hooks struct {
 type request struct {
 	model    string
 	messages []message
-	tools    bool // sertakan tool mode Builder
-	vision   bool // pakai pasangan model gambar
+	tools    bool   // sertakan tool mode Builder
+	task     string // tugas (aimodels.Task*): menentukan model utama & cadangan yang dipakai
 	// maxTokens: batas jawaban (0 = AI_MAX_TOKENS); temperature: nil = bawaan provider.
 	maxTokens   int
 	temperature *float64
@@ -102,10 +102,15 @@ type streamEvent struct {
 	} `json:"choices"`
 }
 
-// chatCompletion memanggil endpoint chat completions (format OpenAI) dengan streaming SSE.
+// chatCompletion memanggil endpoint chat completions (format OpenAI) dengan streaming SSE, di provider
+// milik model (req.model = "model" atau "model@provider", lihat paket aimodels).
 func (s *Service) chatCompletion(req request, h hooks) (*reply, error) {
+	endpoint, err := s.models.Resolve(req.model)
+	if err != nil {
+		return nil, err // dianggap gangguan: callAI pindah ke model cadangan bila ada
+	}
 	body := map[string]any{
-		"model":          req.model,
+		"model":          endpoint.Model,
 		"max_tokens":     cmp.Or(req.maxTokens, s.cfg.AI.MaxTokens),
 		"stream":         true,
 		"stream_options": map[string]bool{"include_usage": true},
@@ -123,11 +128,13 @@ func (s *Service) chatCompletion(req request, h hooks) (*reply, error) {
 	if err := enc.Encode(body); err != nil {
 		return nil, err
 	}
-	httpReq, err := http.NewRequestWithContext(h.ctx, http.MethodPost, s.cfg.AI.BaseURL+"/chat/completions", &payload)
+	httpReq, err := http.NewRequestWithContext(h.ctx, http.MethodPost, endpoint.BaseURL+"/chat/completions", &payload)
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Authorization", "Bearer "+s.cfg.AI.APIKey)
+	if endpoint.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+endpoint.APIKey)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	res, err := s.http.Do(httpReq)
 	if err != nil {
@@ -255,15 +262,11 @@ func isOutage(err error, ctx context.Context) bool {
 	return true // jaringan putus, timeout, stream terputus di tengah jawaban
 }
 
-// callAI memanggil AI dengan strategi cadangan: coba model utama; bila gangguan, ulangi permintaan
+// callAI memanggil AI dengan strategi cadangan: coba model utama tugas itu (lihat aimodels.For); bila gangguan, ulangi permintaan
 // yang sama dengan model cadangan berikutnya, dan seterusnya. Model yang gangguan dilewati beberapa menit (lihat paket aimodels),
 // jadi putaran berikutnya langsung memakai cadangan.
 func (s *Service) callAI(req request, h hooks) (*reply, error) {
-	models := s.models.Get()
-	order := s.models.Order(models.Model, models.Fallbacks)
-	if req.vision {
-		order = s.models.Order(models.Vision, models.VisionFallbacks)
-	}
+	order := s.models.OrderFor(req.task)
 	for i, model := range order {
 		hasNext := i < len(order)-1
 		// Ada cadangan: cukup 1 kali coba ulang saat sibuk, lalu pindah — daripada user menunggu lama.

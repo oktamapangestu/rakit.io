@@ -648,7 +648,11 @@ func (s *Service) runJob(j *job, in jobInput) {
 	send := j.emit
 	status := "error"
 	inTokens, outTokens := 0, 0
-	usedModel := s.models.Get().Model // model yang benar-benar menjawab (bisa cadangan), untuk statistik
+	task := aimodels.TaskBuilder
+	if in.mode == "plan" {
+		task = aimodels.TaskPlan
+	}
+	usedModel, _ := s.models.For(task) // model yang benar-benar menjawab (bisa cadangan), untuk statistik
 	slug := in.project.Slug
 
 	err := func() (err error) {
@@ -669,7 +673,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 			for _, url := range in.images {
 				content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": url}})
 			}
-			seen, err := s.callAI(request{vision: true, messages: []message{
+			seen, err := s.callAI(request{task: aimodels.TaskVision, messages: []message{
 				{"role": "system", "content": visionPrompt},
 				{"role": "user", "content": content},
 			}}, hooks{ctx: j.ctx, onQueued: queued, onRetry: retry})
@@ -743,7 +747,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 		var text string
 		var changes []change
 		if in.mode == "plan" {
-			r, err := s.callAI(request{messages: convo}, h)
+			r, err := s.callAI(request{task: task, messages: convo}, h)
 			if err != nil {
 				return err
 			}

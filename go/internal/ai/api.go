@@ -145,7 +145,7 @@ var spacesRE = regexp.MustCompile(`\s+`)
 
 // Prompt menerima satu prompt: memotong kredit, menyimpan pesan, lalu menjalankan job di latar.
 func (s *Service) Prompt(user *store.User, project *store.Project, body map[string]any) (any, error) {
-	if !s.cfg.AI.Enabled {
+	if !s.models.Enabled() {
 		return nil, httpx.Errorf(503, "Fitur AI belum dikonfigurasi di server")
 	}
 	prompt := strings.TrimSpace(jsconv.String(body["prompt"]))

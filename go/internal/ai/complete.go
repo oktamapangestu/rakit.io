@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/plans"
@@ -67,23 +68,10 @@ func cleanCompletion(text, prefix, suffix string) string {
 	return text
 }
 
-func (s *Service) completeModels() []string {
-	if s.cfg.AI.CompleteModel != "" {
-		return []string{s.cfg.AI.CompleteModel}
-	}
-	m := s.models.Get()
-	for _, list := range [][]string{s.models.Order(m.Vision, m.VisionFallbacks), s.models.Order(m.Model, m.Fallbacks)} {
-		if len(list) > 0 {
-			return list
-		}
-	}
-	return nil
-}
-
 // Complete: prediksi teks untuk disisipkan di posisi kursor.
 func (s *Service) Complete(ctx context.Context, user *store.User, body map[string]any) (any, error) {
 	limit := s.cfg.AI.CompleteDailyLimit
-	if !s.cfg.AI.Enabled || limit == 0 {
+	if !s.models.Enabled() || limit == 0 {
 		return nil, httpx.Errorf(503, "Prediksi kode belum tersedia di server ini")
 	}
 	prefix, _ := body["prefix"].(string)
@@ -132,7 +120,7 @@ func (s *Service) Complete(ctx context.Context, user *store.User, body map[strin
 	}
 	var r *reply
 	var err error
-	for _, model := range s.completeModels() {
+	for _, model := range s.models.OrderFor(aimodels.TaskComplete) {
 		req.model = model
 		if r, err = s.chatCompletion(req, hooks{ctx: ctx}); err == nil || ctx.Err() != nil {
 			break

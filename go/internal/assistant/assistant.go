@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
@@ -65,6 +66,9 @@ type Service struct {
 	waiting  chan struct{}
 	visitors *httpx.RateLimiter
 	sites    *httpx.RateLimiter
+
+	// Providers: provider AI & penerjemah "model@provider" (paket aimodels). Dipasang di main.go.
+	Providers *aimodels.Service
 }
 
 func New(cfg *config.Config, db *store.Store, p *plans.Plans) *Service {
@@ -390,7 +394,7 @@ func (s *Service) OwnerView(user *store.User, project *store.Project) (any, erro
 		packages = s.cfg.Assistant.Packages
 	}
 	return map[string]any{
-		"available": s.cfg.AI.Enabled,
+		"available": s.Providers.Enabled(),
 		"settings":  settings,
 		"models":    s.publicModels(),
 		"wallet":    wallet,

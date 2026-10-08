@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/credits"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
@@ -219,7 +220,7 @@ func diagramHeader(code string) string {
 // GenerateDiagram membuat (atau, bila renderError diisi, memperbaiki) diagram satu jenis lalu menyimpannya.
 // facts: hasil analisis otomatis project (bahan diagram lama), dikirim ke AI sebagai bantuan.
 func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project *store.Project, kind string, facts any, renderError string) (any, error) {
-	if !s.cfg.AI.Enabled {
+	if !s.models.Enabled() {
 		return nil, httpx.Errorf(503, "Fitur AI belum dikonfigurasi di server")
 	}
 	spec, ok := diagramKinds[kind]
@@ -265,7 +266,8 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 
 	ctx, cancel := context.WithTimeout(ctx, diagramTimeout)
 	defer cancel()
-	status, usedModel := "error", s.models.Get().Model
+	status := "error"
+	usedModel, _ := s.models.For(aimodels.TaskDiagram)
 	inTokens, outTokens := 0, 0
 	code, notes, err := func() (string, []DiagramNote, error) {
 		projectContext, err := s.projectContext(ctx, project.Slug, "", nil)
@@ -287,7 +289,7 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 		}
 		// Format salah (mis. digambar dengan karakter ASCII): minta sekali lagi, tanpa kredit tambahan.
 		for attempt := 0; ; attempt++ {
-			r, err := s.callAI(request{messages: convo}, hooks{ctx: ctx, onModel: func(model string) { usedModel = model }})
+			r, err := s.callAI(request{task: aimodels.TaskDiagram, messages: convo}, hooks{ctx: ctx, onModel: func(model string) { usedModel = model }})
 			if err != nil {
 				return "", nil, err
 			}

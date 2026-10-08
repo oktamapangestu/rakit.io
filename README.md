@@ -86,8 +86,8 @@ Konfigurasi di `.env`:
 
 | Variabel | Default | Keterangan |
 |---|---|---|
-| `AI_BASE_URL` | — | Wajib. Contoh: `https://api.kelontongai.id/v1` |
-| `AI_API_KEY` | — | Wajib. Tanpa ini fitur AI nonaktif. |
+| `AI_BASE_URL` | — | Provider bawaan. Contoh: `https://api.kelontongai.id/v1`. Provider lain bisa ditambahkan di dashboard owner. |
+| `AI_API_KEY` | — | Key provider bawaan. Tanpa ini (dan tanpa provider dari dashboard) fitur AI nonaktif. |
 | `AI_MODEL` | `deepseek-v4-pro` | Nama model utama di provider. Default sebelum owner menyimpan di dashboard. |
 | `AI_FALLBACK_MODEL` | — | Model cadangan saat model utama gangguan, dipisah koma bila lebih dari satu (dicoba berurutan, maks. 5). Kosong = tanpa cadangan. |
 | `AI_VISION_FALLBACK_MODEL` | — | Model cadangan untuk pembaca gambar (`AI_VISION_MODEL`), dipisah koma bila lebih dari satu. |
@@ -107,11 +107,22 @@ Konfigurasi di `.env`:
   jadi antrean menyesuaikan diri dengan batas provider tanpa perlu tahu angkanya. Antrean penuh, terlalu lama,
   atau dihentikan user → kredit dikembalikan. Statistiknya ada di dashboard pemilik. Antrean disimpan di memori
   (satu proses server); bila nanti memakai beberapa server, pindahkan ke Redis.
+- **Multi provider:** selain provider bawaan dari `.env`, owner bisa menambah, mengubah, dan menghapus provider
+  kompatibel OpenAI (OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Groq, Ollama, …) di dashboard (`/admin` → kartu
+  *Provider AI*, hanya server Go; disimpan di `settings.ai_providers`). API key tidak pernah dikirim balik ke browser
+  (hanya 4 karakter terakhir), dan tombol *Tes* memanggil `GET {baseUrl}/models` tanpa biaya token. Model merujuk
+  provider dengan akhiran `@id` (`gpt-5@openai`; tanpa `@` = provider bawaan) — di dashboard dipilih lewat dropdown
+  di samping tiap isian model, termasuk model asisten website. Provider yang masih dipakai model tidak bisa dihapus.
+  Kalau kembali ke server Node, model ber-`@` tidak dikenali: kembalikan modelnya ke provider bawaan dulu.
+- **Model per tugas:** di kartu *Model AI editor* → *Model per tugas*, owner bisa memberi Builder, Plan, Diagram,
+  Baca Alur Kode, dan Prediksi kode model khusus + cadangannya sendiri (boleh di provider lain), mis. model kecil &
+  cepat untuk prediksi kode. Tugas tanpa model khusus mengikuti model utama (prediksi kode: `AI_COMPLETE_MODEL`, lalu
+  model gambar, lalu model utama). Disimpan di `settings.ai_task_models`, hanya server Go.
 - **Model cadangan:** model utama & daftar cadangannya (maks. 5, tombol *+ Tambah model cadangan*; juga untuk
   pembaca gambar) diatur di dashboard owner (`/admin` → kartu *Model AI editor*, disimpan di tabel `settings`; `.env`
   hanya default). Bila model utama gangguan — error provider, jaringan putus/timeout, atau tetap sibuk (429/503)
   setelah 1 kali coba ulang — permintaan yang sama diulang dengan cadangan pertama, lalu cadangan berikutnya sesuai
-  urutan. Model yang gangguan dilewati 5 menit (permintaan berikutnya langsung ke model sehat berikutnya),
+  urutan — cadangan boleh di provider lain, jadi gangguan satu provider tidak menghentikan AI. Model yang gangguan dilewati 5 menit (permintaan berikutnya langsung ke model sehat berikutnya),
   lalu dicoba lagi. Tidak pindah model untuk API key ditolak (401/403), antrean penuh, atau dihentikan user. Kartu
   itu juga menampilkan keadaan tiap model dan berapa kali cadangan terpakai (di memori, sejak server dinyalakan).
 - **Riwayat & job:** percakapan AI disimpan di server (tabel `ai_threads`/`ai_messages`) dan muncul lagi saat editor

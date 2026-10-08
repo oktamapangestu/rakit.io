@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/files"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
@@ -408,7 +409,7 @@ func (s *Service) runBuilder(messages []message, existing []string, h hooks) (*b
 			copy(payload, convo)
 			payload[ctxIdx] = withText(payload[ctxIdx], slimContext(messageText(payload[ctxIdx])))
 		}
-		r, err := s.callAI(request{messages: payload, tools: true}, h)
+		r, err := s.callAI(request{task: aimodels.TaskBuilder, messages: payload, tools: true}, h)
 		if err != nil {
 			return nil, err
 		}

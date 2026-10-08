@@ -124,18 +124,25 @@ var errUnavailable = "Asisten sedang tidak bisa menjawab. Coba lagi sebentar lag
 
 // callProvider memanggil provider dengan streaming; onDelta dipanggil untuk tiap potongan jawaban.
 func (s *Service) callProvider(ctx context.Context, model string, messages []chatMessage, onDelta func(string)) (string, *providerUsage, error) {
+	endpoint, err := s.Providers.Resolve(model)
+	if err != nil {
+		log.Printf("Asisten: %v", err)
+		return "", nil, httpx.Errorf(503, "%s", errUnavailable)
+	}
 	var payload bytes.Buffer
 	enc := json.NewEncoder(&payload)
 	enc.SetEscapeHTML(false)
 	enc.Encode(map[string]any{
-		"model": model, "messages": messages, "max_tokens": maxReplyTokens,
+		"model": endpoint.Model, "messages": messages, "max_tokens": maxReplyTokens,
 		"stream": true, "stream_options": map[string]bool{"include_usage": true},
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.AI.BaseURL+"/chat/completions", &payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.BaseURL+"/chat/completions", &payload)
 	if err != nil {
 		return "", nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+s.cfg.AI.APIKey)
+	if endpoint.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+endpoint.APIKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -204,7 +211,7 @@ func (s *Service) activeSite(slug string) (*activeSite, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !s.cfg.AI.Enabled || !site.Enabled || site.Blocked {
+	if !s.Providers.Enabled() || !site.Enabled || site.Blocked {
 		return nil, httpx.Errorf(503, "Asisten AI belum aktif di website ini.")
 	}
 	for _, m := range s.enabledModels() {

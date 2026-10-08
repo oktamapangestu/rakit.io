@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/plans"
@@ -14,10 +15,7 @@ import (
 
 // ---------- Untuk dashboard owner platform ----------
 
-var (
-	keyRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
-	modelRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$`)
-)
+var keyRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
 
 // AdminSite: website yang pernah mengatur asisten (atau diblokir owner).
 type AdminSite struct {
@@ -118,8 +116,11 @@ func (s *Service) SaveAdminSettings(body map[string]any) error {
 			if name == "" {
 				return httpx.Errorf(400, "Nama model \"%s\" wajib diisi", key)
 			}
-			if !modelRE.MatchString(model) {
+			if !aimodels.RefRE.MatchString(model) {
 				return httpx.Errorf(400, "ID model di gateway untuk \"%s\" tidak valid", name)
+			}
+			if err := s.Providers.CheckRef(model); err != nil {
+				return httpx.Errorf(400, "Model untuk \"%s\": %s", name, err.Error())
 			}
 			if math.IsNaN(cost) || math.IsInf(cost, 0) || cost <= 0 || cost > 1_000_000 {
 				return httpx.Errorf(400, "Biaya %s harus lebih dari 0 (Rp per 1 juta token)", name)
