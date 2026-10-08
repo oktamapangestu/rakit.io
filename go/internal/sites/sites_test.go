@@ -1,6 +1,8 @@
 package sites
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -31,5 +33,27 @@ func TestWithPicker(t *testing.T) {
 		if strings.Contains(c.page, "</body>") && !strings.Contains(out, pickerJS+"</script></body>") {
 			t.Errorf("pemilih bukan sebelum </body> untuk %q", c.page)
 		}
+	}
+}
+
+// ETag versi iframe ikut berubah bila skrip pemilih berubah (server diperbarui, file halaman tetap).
+func TestPageETagIncludesPickerVersion(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "index.html")
+	if err := os.WriteFile(file, []byte("<p>halo</p>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, framed := pageETag(info, false), pageETag(info, true)
+	if plain == framed || !strings.Contains(framed, pickerVersion) {
+		t.Fatalf("ETag iframe harus memuat versi pemilih: %s / %s", plain, framed)
+	}
+	old := pickerVersion
+	pickerVersion = "versibaru"
+	defer func() { pickerVersion = old }()
+	if pageETag(info, true) == framed {
+		t.Fatal("ETag iframe tidak berubah saat skrip pemilih berubah")
 	}
 }

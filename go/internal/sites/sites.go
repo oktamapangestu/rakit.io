@@ -122,6 +122,18 @@ const ConsolePath = "/api/_console.js"
 
 var consoleVersion = fmt.Sprintf("%x", sha256.Sum256([]byte(consoleJS)))[:12]
 
+// pickerVersion masuk ke ETag halaman versi iframe: tanpanya, setelah server diperbarui browser tetap
+// mendapat 304 dan memakai halaman dari cache yang masih membawa skrip pemilih/console lama.
+var pickerVersion = fmt.Sprintf("%x", sha256.Sum256([]byte(pickerJS+consoleVersion)))[:12]
+
+// pageETag: ETag file website. picker = versi iframe (disisipi skrip pemilih & console).
+func pageETag(info os.FileInfo, picker bool) string {
+	if picker {
+		return fmt.Sprintf(`W/"%x-%x-p%s"`, info.Size(), info.ModTime().UnixNano(), pickerVersion)
+	}
+	return fmt.Sprintf(`W/"%x-%x"`, info.Size(), info.ModTime().UnixNano())
+}
+
 // ServeConsole mengirim skrip console. Alamatnya memuat versi isi (?v=), jadi boleh di-cache lama.
 func ServeConsole(w http.ResponseWriter, r *http.Request) {
 	hd := w.Header()
@@ -172,10 +184,7 @@ func (h *Handler) withPicker(page []byte) []byte {
 
 func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, file *siteFile, status int) {
 	picker := strings.HasPrefix(file.ctype, "text/html") && inFrame(r)
-	etag := fmt.Sprintf(`W/"%x-%x"`, file.info.Size(), file.info.ModTime().UnixNano())
-	if picker {
-		etag = fmt.Sprintf(`W/"%x-%x-p"`, file.info.Size(), file.info.ModTime().UnixNano())
-	}
+	etag := pageETag(file.info, picker)
 	hd := w.Header()
 	hd.Set("Content-Type", file.ctype)
 	hd.Set("Cache-Control", "no-cache") // selalu revalidasi, supaya preview langsung ter-update
