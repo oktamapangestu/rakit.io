@@ -984,6 +984,33 @@ body:has(#modal:not([hidden])) .release-dot { animation-play-state: paused; }
 .dots i:nth-child(3) { animation-delay: 0.3s; }
 @keyframes blink { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
 
+/* Proses AI: proses berpikir, teks, dan langkah selama job berjalan (dilipat setelah selesai). */
+.ai-activity { border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel); font-size: 13px; color: var(--muted); }
+.ai-activity > summary { padding: 8px 12px; cursor: pointer; user-select: none; color: var(--faint); font-size: 12px; }
+.ai-activity[open] > summary { border-bottom: 1px solid var(--line-2); }
+.ai-activity > :not(summary) { margin: 8px 12px; }
+.ai-thinking > summary { cursor: pointer; font-size: 12px; color: var(--faint); user-select: none; }
+.ai-thinking-text { margin-top: 6px; max-height: 180px; overflow-y: auto; padding-left: 10px; border-left: 2px solid var(--line-2); white-space: pre-wrap; font-style: italic; line-height: 1.5; }
+.ai-say { white-space: pre-wrap; color: var(--text); line-height: 1.55; }
+.ai-steps { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ai-step { position: relative; padding-left: 20px; }
+.ai-step::before { position: absolute; left: 0; top: 1px; width: 14px; text-align: center; font-size: 12px; }
+.ai-step.run::before { content: ""; top: 4px; width: 10px; height: 10px; border: 2px solid var(--line-2); border-top-color: var(--accent-text); border-radius: 50%; animation: ai-spin 0.8s linear infinite; }
+.ai-step.ok::before { content: "✓"; color: var(--ok-text); }
+.ai-step.warn::before { content: "!"; color: var(--warn-text); font-weight: 700; }
+.ai-step.error::before { content: "✕"; color: var(--danger-text); }
+.ai-step.cancel { opacity: 0.55; }
+.ai-step.cancel::before { content: "↻"; }
+.ai-step.note::before { content: "•"; }
+.ai-step summary { cursor: pointer; user-select: none; }
+.ai-step code { font: 12px var(--mono); color: var(--text); }
+.ai-step small { display: block; color: var(--faint); font-size: 12px; }
+.ai-step.warn small { color: var(--warn-text); }
+.ai-step.error small { color: var(--danger-text); }
+.ai-draft { margin: 6px 0 2px; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); font: 11.5px/1.5 var(--mono); color: var(--text); white-space: pre; }
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ai-step.run::before { animation: none; } }
+
 .changes { margin-top: 10px; border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; white-space: normal; }
 .changes-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--panel-2); color: var(--muted); font-size: 12px; }
 .change-row {

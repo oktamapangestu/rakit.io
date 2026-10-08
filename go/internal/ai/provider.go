@@ -67,6 +67,15 @@ type hooks struct {
 	onRunning  func()
 	onRetry    func(attempt, seconds int)
 	onModel    func(model string)
+	// Isi stream untuk tampilan "apa yang dikerjakan AI" (lihat activity.go). onStart: tiap kali model
+	// mulai dipanggil (termasuk coba ulang & model cadangan), supaya potongan dari percobaan gagal dibuang.
+	onStart     func()
+	onReasoning func(text string)
+	onContent   func(text string)
+	onToolDelta func(index int, name, arguments string)
+	// Dari runBuilder: hasil tiap tool call (urut seperti reply.ToolCalls) dan catatan pemeriksaan.
+	onToolResult func(n int, call toolCall, result string)
+	onNote       func(text string)
 }
 
 type request struct {
@@ -88,6 +97,7 @@ type streamEvent struct {
 	Choices []struct {
 		Delta struct {
 			ReasoningContent string `json:"reasoning_content"`
+			Reasoning        string `json:"reasoning"` // nama lain di sebagian gateway (OpenRouter, Groq)
 			Content          string `json:"content"`
 			ToolCalls        []struct {
 				Index    *int   `json:"index"`
@@ -147,6 +157,9 @@ func (s *Service) chatCompletion(req request, h hooks) (*reply, error) {
 		return nil, &providerError{status: res.StatusCode, detail: jsconv.Slice(string(detail), 500), retryAfter: retryAfter}
 	}
 
+	if h.onStart != nil {
+		h.onStart()
+	}
 	out := &reply{}
 	calls := map[int]*toolCall{} // tool call yang datang sepotong-sepotong, dikumpulkan per index
 	nextIndex := 0
@@ -167,16 +180,22 @@ func (s *Service) chatCompletion(req request, h hooks) (*reply, error) {
 				}
 				if len(event.Choices) > 0 {
 					choice := event.Choices[0]
-					if choice.Delta.ReasoningContent != "" {
-						out.Reasoning += choice.Delta.ReasoningContent
+					if thought := cmp.Or(choice.Delta.ReasoningContent, choice.Delta.Reasoning); thought != "" {
+						out.Reasoning += thought
 						if h.onThinking != nil {
 							h.onThinking()
+						}
+						if h.onReasoning != nil {
+							h.onReasoning(thought)
 						}
 					}
 					if choice.Delta.Content != "" {
 						out.Text += choice.Delta.Content
 						if h.onText != nil {
 							h.onText(jsconv.Len(choice.Delta.Content))
+						}
+						if h.onContent != nil {
+							h.onContent(choice.Delta.Content)
 						}
 					}
 					for _, tc := range choice.Delta.ToolCalls {
@@ -201,6 +220,9 @@ func (s *Service) chatCompletion(req request, h hooks) (*reply, error) {
 							if h.onText != nil {
 								h.onText(jsconv.Len(tc.Function.Arguments))
 							}
+						}
+						if h.onToolDelta != nil && (tc.Function.Arguments != "" || tc.Function.Name != "") {
+							h.onToolDelta(i, call.Name, tc.Function.Arguments)
 						}
 					}
 					if choice.FinishReason != nil && *choice.FinishReason != "" {

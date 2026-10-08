@@ -453,6 +453,9 @@ func (s *Service) runBuilder(messages []message, existing []string, h hooks) (*b
 			if len(problems) == 0 || round >= maxBuildRounds-1 {
 				break
 			}
+			if h.onNote != nil {
+				h.onNote("Memperbaiki pemakaian API database")
+			}
 			content := r.Text
 			if content == "" {
 				content = "(selesai)"
@@ -480,8 +483,12 @@ func (s *Service) runBuilder(messages []message, existing []string, h hooks) (*b
 			assistant["reasoning_content"] = r.Reasoning
 		}
 		convo = append(convo, assistant)
-		for _, c := range r.ToolCalls {
-			convo = append(convo, message{"role": "tool", "tool_call_id": c.ID, "content": stageToolCall(c, st, existing, truncated)})
+		for n, c := range r.ToolCalls {
+			result := stageToolCall(c, st, existing, truncated)
+			if h.onToolResult != nil {
+				h.onToolResult(n, c, result)
+			}
+			convo = append(convo, message{"role": "tool", "tool_call_id": c.ID, "content": result})
 		}
 	}
 	out.message = planMessage(text)

@@ -125,6 +125,35 @@ test('Builder: Batalkan mengembalikan file, folder, dan tabel seperti semula', a
   assert.equal((await user.post(`/api/ai/messages/${final.message.id}/revert`)).status, 409);
 });
 
+test('Builder: langkah AI & isi file yang sedang ditulis dikirim sebagai event', async () => {
+  const user = await stack.register();
+  stack.ai.script.push(
+    { reasoning: 'Perlu halaman menu.', ...calls(
+      call('write_file', { path: 'menu.html', content: '<a href="#">Menu</a>\n<p>Kopi "susu"</p>' }),
+      call('create_table', { name: 'produk', columns: [{ name: 'nama', type: 'text' }] }),
+    ) },
+    calls(call('write_file', { path: 'menu.html', content: '<p>Menu</p>' })),
+    { text: 'Selesai.' },
+  );
+  const started = await user.startPrompt('buat menu', { mode: 'build' });
+  const events = await user.jobEvents(started.body.assistantMessage.id);
+  const steps = events.filter((e) => e.type === 'step');
+  assert.deepEqual(steps, [
+    { type: 'step', id: 1, tool: 'write_file', target: 'menu.html', state: 'run' },
+    { type: 'step', id: 2, tool: 'create_table', target: 'produk', state: 'run' },
+    { type: 'step', id: 1, state: 'warn', note: '1 tautan <a href="#"> tidak menuju apa pun — hapus atau arahkan ke seksi nyata' },
+    { type: 'step', id: 2, state: 'ok', note: '' },
+    { type: 'step', id: 3, tool: 'write_file', target: 'menu.html', state: 'run' },
+    { type: 'step', id: 3, state: 'ok', note: '' },
+  ]);
+  const draft = (id) => events.filter((e) => e.type === 'draft' && e.id === id).map((e) => e.text).join('');
+  assert.equal(draft(1), '<a href="#">Menu</a>\n<p>Kopi "susu"</p>');
+  assert.equal(draft(3), '<p>Menu</p>');
+  assert.deepEqual(events.filter((e) => e.type === 'round').length, 2);
+  assert.equal(events.find((e) => e.type === 'reasoning').text, 'Perlu halaman menu.');
+  assert.equal(events.at(-1).type, 'done');
+});
+
 test('Builder: panggilan tool yang salah dijawab dengan pesan kesalahan, bukan diterapkan', async () => {
   const user = await stack.register();
   stack.ai.script.push(
@@ -317,16 +346,21 @@ test('job: progres bisa diikuti ulang kapan saja, juga setelah selesai', async (
   const id = started.body.assistantMessage.id;
   const events = await user.jobEvents(id);
   const types = events.map((e) => e.type);
-  assert.deepEqual(types.filter((t) => t !== 'progress'), ['running', 'thinking', 'done']);
+  assert.deepEqual(types.filter((t) => !['progress', 'reasoning', 'say'].includes(t)), ['running', 'thinking', 'done']);
+  // Proses berpikir & teks jawaban ikut dikirim (untuk panel "Proses AI").
+  const textOf = (list, type) => list.filter((e) => e.type === type).map((e) => e.text).join('');
+  assert.equal(textOf(events, 'reasoning'), 'berpikir...');
+  assert.equal(textOf(events, 'say'), 'a'.repeat(500) + 'b'.repeat(500));
   assert.ok(types.includes('progress'));
   assert.equal(events.filter((e) => e.type === 'progress').at(-1).chars, 1000);
   assert.equal(events.at(-1).message.content.length, 1000);
 
   // Sambung ulang setelah selesai: event diputar ulang dan langsung ditutup.
-  // Event progres hanya disimpan yang terbaru.
+  // Event progres hanya disimpan yang terbaru; potongan teks berurutan disatukan.
   const replay = await user.jobEvents(id);
-  assert.deepEqual(replay.map((e) => e.type), ['running', 'thinking', 'progress', 'done']);
-  assert.equal(replay[2].chars, 1000);
+  assert.deepEqual(replay.map((e) => e.type).filter((t) => t !== 'say'), ['running', 'thinking', 'reasoning', 'progress', 'done']);
+  assert.equal(replay.find((e) => e.type === 'progress').chars, 1000);
+  assert.equal(textOf(replay, 'say'), 'a'.repeat(500) + 'b'.repeat(500));
 
   const other = await stack.register();
   assert.equal((await other.raw('GET', `/api/ai/jobs/${id}/events`)).status, 404);
@@ -415,7 +449,7 @@ test('provider sibuk (503): dicoba ulang lalu berhasil', async () => {
   stack.ai.script.push({ status: 503, retryAfter: 1 }, { text: 'Akhirnya.' });
   const started = await user.startPrompt('sibuk dulu');
   const events = await user.jobEvents(started.body.assistantMessage.id);
-  assert.deepEqual(events.map((e) => e.type), ['running', 'retry', 'running', 'done']);
+  assert.deepEqual(events.map((e) => e.type), ['running', 'retry', 'running', 'say', 'done']);
   assert.deepEqual(events[1], { type: 'retry', attempt: 1, max: 3, seconds: 1 });
   assert.equal(events.at(-1).message.content, 'Akhirnya.');
 });

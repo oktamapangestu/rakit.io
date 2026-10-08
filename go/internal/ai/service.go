@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -589,10 +591,18 @@ type job struct {
 func (j *job) emit(ev event) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	// Event progres/antrean cukup disimpan yang terbaru, supaya buffer tidak membengkak.
+	// Event progres/antrean cukup disimpan yang terbaru, dan potongan teks berurutan (proses berpikir, isi
+	// file) disatukan, supaya buffer untuk editor yang menyambung lagi tidak membengkak. Event yang sudah
+	// masuk antrean listener tidak diubah: gabungannya event baru.
 	kind := ev["type"]
-	if n := len(j.events); n > 0 && j.events[n-1]["type"] == kind && (kind == "progress" || kind == "queued") {
-		j.events[n-1] = ev
+	if kind == "progress" || kind == "queued" {
+		j.events = slices.DeleteFunc(j.events, func(old event) bool { return old["type"] == kind })
+	}
+	n := len(j.events)
+	if n > 0 && j.events[n-1]["type"] == kind && (kind == "reasoning" || kind == "say" || kind == "draft") && j.events[n-1]["id"] == ev["id"] {
+		merged := maps.Clone(ev)
+		merged["text"] = j.events[n-1]["text"].(string) + ev["text"].(string)
+		j.events[n-1] = merged
 	} else {
 		j.events = append(j.events, ev)
 	}
@@ -715,6 +725,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 
 		chars, lastSent := 0, 0
 		thinkingSent := false
+		act := newActivity(send)
 		h := hooks{
 			ctx: j.ctx,
 			onText: func(n int) {
@@ -735,8 +746,14 @@ func (s *Service) runJob(j *job, in jobInput) {
 				s.db.Exec("UPDATE ai_messages SET status = ? WHERE id = ?", "running", in.messageID)
 				send(event{"type": "running"})
 			},
-			onRetry: retry,
-			onModel: func(model string) { usedModel = model },
+			onRetry:      retry,
+			onModel:      func(model string) { usedModel = model },
+			onStart:      act.start,
+			onReasoning:  act.reasoning,
+			onContent:    act.say,
+			onToolDelta:  act.toolDelta,
+			onToolResult: act.toolResult,
+			onNote:       act.note,
 		}
 		system := s.buildPrompt
 		if in.mode == "plan" {
@@ -781,6 +798,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 			outTokens += result.outTok
 			text, changes = result.message, result.changes
 		}
+		act.flush()
 		if text == "" && len(changes) == 0 {
 			return &failure{"bad_output", "AI tidak memberi jawaban. Coba lagi."}
 		}

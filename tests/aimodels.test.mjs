@@ -168,7 +168,7 @@ test('antrean: lebih dari batas menunggu giliran; antrean penuh ditolak dengan k
     // Yang pertama dihentikan: yang mengantre langsung jalan.
     await a.post(`/api/ai/jobs/${first.body.assistantMessage.id}/cancel`);
     const events = await b.jobEvents(second.body.assistantMessage.id);
-    assert.deepEqual(events.map((e) => e.type), ['queued', 'running', 'done']);
+    assert.deepEqual(events.map((e) => e.type).filter((t) => t !== 'say'), ['queued', 'running', 'done']);
     assert.deepEqual(events[0], { type: 'queued', position: 1, total: 1 });
   } finally {
     await stack.stop();

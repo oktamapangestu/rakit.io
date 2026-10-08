@@ -2482,6 +2482,111 @@
     attachJob(started.assistantMessage);
   }
 
+  // ---------- Proses AI ----------
+  // Yang dikerjakan AI selama job berjalan (event dari server, lihat go/internal/ai/activity.go): proses
+  // berpikir, teks jawaban, dan langkah-langkahnya (menulis file — dengan isi yang sedang ditulis —, membuat
+  // tabel, menghapus file). Setelah selesai diringkas jadi "Lihat proses AI" di atas jawaban.
+  const STEP_LABEL = { write_file: 'Menulis', delete_file: 'Menghapus', create_table: 'Tabel' };
+  function activityView() {
+    const box = $('#aiMessages');
+    const summary = h('summary', {}, 'Proses AI');
+    const el = h('details', { class: 'ai-activity', open: true }, summary);
+    let thinking = null;
+    let say = null;
+    let list = null;
+    let steps = new Map(); // id -> { li, code, label }
+    let count = 0;
+    const started = Date.now();
+
+    // Ikuti ke bawah hanya bila pengguna tidak sedang menggulir ke atas membaca.
+    const follow = (scroller, run) => {
+      const stick = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40;
+      run();
+      if (stick) scroller.scrollTop = scroller.scrollHeight;
+    };
+    const append = (run) => follow(box, run);
+    const ensureList = () => {
+      if (!list) {
+        list = h('ol', { class: 'ai-steps' });
+        el.append(list);
+      }
+      return list;
+    };
+
+    function reset() {
+      el.replaceChildren(summary);
+      el.open = true;
+      thinking = say = list = null;
+      steps = new Map();
+      count = 0;
+    }
+
+    function handle(ev) {
+      if (ev.type === 'reasoning') {
+        if (!thinking) {
+          thinking = h('div', { class: 'ai-thinking-text' });
+          el.append(h('details', { class: 'ai-thinking', open: true }, h('summary', {}, 'Proses berpikir'), thinking));
+        }
+        append(() => follow(thinking, () => thinking.append(ev.text)));
+      } else if (ev.type === 'say') {
+        if (!say) {
+          say = h('div', { class: 'ai-say' });
+          say.raw = '';
+          el.append(say);
+        }
+        // Mode Plan menjawab di dalam <message>…</message>; tag-nya tidak perlu terlihat.
+        say.raw += ev.text;
+        append(() => { say.textContent = say.raw.replace(/<\/?message>/g, '').trim(); });
+      } else if (ev.type === 'round') {
+        // Model dipanggil lagi: proses berpikir & teks berikutnya mulai di paragraf baru.
+        if (thinking) thinking.append('\n\n');
+        say = null;
+        for (const step of steps.values()) step.code?.closest('details')?.removeAttribute('open');
+      } else if (ev.type === 'step') {
+        let step = steps.get(ev.id);
+        if (!step) {
+          // Mulai menulis: proses berpikir dilipat, tempat untuk isi file yang sedang ditulis disiapkan.
+          el.querySelector('.ai-thinking')?.removeAttribute('open');
+          count += 1;
+          const label = h('span', { class: 'ai-step-label' }, `${STEP_LABEL[ev.tool] || ev.tool} `, h('code', {}, ev.target || '…'));
+          const li = h('li', { class: 'ai-step run' });
+          if (ev.tool === 'write_file') {
+            const code = h('pre', { class: 'ai-draft' });
+            li.append(h('details', { open: true }, h('summary', {}, label), code));
+            step = { li, code };
+          } else {
+            li.append(label);
+            step = { li };
+          }
+          steps.set(ev.id, step);
+          append(() => ensureList().append(li));
+        }
+        if (ev.state && ev.state !== 'run') {
+          step.li.className = `ai-step ${ev.state}`;
+          step.li.querySelector('details')?.removeAttribute('open');
+          const note = ev.state === 'cancel' ? 'terputus, diulang' : ev.note;
+          if (note) step.li.append(h('small', {}, ev.state === 'warn' ? `${note} — AI memperbaikinya` : note));
+        }
+      } else if (ev.type === 'draft') {
+        const step = steps.get(ev.id);
+        if (step?.code) append(() => follow(step.code, () => step.code.append(ev.text)));
+      } else if (ev.type === 'note') {
+        append(() => ensureList().append(h('li', { class: 'ai-step note' }, ev.text)));
+      }
+    }
+
+    // Selesai: dilipat jadi ringkasan; dibuang bila tidak ada yang bisa dilihat (model tanpa proses berpikir).
+    function finish() {
+      if (el.children.length <= 1) return el.remove();
+      const secs = Math.max(1, Math.round((Date.now() - started) / 1000));
+      summary.textContent = `Lihat proses AI · ${count ? `${count} langkah · ` : ''}${secs} dtk`;
+      el.open = false;
+      el.querySelectorAll('details').forEach((d) => d.removeAttribute('open'));
+    }
+
+    return { el, reset, handle, finish };
+  }
+
   // Ikuti progres job di server. Koneksi yang putus disambung lagi; job tetap jalan di server.
   async function attachJob(message) {
     const box = $('#aiMessages');
@@ -2513,7 +2618,8 @@
       await api('POST', `/api/ai/jobs/${message.id}/cancel`).catch((err) => toast(err.message, 'error'));
     };
     const loading = h('div', { class: 'msg loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), status, stopBtn);
-    box.append(loading);
+    const activity = activityView();
+    box.append(activity.el, loading);
     aiScroll();
 
     let final = null;
@@ -2526,7 +2632,9 @@
           return;
         }
         if (!res.ok) throw new Error(`Gagal (${res.status})`);
+        activity.reset(); // server mengirim ulang semua event sejak awal job
         for await (const event of readEvents(res)) {
+          activity.handle(event);
           if (event.credits) { ai.credits = event.credits; renderCredits(); }
           if (event.type === 'vision') setPhase({ kind: 'vision' });
           else if (event.type === 'queued') setPhase({ kind: 'queued', position: event.position, total: event.total });
@@ -2541,6 +2649,7 @@
 
     clearInterval(statusTimer);
     loading.remove();
+    activity.finish();
     ai.busy = false;
     ai.jobId = null;
     ai.stream = null;
