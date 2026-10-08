@@ -138,3 +138,35 @@ test('teks dari JavaScript: string utuh di file JS ditemukan & ditulis ulang den
   assert.equal(encodeLiteral("Jangan 'lupa'\nya", "'"), "Jangan \\'lupa\\'\\nya");
   assert.equal(encodeLiteral('Rp ${harga}', '`'), 'Rp \\${harga}');
 });
+
+test('Alpine: teks di sekitar x-text bisa diubah; teks x-text sendiri dilaporkan sebagai terikat data', () => {
+  const src = '<body><p class="count">Kamu sudah klik <span x-text="klik"></span> kali</p><h3 x-text="p.nama"></h3></body>';
+  const P = 'body > p:nth-of-type(1)';
+  assert.equal(edit(src, P, ['Kamu sudah klik ', '3', ' kali'], ['Sudah diklik ', '3', ' kali']),
+    '<body><p class="count">Sudah diklik <span x-text="klik"></span> kali</p><h3 x-text="p.nama"></h3></body>');
+  assert.deepEqual({ ...apply(src, P, ['Kamu sudah klik ', '3', ' kali'], ['Kamu sudah klik ', '9', ' kali'], decode) }, { error: 'bound', index: 1 });
+  assert.equal(apply(src, P, ['Kamu sudah klik ', '3', ' kali'], ['Sudah ', '9', ' kali'], decode).error, 'mixed');
+  // Diklik (after = before): berhasil, dengan daftar teks terikat.
+  assert.deepEqual([...apply(src, 'body > h3:nth-of-type(1)', ['Kopi Susu'], ['Kopi Susu'], decode).bound], [0]);
+  assert.deepEqual({ ...apply(src, 'body > h3:nth-of-type(1)', ['Kopi Susu'], 'Kopi Gula Aren', decode) }, { error: 'bound', index: 0 });
+});
+
+test('Alpine: selector menembus <template> x-for / x-if ke isinya', () => {
+  const src = '<body><ul><template x-for="p in produk" :key="p.id"><li><b x-text="p.nama"></b> <button>Beli</button></li></template><li>Statis</li></ul></body>';
+  assert.equal(edit(src, 'body > ul:nth-of-type(1) > template:nth-of-type(1) > li:nth-of-type(1) > button:nth-of-type(1)', ['Beli'], ['Pesan']),
+    src.replace('>Beli<', '>Pesan<'));
+  assert.equal(edit(src, 'body > ul:nth-of-type(1) > li:nth-of-type(1)', ['Statis'], ['Tetap']), src.replace('Statis', 'Tetap'));
+});
+
+test('string JS di HTML halaman: x-data di atribut dan <script> tanpa src', () => {
+  const { findHtmlLiterals, encodeHtmlLiteral } = context.rakitTextEdit;
+  const src = `<body><div x-data="{ judul: 'Promo Akhir Tahun', items: ['Kopi & Teh'] }"><h2 x-text="judul"></h2></div>
+<script src="/app.js"></script><script>document.title = "Promo Akhir Tahun";</script><p>'Promo Akhir Tahun'</p></body>`;
+  const found = [...findHtmlLiterals(src, 'Promo Akhir Tahun')];
+  assert.equal(found.length, 2, 'atribut & <script> inline; teks halaman biasa tidak ikut');
+  const [attr] = found.filter((f) => f.attr);
+  const out = src.slice(0, attr.start) + encodeHtmlLiteral('Diskon "Besar" & Hemat', attr) + src.slice(attr.end);
+  assert.ok(out.includes(`x-data="{ judul: 'Diskon &quot;Besar&quot; &amp; Hemat',`));
+  const [amp] = findHtmlLiterals(src, 'Kopi & Teh');
+  assert.equal(src.slice(amp.start, amp.end), 'Kopi & Teh');
+});

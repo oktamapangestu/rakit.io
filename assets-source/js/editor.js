@@ -926,42 +926,106 @@
     return path ? fileModel(path) : Promise.resolve({ error: 'Halaman ini tidak ditemukan di file project, jadi tidak bisa diubah dari preview.' });
   }
 
-  // Tempat teks elemen di sumber: HTML halaman, atau string di file JS project bila teksnya ditulis skrip.
-  // after = before untuk sekadar memeriksa (saat teks diklik, sebelum diketik).
-  // Hasil: { path, model, edits } atau { error }.
+  // Tempat teks elemen di sumber: HTML halaman; untuk teks yang diisi skrip/Alpine (x-text, innerHTML), baris
+  // database asalnya (dikenali preview dari data /api/db yang dibaca halaman) atau string di HTML halaman /
+  // file JS project. after = before untuk sekadar memeriksa (saat teks diklik, sebelum diketik).
+  // Hasil: { path, model, edits, reload } | { db, value } | { error, ai } — ai: asal teksnya tidak bisa diubah
+  // langsung (mis. hitungan), jadi perubahannya diteruskan ke AI.
   async function findText(m, after) {
     const page = await pageModel(m.page);
     if (page.error) return page;
-    const res = window.rakitTextEdit.apply(page.model.getValue(), m.selector, m.before, after, decodeHtml);
-    if (!res.error) return { ...page, edits: res.edits };
+    const src = page.model.getValue();
+    const db = Array.isArray(m.db) ? m.db : [];
+    const res = window.rakitTextEdit.apply(src, m.selector, m.before, after, decodeHtml);
+    if (!res.error) {
+      // Diklik: teks yang seluruhnya diisi dari data harus punya asal yang bisa diubah.
+      const filled = m.before.map((t, i) => [t, i]).filter(([t]) => /\S/.test(t)).map(([, i]) => i);
+      if (after === m.before && filled.length && filled.every((i) => res.bound.includes(i))) {
+        const found = [];
+        for (const i of filled) found.push(await dynamicText(page, db[i], m.before[i], m.before[i]));
+        return found.find((f) => !f.error) || found[0];
+      }
+      // Isi <template> (x-for / x-if) dipakai semua salinannya: muat ulang preview supaya semuanya ikut berubah.
+      return { ...page, edits: res.edits, reload: m.selector.includes('template:') };
+    }
+    if (res.error === 'mixed') return { error: 'Teks ini memuat bagian dari data. Ubah satu bagian saja dalam sekali edit.', ai: true };
 
-    // Hanya teks polos satu bagian (tanpa tebal/tautan di dalamnya) yang dicari di JS.
-    const filled = m.before.map((t, i) => [t, i]).filter(([t]) => /\S/.test(t));
-    const old = filled.length === 1 ? filled[0][0].trim() : '';
-    const next = (typeof after === 'string' ? after : filled.length === 1 ? after[filled[0][1]] : '').trim();
-    const notFound = { error: `Teks ini tidak tertulis di ${page.path} atau file JS mana pun — kemungkinan dirakit JavaScript dari data (mis. hitungan atau nama pengguna). Ubah lewat kode atau minta AI.` };
-    if (!old) return notFound;
+    let index = res.error === 'bound' ? res.index : -1;
+    if (index < 0) {
+      // Elemen tidak ada di HTML (dibuat skrip): hanya teks polos satu bagian yang dicari asalnya.
+      const filled = m.before.map((t, i) => [t, i]).filter(([t]) => /\S/.test(t));
+      if (filled.length !== 1) return { error: `Teks ini tidak tertulis di ${page.path} — kemungkinan dirakit JavaScript.`, ai: true };
+      index = filled[0][1];
+    }
+    const next = typeof after === 'string' ? after : after[index];
+    return dynamicText(page, db[index], m.before[index].trim(), next.trim());
+  }
+
+  // Tabel database project (untuk mencocokkan asal teks dari preview); dimuat bila tab Data belum dibuka.
+  async function dbTableList() {
+    if (!dbState.tables.length) {
+      try {
+        dbState.tables = (await api('GET', '/api/database/tables')).tables;
+      } catch { /* tanpa tabel: asal dari database tidak dipakai */ }
+    }
+    return dbState.tables;
+  }
+
+  // Kolom database asal teks/gambar menurut preview: { table, column, numeric } atau null.
+  async function dbTarget(source, types) {
+    if (!source || typeof source !== 'object' || source.ambiguous || source.id == null || typeof source.column !== 'string') return null;
+    const tables = await dbTableList();
+    let name = source.table;
+    if (typeof name !== 'string') {
+      const via = source.via && tables.find((t) => t.name === source.via.table)?.columns.find((c) => c.name === source.via.column);
+      name = via?.type === 'reference' ? via.refTable : null;
+    }
+    const column = tables.find((t) => t.name === name)?.columns.find((c) => c.name === source.column);
+    return column && types.includes(column.type) ? { table: name, id: source.id, column: column.name, numeric: Boolean(source.numeric) } : null;
+  }
+
+  // Asal teks yang diisi skrip: baris database, lalu string di HTML halaman atau file JS.
+  async function dynamicText(page, source, old, next) {
+    const target = await dbTarget(source, ['text', 'number', 'date']);
+    if (target) {
+      // Angka berformat (Rp 15.000) disimpan sebagai angkanya saja.
+      const value = target.numeric ? next.replace(/\D/g, '') : next;
+      if (target.numeric && !value) return { error: 'Kolom ini berisi angka: tulis angkanya, mis. 15.000.' };
+      return { db: target, value };
+    }
     const found = [];
-    for (const e of state.entries) {
-      if (e.type !== 'file' || extOf(e.path) !== 'js' || (e.size ?? 0) > 1048576) continue;
-      const file = await fileModel(e.path);
-      if (file.error) continue;
-      for (const lit of window.rakitTextEdit.findLiterals(file.model.getValue(), old)) found.push({ ...file, lit });
+    if (old) {
+      for (const lit of window.rakitTextEdit.findHtmlLiterals(page.model.getValue(), old)) found.push({ ...page, lit, html: true });
+      for (const e of state.entries) {
+        if (e.type !== 'file' || extOf(e.path) !== 'js' || (e.size ?? 0) > 1048576) continue;
+        const file = await fileModel(e.path);
+        if (file.error) continue;
+        for (const lit of window.rakitTextEdit.findLiterals(file.model.getValue(), old)) found.push({ ...file, lit });
+      }
     }
-    if (found.length > 1) {
-      return { error: `Teks ini ditulis JavaScript dan muncul ${found.length} kali di file JS, jadi tidak jelas mana yang diubah. Ubah lewat kode atau minta AI.` };
+    if (found.length === 1) {
+      const [{ path, model, lit, html }] = found;
+      const text = html ? window.rakitTextEdit.encodeHtmlLiteral(next, lit) : window.rakitTextEdit.encodeLiteral(next, lit.quote);
+      return { path, model, edits: next === old ? [] : [{ start: lit.start, end: lit.end, text }] };
     }
-    if (!found.length) return notFound;
-    const [{ path, model, lit }] = found;
-    const edits = next === old ? [] : [{ start: lit.start, end: lit.end, text: window.rakitTextEdit.encodeLiteral(next, lit.quote) }];
-    return { path, model, edits };
+    if (found.length > 1) return { error: `Teks ini ditulis JavaScript dan muncul ${found.length} kali di kode.`, ai: true };
+    if (source?.ambiguous) return { error: `Teks ini ada di ${source.ambiguous} baris data sekaligus.`, ai: true };
+    return { error: 'Teks ini dihitung JavaScript (mis. hitungan atau gabungan data).', ai: true };
+  }
+
+  // Teks/gambar yang tidak bisa diubah langsung: minta AI mengubahnya (kotak AI diisi, belum dikirim).
+  function editViaAi(page, what) {
+    askAi(`Di halaman ${pageFile(String(page)) || page}, ${what} Bagian itu ditampilkan oleh JavaScript, jadi ubah di sumbernya (kode atau data).`);
+    toast('Bagian ini dibuat JavaScript — permintaannya sudah disiapkan di AI, tinggal kirim');
+    reloadPreview();
   }
 
   // Terapkan perubahan ke model sebagai satu langkah undo, lalu simpan tanpa memuat ulang preview.
-  function commitEdits(path, model, edits, what) {
+  // reload: muat ulang preview sesudah disimpan (mis. isi <template> yang tampil di banyak salinan).
+  function commitEdits(path, model, edits, what, { reload = false } = {}) {
     // File dibuka sebagai tab (tanpa pindah tab), supaya perubahannya terlihat & bisa di-undo.
     if (!state.tabs.includes(path)) state.tabs.push(path);
-    if (state.autosave) quietSaves.add(path);
+    if (state.autosave && !reload) quietSaves.add(path);
     model.pushEditOperations([], edits.map((e) => ({
       range: monaco.Range.fromPositions(model.getPositionAt(e.start), model.getPositionAt(e.end)),
       text: e.text,
@@ -976,17 +1040,35 @@
     const valid = typeof m.selector === 'string' && Array.isArray(m.before) && m.before.every((t) => typeof t === 'string')
       && (typeof m.after === 'string' || (Array.isArray(m.after) && m.after.length === m.before.length && m.after.every((t) => typeof t === 'string')));
     if (!valid) return;
+    if (m.db !== undefined && !Array.isArray(m.db)) return;
     const res = await findText(m, m.after);
+    if (res.error && res.ai) {
+      const flat = (v) => (Array.isArray(v) ? v.join('') : v).replace(/\s+/g, ' ').trim();
+      return editViaAi(m.page, `ubah teks "${flat(m.before)}" menjadi "${flat(m.after)}".`);
+    }
     if (res.error) return textEditFailed(res.error);
-    if (res.edits.length) commitEdits(res.path, res.model, res.edits, 'Teks');
+    if (res.db) return saveDbValue(res.db, { [res.db.column]: res.value }, 'Teks');
+    if (res.edits.length) commitEdits(res.path, res.model, res.edits, 'Teks', { reload: res.reload });
+  }
+
+  // Simpan perubahan dari preview ke baris database asalnya (preview sudah menampilkan nilai barunya).
+  async function saveDbValue(target, values, what) {
+    try {
+      await api('PATCH', `${tableUrl(target.table)}/rows/${encodeURIComponent(target.id)}`, values);
+      toast(`${what} diubah di database: tabel ${target.table}, baris #${target.id}`);
+      if ($('#editorArea').dataset.mode === 'data' && dbState.active === target.table) dbLoadRows();
+    } catch (err) {
+      textEditFailed(err.message);
+    }
   }
 
   // Teks diklik di preview: periksa dulu apakah ada di sumber, supaya pengguna tidak mengetik sia-sia.
   async function checkTextEdit(m) {
     if (typeof m.selector !== 'string' || !Array.isArray(m.before) || !m.before.every((t) => typeof t === 'string')) return;
     const res = await findText(m, m.before);
-    toPicker({ type: 'textChecked', id: m.id, ok: !res.error, file: res.path });
-    if (res.error) toast(res.error, 'error');
+    toPicker({ type: 'textChecked', id: m.id, ok: !res.error, ai: Boolean(res.ai), file: res.path });
+    if (res.error && res.ai) toast(`${res.error} Ketik perubahannya — nanti diteruskan ke AI.`);
+    else if (res.error) toast(res.error, 'error');
   }
 
   // ---------- Ganti gambar di preview ----------
@@ -1008,6 +1090,7 @@
 
   function openImageEdit(m) {
     if (typeof m.selector !== 'string' || !isStr(m.src) || !isStr(m.alt) || typeof m.shown !== 'string') return;
+    if ((m.db != null && typeof m.db !== 'object') || (m.altDb != null && typeof m.altDb !== 'object')) return;
     if (m.picture) {
       return toast('Gambar ini memakai <picture> dengan beberapa versi gambar, jadi tidak bisa diganti dari preview. Ubah lewat kode atau minta AI.', 'error');
     }
@@ -1079,12 +1162,36 @@
       const page = await pageModel(m.page);
       if (page.error) return textEditFailed(page.error);
       const res = window.rakitTextEdit.applyImage(page.model.getValue(), m.selector, { src: m.src, alt: m.alt }, changes, decodeHtml);
-      if (res.error) {
-        return textEditFailed(`Gambar ini tidak ditemukan di ${page.path}: mungkin dibuat JavaScript atau dimuat dari file lain. Ubah lewat kode atau minta AI.`);
+      if (!res.error) {
+        if (!res.edits.length) return;
+        // Gambar di <template> (x-for / x-if) tampil di banyak salinan: muat ulang preview.
+        const reload = m.selector.includes('template:');
+        commitEdits(page.path, page.model, res.edits, 'Gambar', { reload });
+        if (!reload) toPicker({ type: 'setImage', page: m.page, selector: m.selector, ...changes });
+        return;
       }
-      if (!res.edits.length) return;
-      commitEdits(page.path, page.model, res.edits, 'Gambar');
-      toPicker({ type: 'setImage', page: m.page, selector: m.selector, ...changes });
+      // Gambar dari database (mis. kolom foto produk): ubah barisnya.
+      const srcTarget = await dbTarget(m.db, ['image', 'text']);
+      const altTarget = await dbTarget(m.altDb, ['text']);
+      const same = (a, b) => a && b && a.table === b.table && String(a.id) === String(b.id);
+      if ((!changes.src || srcTarget) && (changes.alt === undefined || altTarget || same(srcTarget, altTarget))) {
+        const target = srcTarget || altTarget;
+        if (target) {
+          const values = {};
+          if (changes.src) values[srcTarget.column] = changes.src;
+          if (changes.alt !== undefined && altTarget) {
+            if (same(altTarget, target)) values[altTarget.column] = changes.alt;
+            else await saveDbValue(altTarget, { [altTarget.column]: changes.alt }, 'Teks alt');
+          }
+          if (Object.keys(values).length) await saveDbValue(target, values, 'Gambar');
+          toPicker({ type: 'setImage', page: m.page, selector: m.selector, ...changes });
+          return;
+        }
+      }
+      const newAlt = changes.alt !== undefined ? `"${changes.alt}"` : '';
+      editViaAi(m.page, changes.src
+        ? `ganti gambar "${m.src ?? ''}" menjadi "${changes.src}"${newAlt ? `, dan ubah teks alt-nya menjadi ${newAlt}` : ''}.`
+        : `ubah teks alt gambar "${m.src ?? ''}" menjadi ${newAlt}.`);
     };
 
     root.replaceChildren(h('form', { class: 'modal image-modal imgpick-modal', role: 'dialog', 'aria-label': 'Ganti gambar', onsubmit: submit },

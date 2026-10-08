@@ -32,20 +32,143 @@
     return r.width >= 80 && r.height >= 40 && r.width * r.height >= 8000;
   }
   function blockOf(el) {
-    for (; el && el !== document.body; el = el.parentElement) if (isBlock(el)) return el;
+    for (; el && el !== document.body; el = el.parentElement) if (isBlock(el) && !fromAlpine(el)) return el;
     return null;
   }
 
+  // Elemen yang dibuat Alpine.js dari <template x-for / x-if / x-teleport> tidak ada di file HTML apa adanya:
+  // sumbernya adalah isi template-nya (satu elemen akar). Elemen ini tidak ikut dihitung di :nth-of-type
+  // saudara-saudaranya, dan selectornya menembus template: … > template:nth-of-type(1) > li:nth-of-type(1).
+  function cloned(el) {
+    if (el._x_refreshXForScope || el._x_teleportBack) return true;
+    for (let s = el.previousElementSibling; s; s = s.previousElementSibling) if (s._x_currentIfEl === el) return true;
+    return false;
+  }
+  function fromAlpine(el) {
+    for (; el && el !== document.body; el = el.parentElement) if (cloned(el)) return true;
+    return false;
+  }
+  function templateOf(el) {
+    if (el._x_teleportBack) return el._x_teleportBack;
+    for (let s = el.previousElementSibling; s; s = s.previousElementSibling) {
+      if (s.localName !== 'template') continue;
+      if (s._x_currentIfEl === el) return s;
+      const lookup = s._x_lookup; // Map (Alpine >= 3.14) atau objek
+      if (lookup && [...(lookup instanceof Map ? lookup.values() : Object.values(lookup))].includes(el)) return s;
+    }
+    return null;
+  }
+
+  // Selector menunjuk posisi di HTML sumber, jadi elemen buatan Alpine dilewati saat menghitung.
   function selectorOf(el) {
     const steps = [];
-    for (; el && el !== document.body; el = el.parentElement) {
-      const tag = el.tagName.toLowerCase();
+    while (el && el !== document.body) {
+      const tpl = cloned(el) && templateOf(el);
+      if (tpl) {
+        steps.unshift(`${el.localName}:nth-of-type(1)`);
+        el = tpl;
+        continue;
+      }
       let n = 1;
-      for (let s = el.previousElementSibling; s; s = s.previousElementSibling) if (s.tagName === el.tagName) n += 1;
-      steps.unshift(`${tag}:nth-of-type(${n})`);
+      for (let s = el.previousElementSibling; s; s = s.previousElementSibling) if (s.tagName === el.tagName && !cloned(s)) n += 1;
+      steps.unshift(`${el.localName}:nth-of-type(${n})`);
+      el = el.parentElement;
     }
     return ['body', ...steps].join(' > ');
   }
+  // Kebalikan selectorOf (bukan document.querySelector, yang ikut menghitung elemen buatan Alpine). Isi
+  // template tidak tampil di halaman, jadi selector yang menembus template tidak menunjuk apa pun.
+  function elementAt(selector) {
+    if (typeof selector !== 'string') return null;
+    const parts = selector.split(' > ');
+    if (parts.shift() !== 'body') return null;
+    let el = document.body;
+    for (const part of parts) {
+      const m = /^([a-z][a-z0-9-]*):nth-of-type\((\d+)\)$/.exec(part);
+      if (!m || m[1] === 'template') return null;
+      let n = Number(m[2]);
+      let next = null;
+      for (const c of el.children) if (c.localName === m[1] && !cloned(c) && --n === 0) { next = c; break; }
+      if (!next) return null;
+      el = next;
+    }
+    return el === document.body ? null : el;
+  }
+
+  // ---------- Data dari database ----------
+  // Baris yang dibaca halaman dari /api/db/<tabel> (lewat response.json()) dicatat, supaya teks/gambar yang
+  // ditampilkan dari data bisa dikenali dan diubah langsung di baris asalnya. Relasi yang di-expand
+  // (<kolom>__ref) dicatat dengan tabel & kolom asalnya; editor mencari tabel tujuannya.
+  const dbRows = []; // { table, via: {table, column} | undefined, row }
+  const seenRows = new WeakSet();
+  function addRow(table, row, via) {
+    if (!row || typeof row !== 'object' || Array.isArray(row) || row.id == null || seenRows.has(row)) return;
+    seenRows.add(row);
+    dbRows.push({ table, via, row });
+    if (!table) return; // expand hanya satu tingkat
+    for (const [key, value] of Object.entries(row)) if (key.endsWith('__ref')) addRow(null, value, { table, column: key.slice(0, -5) });
+  }
+  const readJson = Response.prototype.json;
+  Response.prototype.json = async function json() {
+    const data = await readJson.call(this);
+    try {
+      const u = new URL(this.url, location.href);
+      const m = u.origin === location.origin && /^\/api\/db\/([^/]+)(?:\/[^/]+)?\/?$/.exec(u.pathname);
+      if (m && data && typeof data === 'object') {
+        const table = decodeURIComponent(m[1]);
+        for (const row of Array.isArray(data.rows) ? data.rows : [data]) addRow(table, row);
+      }
+    } catch { /* bukan urusan halaman */ }
+    return data;
+  };
+
+  // Angka yang ditampilkan dengan format (Rp 15.000, 1,250) dicocokkan dari digitnya saja.
+  const digitsOf = (text) => (/^[^\d]*\d[\d.,\s]*[^\d]*$/.test(text) ? text.replace(/\D/g, '') : '');
+
+  // dbSource: baris & kolom database asal sebuah teks (atau src gambar) di halaman, bila jelas satu.
+  // Hasil: { table, via, id, column, numeric } | { ambiguous: n } | null.
+  function dbSource(el, text) {
+    const value = String(text ?? '').trim();
+    if (!value || !dbRows.length) return null;
+    const digits = digitsOf(value);
+    let hits = [];
+    for (const { table, via, row } of dbRows) {
+      for (const [column, v] of Object.entries(row)) {
+        if (column === 'id' || column === 'created_at' || column.endsWith('__ref') || v == null || typeof v === 'object' || typeof v === 'boolean') continue;
+        const exact = String(v).trim() === value;
+        const numeric = !exact && typeof v === 'number' && Number.isInteger(v) && v >= 0 && digits !== '' && String(v) === digits.replace(/^0+(?=\d)/, '');
+        if (exact || numeric) hits.push({ table, via, id: row.id, column, numeric, row });
+      }
+    }
+    const key = (h) => `${h.table || `${h.via.table}.${h.via.column}`}|${h.id}|${h.column}`;
+    hits = [...new Map(hits.map((h) => [key(h), h])).values()];
+    if (hits.length > 1) {
+      // Data yang sama di beberapa baris: pakai scope Alpine elemen ini (mis. item x-for) untuk memilih.
+      const scoped = [];
+      for (let n = el; n; n = n.parentElement) {
+        for (const scope of n._x_dataStack || []) {
+          for (const v of Object.values(scope)) if (v && typeof v === 'object' && !Array.isArray(v) && v.id != null) scoped.push(v);
+        }
+      }
+      const narrowed = hits.filter((h) => scoped.some((o) => o.id === h.id && h.column in o && String(o[h.column]) === String(h.row[h.column])));
+      if (narrowed.length) hits = narrowed;
+    }
+    if (hits.length > 1) return { ambiguous: hits.length };
+    if (!hits.length) return null;
+    const [{ table, via, id, column, numeric }] = hits;
+    return { table, via, id, column, numeric };
+  }
+  // Setelah teks dari database diubah: catatan barisnya ikut diperbarui, supaya edit berikutnya tetap cocok.
+  function updateRow(source, value) {
+    if (!source || !source.column) return;
+    for (const { table, via, row } of dbRows) {
+      if (row.id !== source.id || !(source.column in row)) continue;
+      if (source.table ? table === source.table : via && via.table === source.via.table && via.column === source.via.column) {
+        row[source.column] = source.numeric ? Number(digitsOf(value) || row[source.column]) : value.trim();
+      }
+    }
+  }
+
   function labelOf(el) {
     const heading = el.matches('h1,h2,h3') ? el : el.querySelector('h1,h2,h3');
     const text = heading && heading.textContent.replace(/\s+/g, ' ').trim();
@@ -186,7 +309,7 @@
   // ---------- Edit teks ----------
   // Klik teks di halaman untuk mengubahnya langsung (contenteditable). Saat selesai, isi tiap text node
   // elemen sebelum & sesudah dikirim ke editor, yang menerapkannya ke HTML sumber (textedit.js).
-  let editing = null; // { el, nodes, before, html, id }
+  let editing = null; // { el, nodes, before, html, id, db, ai }
   let checks = 0; // nomor pemeriksaan teks terakhir (balasan lama diabaikan)
   let notice = null; // { el, text, until }: keterangan merah sebentar di elemen yang tidak bisa diedit
   // Teks di dalam elemen ini bukan teks halaman (sama dengan NO_TEXT di textedit.js).
@@ -196,7 +319,8 @@
   function textNodes(el, out = []) {
     for (const n of el.childNodes) {
       if (n.nodeType === Node.TEXT_NODE) out.push(n);
-      else if (n.nodeType === Node.ELEMENT_NODE && !NO_TEXT.has(n.localName)) textNodes(n, out);
+      // Elemen buatan Alpine di dalamnya bersumber di <template>, yang di sumber juga dilewati.
+      else if (n.nodeType === Node.ELEMENT_NODE && !NO_TEXT.has(n.localName) && !cloned(n)) textNodes(n, out);
     }
     return out;
   }
@@ -240,10 +364,14 @@
 
   function startEdit(el, x, y) {
     const nodes = textNodes(el);
-    editing = { el, nodes, before: nodes.map((n) => n.data), html: el.innerHTML, id: ++checks };
+    const before = nodes.map((n) => n.data);
+    // Asal tiap text node di database (bila teksnya ditampilkan dari data /api/db).
+    const db = before.map((t) => (/\S/.test(t) ? dbSource(el, t) : null));
+    editing = { el, nodes, before, html: el.innerHTML, id: ++checks, db, ai: false };
     notice = null;
-    // Editor memeriksa apakah teks ini ada di sumber; bila tidak, edit dibatalkan (lihat onChecked).
-    send({ type: 'textCheck', id: editing.id, page: location.pathname, selector: selectorOf(el), before: editing.before });
+    // Editor mencari asal teks ini (HTML, string JS, database); bila tidak ketemu, perubahannya diteruskan ke
+    // AI, atau edit dibatalkan (lihat onChecked).
+    send({ type: 'textCheck', id: editing.id, page: location.pathname, selector: selectorOf(el), before, db });
     try {
       el.contentEditable = 'plaintext-only';
     } catch {
@@ -264,7 +392,7 @@
   // keep: simpan perubahan (false = kembalikan teks semula).
   function finishEdit(keep) {
     if (!editing) return;
-    const { el, nodes, before, html } = editing;
+    const { el, nodes, before, html, db } = editing;
     editing = null;
     el.removeEventListener('keydown', onEditKey);
     el.removeEventListener('paste', onPaste);
@@ -292,15 +420,23 @@
       el.innerHTML = html;
       return send({ type: 'textError', reason: 'structure' });
     }
-    send({ type: 'textEdit', page: location.pathname, selector: selectorOf(el), before, after });
+    send({ type: 'textEdit', page: location.pathname, selector: selectorOf(el), before, after, db });
+    if (typeof after === 'string') {
+      const one = db.filter(Boolean);
+      if (one.length === 1) updateRow(one[0], after);
+    } else {
+      db.forEach((source, i) => { if (after[i] !== before[i]) updateRow(source, after[i]); });
+    }
   }
 
   function onChecked(m) {
-    if (m.ok || !editing || editing.id !== m.id) return;
+    if (!editing || editing.id !== m.id) return;
+    if (m.ai) editing.ai = true; // teks dihitung skrip: perubahannya diteruskan ke AI saat disimpan
+    if (m.ok || m.ai) return;
     const { el } = editing;
     finishEdit(false);
     el.blur();
-    notice = { el, text: 'Dibuat JavaScript — ubah lewat kode/AI', until: Date.now() + 3500 };
+    notice = { el, text: 'Tidak bisa diubah di sini', until: Date.now() + 3500 };
   }
 
   function onEditKey(e) {
@@ -338,7 +474,9 @@
   function imageTarget(node) {
     return node && node.localName === 'img' && !node.closest(NOT_EDITABLE) ? node : null;
   }
+  let lastImage = null; // gambar terakhir yang diklik (gambar dari data tidak bisa dicari lewat selector)
   function editImage(img) {
+    lastImage = img;
     const picture = img.parentElement && img.parentElement.localName === 'picture' && img.parentElement.querySelector('source');
     send({
       type: 'imageEdit',
@@ -348,16 +486,13 @@
       alt: img.getAttribute('alt'),
       shown: img.currentSrc || img.src,
       picture: Boolean(picture),
+      db: dbSource(img, img.getAttribute('src')),
+      altDb: dbSource(img, img.getAttribute('alt')),
     });
   }
   function setImage(m) {
     if (m.page !== location.pathname || typeof m.selector !== 'string') return;
-    let img = null;
-    try {
-      img = document.querySelector(m.selector);
-    } catch {
-      return;
-    }
+    const img = elementAt(m.selector) || (lastImage && lastImage.isConnected && selectorOf(lastImage) === m.selector ? lastImage : null);
     if (!img || img.localName !== 'img') return;
     if (typeof m.src === 'string' && m.src !== img.getAttribute('src')) {
       img.removeAttribute('srcset');
@@ -379,7 +514,7 @@
     while (layer.children.length > (shown ? 1 : 0)) layer.lastChild.remove();
     if (shown) {
       layer.firstChild.className = editing ? 'box txt sel' : 'box txt sel no';
-      place(layer.firstChild, shown.el, editing ? 'Enter simpan · Esc batal' : notice.text);
+      place(layer.firstChild, shown.el, editing ? (editing.ai ? 'Enter: minta AI mengubah · Esc batal' : 'Enter simpan · Esc batal') : notice.text);
     }
     hoverBox.classList.add('txt');
     if (hovered) place(hoverBox, hovered, hovered.localName === 'img' ? 'Klik untuk ganti gambar' : 'Klik untuk ubah teks');
@@ -419,7 +554,7 @@
       if (next !== mode) setMode(next);
       if (mode === 'pick' && m.type === 'pick' && Array.isArray(m.restore)) {
         // Setelah preview dimuat ulang: pilih lagi blok yang masih ada.
-        selected = m.restore.map((sel) => { try { return document.querySelector(sel); } catch { return null; } }).filter((el) => el && isBlock(el)).slice(0, max);
+        selected = m.restore.map(elementAt).filter((el) => el && isBlock(el)).slice(0, max);
         report();
       }
     } else if (m.type === 'textChecked') {

@@ -181,10 +181,20 @@
     return el;
   }
 
-  function textNodes(el, out = []) {
+  // Isi elemen ini diisi Alpine.js dari data (x-text / x-html): satu text node "terikat" yang di preview boleh
+  // berisi apa saja, dan tidak bisa diubah di HTML (asalnya dicari di string JS atau database).
+  const BOUND = new Set(['x-text', 'x-html']);
+
+  const isBound = (src, el) => el.start !== undefined && el.innerEnd !== undefined && attrs(src, el).some((a) => BOUND.has(a.name));
+  const boundNode = (el) => ({ text: true, bound: true, start: el.innerStart, end: el.innerEnd });
+
+  function textNodes(el, src, out = []) {
+    if (isBound(src, el)) return [boundNode(el)];
     for (const n of el.children) {
       if (n.text) out.push(n);
-      else if (!NO_TEXT.has(n.tag)) textNodes(n, out);
+      else if (NO_TEXT.has(n.tag)) continue;
+      else if (isBound(src, n)) out.push(boundNode(n));
+      else textNodes(n, src, out);
     }
     return out;
   }
@@ -202,41 +212,46 @@
   //   before: isi tiap text node elemen di preview sebelum diubah (urut dokumen)
   //   after:  isi sesudahnya (array sepanjang before), atau string bila seluruh isi elemen kini teks polos
   //   decode: mengubah teks HTML mentah (dengan &amp; dsb.) menjadi teks biasa
-  // Hasil: { edits: [{start, end, text}] } atau { error } (pesan untuk pengguna).
+  // Hasil: { edits: [{start, end, text}], bound: [indeks before yang terikat data] }, atau { error } (kode
+  // untuk pemanggil). error 'bound' + index: hanya satu teks terikat data yang diubah — asalnya dicari di
+  // tempat lain (string JS, database) oleh pemanggil.
   function apply(src, selector, before, after, decode) {
     const el = find(parse(src), src, selector);
     if (!el || el.innerEnd === undefined) return { error: 'missing' };
-    const nodes = textNodes(el);
-    const texts = nodes.map((n) => decode(src.slice(n.start, n.end)));
-    if (norm(texts.join('')) !== norm(before.join(''))) return { error: 'mismatch' };
-
-    if (typeof after === 'string') {
-      // Isi elemen diganti teks polos (format di dalamnya ikut dihapus di preview).
-      if (norm(after) === norm(before.join(''))) return { edits: [] };
-      return { edits: [{ start: el.innerStart, end: el.innerEnd, text: replaceCore(src.slice(el.innerStart, el.innerEnd), after) }] };
-    }
+    const nodes = textNodes(el, src);
+    const texts = nodes.map((n) => (n.bound ? null : decode(src.slice(n.start, n.end))));
+    const same = (k, t) => texts[k] === null || norm(texts[k]) === norm(t);
 
     // Pasangkan text node preview dengan text node sumber. Biasanya sama persis; kalau jumlahnya beda
     // (spasi kosong di antara tag yang diperlakukan berbeda), cukup yang berisi teks.
     let pairs = null;
-    if (nodes.length === before.length && texts.every((t, i) => norm(t) === norm(before[i]))) {
-      pairs = before.map((_, i) => [i, nodes[i]]);
+    if (nodes.length === before.length && before.every((t, i) => same(i, t))) {
+      pairs = before.map((_, i) => [i, i]);
     } else {
-      const filled = (list) => list.map((t, i) => [t, i]).filter(([t]) => norm(t));
-      const a = filled(before);
-      const b = filled(texts);
-      if (a.length !== b.length || a.some(([t], k) => norm(t) !== norm(b[k][0]))) return { error: 'mismatch' };
-      pairs = a.map(([, i], k) => [i, nodes[b[k][1]]]);
-      // Teks diketik di spasi kosong yang tidak punya pasangan di sumber.
-      const paired = new Set(pairs.map(([i]) => i));
-      if (before.some((t, i) => !paired.has(i) && norm(t) !== norm(after[i]))) return { error: 'mismatch' };
+      const a = before.map((t, i) => [t, i]).filter(([t]) => norm(t));
+      const b = texts.map((t, k) => [t, k]).filter(([t]) => t === null || norm(t));
+      if (a.length !== b.length || a.some(([t], j) => !same(b[j][1], t))) return { error: 'mismatch' };
+      pairs = a.map(([, i], j) => [i, b[j][1]]);
+      if (typeof after !== 'string') {
+        // Teks diketik di spasi kosong yang tidak punya pasangan di sumber.
+        const paired = new Set(pairs.map(([i]) => i));
+        if (before.some((t, i) => !paired.has(i) && norm(t) !== norm(after[i]))) return { error: 'mismatch' };
+      }
     }
-    const edits = [];
-    for (const [i, node] of pairs) {
-      if (norm(after[i]) === norm(before[i])) continue;
-      edits.push({ start: node.start, end: node.end, text: replaceCore(src.slice(node.start, node.end), after[i]) });
+    const bound = pairs.filter(([, k]) => nodes[k].bound).map(([i]) => i);
+
+    if (typeof after === 'string') {
+      // Isi elemen diganti teks polos (format di dalamnya ikut dihapus di preview).
+      if (norm(after) === norm(before.join(''))) return { edits: [], bound };
+      if (bound.length) return bound.length === 1 && pairs.length === 1 ? { error: 'bound', index: bound[0] } : { error: 'mixed' };
+      return { edits: [{ start: el.innerStart, end: el.innerEnd, text: replaceCore(src.slice(el.innerStart, el.innerEnd), after) }], bound };
     }
-    return { edits };
+
+    const changed = pairs.filter(([i]) => norm(after[i]) !== norm(before[i]));
+    const changedBound = changed.filter(([, k]) => nodes[k].bound);
+    if (changedBound.length) return changed.length === 1 ? { error: 'bound', index: changed[0][0] } : { error: 'mixed' };
+    const edits = changed.map(([i, k]) => ({ start: nodes[k].start, end: nodes[k].end, text: replaceCore(src.slice(nodes[k].start, nodes[k].end), after[i]) }));
+    return { edits, bound };
   }
 
   // attrs: atribut tag pembuka elemen: [{name, start, end, value: {start, end} | null}] (posisi di src).
@@ -324,5 +339,44 @@
     return out;
   }
 
-  root.rakitTextEdit = { apply, applyImage, parse, find, encodeLiteral, findLiterals };
+  // findHtmlLiterals: string JS bernilai `text` di dalam HTML halaman — di <script> tanpa src dan di nilai
+  // atribut (x-data="{ judul: 'Halo' }", @click="…"). Di atribut, string memakai tanda kutip selain pembatas
+  // atributnya, dan "&" serta tanda kutip pembatas di dalamnya ditulis sebagai entitas.
+  // Hasil: [{start, end, quote, attr}] — attr = tanda kutip pembatas atribut, atau null di <script>.
+  const attrEncode = (s, delim) => s.replace(/&/g, '&amp;').split(delim).join(delim === '"' ? '&quot;' : '&#39;');
+  function findHtmlLiterals(src, text) {
+    const out = [];
+    if (!text) return out;
+    const within = (start, end, delim) => {
+      const part = src.slice(start, end);
+      for (const quote of ["'", '"', '`']) {
+        if (quote === delim) continue;
+        const literal = quote + encodeLiteral(text, quote) + quote;
+        for (const needle of new Set(delim ? [attrEncode(literal, delim), literal] : [literal])) {
+          if (delim && needle.includes(delim)) continue;
+          for (let i = part.indexOf(needle); i >= 0; i = part.indexOf(needle, i + 1)) {
+            if (part[i - 1] === '\\') continue;
+            out.push({ start: start + i + 1, end: start + i + needle.length - 1, quote, attr: delim || null });
+          }
+        }
+      }
+    };
+    const walk = (el) => {
+      for (const n of el.children) {
+        if (n.text) continue;
+        if (n.start !== undefined && n.innerEnd !== undefined) {
+          const list = attrs(src, n);
+          if (n.tag === 'script' && !list.some((a) => a.name === 'src')) within(n.innerStart, n.innerEnd, '');
+          for (const a of list) if (a.value && /["']/.test(src[a.value.start - 1])) within(a.value.start, a.value.end, src[a.value.start - 1]);
+        }
+        walk(n);
+      }
+    };
+    walk(parse(src));
+    return [...new Map(out.map((o) => [o.start, o])).values()];
+  }
+  // encodeHtmlLiteral: isi string baru untuk tempat yang ditemukan findHtmlLiterals.
+  const encodeHtmlLiteral = (text, lit) => (lit.attr ? attrEncode(encodeLiteral(text, lit.quote), lit.attr) : encodeLiteral(text, lit.quote));
+
+  root.rakitTextEdit = { apply, applyImage, parse, find, encodeLiteral, findLiterals, findHtmlLiterals, encodeHtmlLiteral };
 })(typeof window !== 'undefined' ? window : globalThis);
