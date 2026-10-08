@@ -2486,9 +2486,10 @@
   // Yang dikerjakan AI selama job berjalan (event dari server, lihat go/internal/ai/activity.go): proses
   // berpikir, teks jawaban, dan langkah-langkahnya (menulis file — dengan isi yang sedang ditulis —, membuat
   // tabel, menghapus file). Setelah selesai diringkas jadi "Lihat proses AI" di atas jawaban.
-  const STEP_LABEL = { write_file: 'Menulis', delete_file: 'Menghapus', create_table: 'Tabel' };
-  function activityView() {
-    const box = $('#aiMessages');
+  const STEP_LABEL = { write_file: 'Menulis', delete_file: 'Menghapus', create_table: 'Tabel', diagram: 'Menggambar diagram' };
+  // scroller: elemen (atau fungsi yang mengembalikannya) yang digulir mengikuti isi baru — daftar pesan AI,
+  // atau panel proses di kanvas diagram.
+  function activityView(scroller = () => $('#aiMessages')) {
     const summary = h('summary', {}, 'Proses AI');
     const el = h('details', { class: 'ai-activity', open: true }, summary);
     let thinking = null;
@@ -2499,12 +2500,15 @@
     const started = Date.now();
 
     // Ikuti ke bawah hanya bila pengguna tidak sedang menggulir ke atas membaca.
-    const follow = (scroller, run) => {
-      const stick = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40;
+    const follow = (target, run) => {
+      const stick = target.scrollHeight - target.scrollTop - target.clientHeight < 40;
       run();
-      if (stick) scroller.scrollTop = scroller.scrollHeight;
+      if (stick) target.scrollTop = target.scrollHeight;
     };
-    const append = (run) => follow(box, run);
+    const append = (run) => {
+      const box = typeof scroller === 'function' ? scroller() : scroller;
+      return box ? follow(box, run) : run();
+    };
     const ensureList = () => {
       if (!list) {
         list = h('ol', { class: 'ai-steps' });
@@ -2548,9 +2552,10 @@
           // Mulai menulis: proses berpikir dilipat, tempat untuk isi file yang sedang ditulis disiapkan.
           el.querySelector('.ai-thinking')?.removeAttribute('open');
           count += 1;
-          const label = h('span', { class: 'ai-step-label' }, `${STEP_LABEL[ev.tool] || ev.tool} `, h('code', {}, ev.target || '…'));
+          const target = ev.tool === 'diagram' ? DIAGRAM_NAMES[ev.target] || ev.target : ev.target;
+          const label = h('span', { class: 'ai-step-label' }, `${STEP_LABEL[ev.tool] || ev.tool} `, h('code', {}, target || '…'));
           const li = h('li', { class: 'ai-step run' });
-          if (ev.tool === 'write_file') {
+          if (ev.tool === 'write_file' || ev.tool === 'diagram') {
             const code = h('pre', { class: 'ai-draft' });
             li.append(h('details', { open: true }, h('summary', {}, label), code));
             step = { li, code };
@@ -3543,6 +3548,8 @@
   // view: posisi & skala kanvas (x, y dalam px layar; z = zoom); w/h = ukuran asli SVG; touched = user sudah zoom/geser.
   const diagram = {
     kind: storage.get('rakit.diagram', 'erd'), saved: null, busy: null, code: '', mermaid: null, seq: 0,
+    status: null, activity: null, // selama AI membuat diagram: teks status & panel proses AI
+    edit: null, // mode Edit: { code, base, error, timer, pane, input, errorEl, saveBtn, aiInput, aiBtn }
     view: { x: 0, y: 0, z: 1, w: 0, h: 0, touched: false },
   };
   const ZOOM_MIN = 0.1;
@@ -3864,7 +3871,18 @@
     label.textContent = diagram.busy === diagram.kind ? 'AI sedang membuat…' : saved ? `Diperbarui ${diagramTime(saved.updatedAt)}` : 'Belum dibuat';
     label.title = saved ? new Date(saved.updatedAt).toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' }) : '';
     const btn = $('#diagramUpdate');
-    btn.disabled = Boolean(diagram.busy) || !diagram.saved;
+    btn.disabled = Boolean(diagram.busy) || !diagram.saved || Boolean(diagram.edit);
+    const editBtn = $('#diagramEdit');
+    editBtn.disabled = Boolean(diagram.busy) || !saved;
+    editBtn.setAttribute('aria-pressed', String(Boolean(diagram.edit)));
+    editBtn.classList.toggle('active', Boolean(diagram.edit));
+    if (diagram.edit) {
+      const busy = Boolean(diagram.busy);
+      const { input, aiInput, aiBtn, saveBtn } = diagram.edit;
+      input.readOnly = aiInput.disabled = aiBtn.disabled = busy;
+      saveBtn.disabled = busy || Boolean(diagram.edit.error) || diagram.edit.code === diagram.edit.base;
+      aiBtn.title = `AI mengubah diagram sesuai permintaanmu (${ai.credits?.costPerPrompt ?? 1} kredit)`;
+    }
     $('#diagramInfo').title = `Tentang diagram ${DIAGRAM_NAMES[diagram.kind]}`;
     btn.title = `Buat ulang diagram ${DIAGRAM_NAMES[diagram.kind]} dengan AI dari file & database terbaru (${ai.credits?.costPerPrompt ?? 1} kredit)`;
   }
@@ -3883,12 +3901,17 @@
     const seq = ++diagram.seq; // hanya render terakhir yang boleh tampil (tab bisa diganti cepat)
     const name = DIAGRAM_NAMES[diagram.kind];
     const saved = diagram.saved[diagram.kind];
-    diagram.code = saved?.code ?? '';
+    const editing = diagram.edit;
+    diagram.code = editing ? editing.code : saved?.code ?? '';
     renderFindings(saved?.notes ?? []);
-    diagram.view.w = 0;
+    // Saat mengedit, pratinjau digambar ulang tiap kode berubah: posisi & zoom dipertahankan.
+    const keepView = Boolean(editing && canvas.querySelector('.diagram-stage'));
+    if (!keepView) diagram.view.w = 0;
     if (diagram.busy === diagram.kind) {
-      canvas.replaceChildren(h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')),
-        `AI sedang membaca project dan menggambar diagram ${name}… (bisa sampai 1–2 menit)`));
+      // Proses AI (berpikir & kode Mermaid yang sedang ditulis) tampil di bawah status selama diagram dibuat.
+      canvas.replaceChildren(h('div', { class: 'diagram-progress' },
+        h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), diagram.status),
+        diagram.activity?.el));
       return;
     }
     if (!saved) {
@@ -3897,12 +3920,13 @@
         diagramButton('Buat diagram dengan AI', () => generateDiagram(), true)));
       return;
     }
-    canvas.replaceChildren(h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Menggambar diagram…'));
+    if (!keepView) canvas.replaceChildren(h('div', { class: 'diagram-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Menggambar diagram…'));
     const id = `diagram-${seq}`;
     try {
       const mermaid = await loadMermaid();
-      const { svg: markup } = await mermaid.render(id, saved.code);
+      const { svg: markup } = await mermaid.render(id, diagram.code);
       if (seq !== diagram.seq) return;
+      if (editing) setEditError(null);
       // Parse di dokumen terpisah lalu pindahkan elemen SVG-nya (tanpa innerHTML). Parser HTML dipakai karena
       // label Mermaid berisi HTML (mis. <br>) yang tidak valid sebagai XML murni.
       const svgEl = new DOMParser().parseFromString(markup, 'text/html').querySelector('svg');
@@ -3917,13 +3941,22 @@
       Object.assign(diagram.view, { w: width, h: height });
       canvas.replaceChildren(
         h('div', { class: 'diagram-stage' }, imported),
-        h('div', { class: 'diagram-hint' }, 'Scroll atau cubit untuk zoom · seret untuk geser · klik dua kali untuk memperbesar'),
+        h('div', { class: 'diagram-hint' }, editing
+          ? 'Klik teks di diagram untuk menggantinya · scroll atau cubit untuk zoom · seret untuk geser'
+          : 'Scroll atau cubit untuk zoom · seret untuk geser · klik dua kali untuk memperbesar'),
       );
-      fitDiagram();
+      if (keepView) applyView();
+      else fitDiagram();
     } catch (err) {
       if (seq !== diagram.seq) return;
-      console.error(err);
       const message = String(err.message || err).slice(0, 1000);
+      // Sedang mengedit: kesalahan ditampilkan di panel kode; gambar terakhir yang berhasil tetap terlihat.
+      if (editing) {
+        setEditError(message);
+        if (!keepView) canvas.replaceChildren(diagramMessage('Kode diagram belum benar', 'Perbaiki kodenya di panel kiri, atau minta AI mengubahnya.'));
+        return;
+      }
+      console.error(err);
       // Kode buatan AI kadang salah tulis: minta AI memperbaikinya (gratis, beberapa kali per diagram).
       canvas.replaceChildren(diagramMessage('Diagram gagal digambar',
         saved.canFix ? 'Kode diagram dari AI ada yang salah. Minta AI memperbaikinya (gratis), atau buat ulang.' : 'Kode diagram dari AI ada yang salah. Coba buat ulang dengan Update diagram.',
@@ -3949,26 +3982,206 @@
   }
 
   // Buat ulang diagram jenis yang sedang dibuka dengan AI. renderError: perbaiki kode yang gagal digambar (gratis).
-  async function generateDiagram(renderError) {
+  // renderError: perbaiki kode tersimpan yang gagal digambar · instruction: ubah diagram (dari mode Edit).
+  async function generateDiagram(renderError, { instruction } = {}) {
     if (diagram.busy) return;
     const kind = diagram.kind;
     diagram.busy = kind;
+    diagram.status = h('span', {}, `AI sedang membaca project dan menggambar diagram ${DIAGRAM_NAMES[kind]}… (bisa sampai 1–2 menit)`);
+    diagram.activity = activityView(() => $('#diagramCanvas .diagram-progress'));
     renderDiagram();
     try {
       await saveAll(); // AI membaca file dari server, jadi simpan perubahan dulu
-      const res = await api('POST', '/api/diagrams/generate', { kind, ...(renderError ? { renderError } : {}) });
+      const res = await streamDiagram({
+        kind,
+        ...(renderError ? { renderError } : {}),
+        ...(instruction ? { instruction, code: diagram.edit?.code } : {}),
+      });
       diagram.saved[kind] = res.diagram;
       ai.credits = res.credits;
       renderCredits();
-      toast(renderError ? `Diagram ${DIAGRAM_NAMES[kind]} diperbaiki` : `Diagram ${DIAGRAM_NAMES[kind]} diperbarui`);
+      if (diagram.edit && diagram.kind === kind) {
+        // Hasil AI sudah disimpan server: jadi dasar baru di panel kode.
+        diagram.edit.base = res.diagram.code;
+        setEditCode(res.diagram.code, { render: false });
+        diagram.edit.aiInput.value = '';
+      }
+      toast(instruction ? `Diagram ${DIAGRAM_NAMES[kind]} diubah AI` : renderError ? `Diagram ${DIAGRAM_NAMES[kind]} diperbaiki` : `Diagram ${DIAGRAM_NAMES[kind]} diperbarui`);
     } catch (err) {
       toast(err.message, 'error');
       if (err.code === 'no_credits') loadCredits();
     } finally {
       diagram.busy = null;
+      diagram.activity = null;
       if ($('#editorArea').dataset.mode === 'diagram' && diagram.kind === kind) renderDiagram();
       else renderDiagramMeta();
     }
+  }
+
+  // ---------- Edit diagram ----------
+  // Mode Edit: panel kode Mermaid di samping kanvas (pratinjau langsung saat mengetik), klik teks di diagram
+  // untuk menggantinya, dan "Ubah dengan AI". Simpan = PUT /api/diagrams/saved/<jenis> (tanpa kredit).
+  function setDiagramEdit(on) {
+    const saved = diagram.saved?.[diagram.kind];
+    if (on && (!saved || diagram.busy)) return;
+    diagram.edit?.pane.remove();
+    clearTimeout(diagram.edit?.timer);
+    diagram.edit = null;
+    if (on) {
+      const edit = { code: saved.code, base: saved.code, error: null, timer: 0 };
+      edit.input = h('textarea', {
+        class: 'diagram-code', spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Kode Mermaid',
+        oninput: () => setEditCode(edit.input.value, { fromInput: true }),
+        onkeydown: (e) => {
+          if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); document.execCommand('insertText', false, '  '); }
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveDiagramEdit(); }
+        },
+      });
+      edit.input.value = saved.code;
+      edit.errorEl = h('p', { class: 'diagram-code-error', hidden: true });
+      edit.saveBtn = h('button', { type: 'button', class: 'fn-btn primary', onclick: saveDiagramEdit }, 'Simpan');
+      edit.aiInput = h('textarea', {
+        rows: '2', maxlength: '2000', placeholder: 'mis. tambahkan tabel pembayaran yang terhubung ke pesanan',
+        'aria-label': 'Perubahan yang diminta ke AI',
+        onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askDiagramChange(); } },
+      });
+      edit.aiBtn = h('button', { type: 'button', class: 'fn-btn', onclick: askDiagramChange }, '✦ Ubah dengan AI');
+      edit.pane = h('aside', { class: 'diagram-editor', 'aria-label': 'Edit diagram' },
+        h('div', { class: 'diagram-editor-head' }, h('strong', {}, 'Kode Mermaid'),
+          h('div', {}, h('button', { type: 'button', class: 'fn-btn', onclick: () => leaveDiagramEdit() }, 'Batal'), edit.saveBtn)),
+        edit.input,
+        edit.errorEl,
+        h('p', { class: 'diagram-editor-hint' }, 'Pratinjau berubah saat kamu mengetik. Klik teks di diagram untuk menggantinya.'),
+        h('div', { class: 'diagram-editor-ai' }, edit.aiInput, edit.aiBtn));
+      diagram.edit = edit;
+      $('#diagramView .diagram-body').prepend(edit.pane);
+      autoFocus(edit.input);
+    }
+    renderDiagram();
+  }
+
+  // Keluar dari mode Edit; perubahan yang belum disimpan dikonfirmasi dulu. Hasil: true bila jadi keluar.
+  async function leaveDiagramEdit() {
+    const edit = diagram.edit;
+    if (!edit) return true;
+    if (edit.code !== edit.base) {
+      const ok = await modal({
+        title: 'Buang perubahan diagram?',
+        message: 'Perubahan kode diagram belum disimpan.',
+        buttons: [{ label: 'Buang perubahan', value: true, primary: true, danger: true }, { label: 'Lanjut mengedit', value: null }],
+      });
+      if (!ok || diagram.edit !== edit) return false;
+    }
+    setDiagramEdit(false);
+    return true;
+  }
+
+  // Kode di panel berubah (diketik, teks diganti dari diagram, atau hasil AI): gambar ulang sebentar kemudian.
+  function setEditCode(code, { fromInput = false, render = true } = {}) {
+    const edit = diagram.edit;
+    if (!edit) return;
+    edit.code = code;
+    if (!fromInput && edit.input.value !== code) edit.input.value = code;
+    clearTimeout(edit.timer);
+    if (render) edit.timer = setTimeout(renderDiagram, 350);
+    else renderDiagram();
+    renderDiagramMeta();
+  }
+
+  function setEditError(message) {
+    const edit = diagram.edit;
+    if (!edit) return;
+    edit.error = message;
+    edit.errorEl.hidden = !message;
+    edit.errorEl.textContent = message ? `Belum bisa digambar: ${message.slice(0, 300)}` : '';
+    renderDiagramMeta();
+  }
+
+  async function saveDiagramEdit() {
+    const edit = diagram.edit;
+    if (!edit || edit.error || diagram.busy || edit.code === edit.base) return;
+    const kind = diagram.kind;
+    edit.saveBtn.disabled = true;
+    try {
+      const res = await api('PUT', `/api/diagrams/saved/${kind}`, { code: edit.code });
+      diagram.saved[kind] = res.diagram;
+      if (diagram.edit === edit) setDiagramEdit(false);
+      toast(`Diagram ${DIAGRAM_NAMES[kind]} disimpan`);
+    } catch (err) {
+      toast(err.message, 'error');
+      renderDiagramMeta();
+    }
+  }
+
+  function askDiagramChange() {
+    const edit = diagram.edit;
+    const instruction = edit?.aiInput.value.trim();
+    if (!instruction || diagram.busy) return;
+    generateDiagram(null, { instruction });
+  }
+
+  // Teks label di titik (x, y) pada diagram (nama tabel, langkah, aktor, pesan), atau ''.
+  const LABEL_TAGS = new Set(['text', 'tspan', 'span', 'p', 'div', 'b', 'strong', 'i', 'em']);
+  function diagramLabelAt(x, y) {
+    for (const el of document.elementsFromPoint(x, y)) {
+      if (!el.closest('#diagramCanvas .diagram-stage')) continue;
+      const box = LABEL_TAGS.has(el.localName) ? el : el.closest('g.node, g.cluster')?.querySelector('.nodeLabel, text');
+      const text = box?.textContent.replace(/\s+/g, ' ').trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
+  // Klik teks di diagram (mode Edit): ganti teks itu di kode. Kalau muncul lebih dari sekali, dipilihkan di
+  // panel kode supaya diubah di sana.
+  async function renameDiagramLabel(label) {
+    const edit = diagram.edit;
+    const count = edit.code.split(label).length - 1;
+    if (!count) return toast(`"${label}" tidak ditemukan apa adanya di kode. Ubah lewat panel kode.`, 'error');
+    if (count > 1) {
+      const at = edit.code.indexOf(label);
+      edit.input.focus();
+      edit.input.setSelectionRange(at, at + label.length);
+      return toast(`"${label}" ada ${count} kali di kode — yang pertama sudah dipilih di panel kode.`);
+    }
+    const next = await modal({
+      title: 'Ganti teks di diagram',
+      input: { value: label },
+      buttons: [{ label: 'Ganti', value: true, primary: true }, { label: 'Batal', value: null }],
+    });
+    if (!next || next === label || diagram.edit !== edit) return;
+    const at = edit.code.indexOf(label);
+    setEditCode(edit.code.slice(0, at) + next + edit.code.slice(at + label.length), { render: false });
+  }
+
+  // Buat diagram sambil mengikuti proses AI-nya (NDJSON, lihat StreamDiagram di server). Hasil: { diagram, credits }.
+  async function streamDiagram(body) {
+    const res = await fetch('/api/diagrams/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(state.projectSlug ? { 'X-Project': state.projectSlug } : {}) },
+      body: JSON.stringify({ ...body, stream: true }),
+      credentials: 'same-origin',
+    });
+    if (res.status === 401) {
+      location.href = '/';
+      throw new Error('Sesi berakhir');
+    }
+    const fail = (data, status) => Object.assign(new Error(data.error || `Gagal (${status})`), { code: data.code });
+    // Ditolak sebelum AI mulai (kredit habis, AI sibuk): jawaban JSON biasa.
+    if (!(res.headers.get('Content-Type') || '').includes('ndjson')) {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw fail(data, res.status);
+      return data;
+    }
+    for await (const ev of readEvents(res)) {
+      if (ev.type === 'done') return ev;
+      if (ev.type === 'error') throw fail(ev, ev.status);
+      if (ev.type === 'queued') diagram.status.textContent = `Menunggu antrean AI… posisi ${ev.position} dari ${ev.total}`;
+      else if (ev.type === 'retry') diagram.status.textContent = `AI sedang sibuk, mencoba lagi (${ev.attempt}/${ev.max})…`;
+      else if (ev.type === 'reasoning' || ev.type === 'step') diagram.status.textContent = `AI sedang menggambar diagram ${DIAGRAM_NAMES[body.kind]}…`;
+      diagram.activity?.handle(ev);
+    }
+    throw new Error('Koneksi ke server terputus. Coba lagi.');
   }
 
   function downloadDiagram() {
@@ -3989,7 +4202,22 @@
 
   function bindDiagramEvents() {
     document.querySelectorAll('[data-diagram]').forEach((btn) => {
-      btn.onclick = () => { diagram.kind = btn.dataset.diagram; storage.set('rakit.diagram', diagram.kind); renderDiagram(); };
+      btn.onclick = async () => {
+        if (btn.dataset.diagram === diagram.kind || !(await leaveDiagramEdit())) return;
+        diagram.kind = btn.dataset.diagram;
+        storage.set('rakit.diagram', diagram.kind);
+        renderDiagram();
+      };
+    });
+    $('#diagramEdit').onclick = () => (diagram.edit ? leaveDiagramEdit() : setDiagramEdit(true));
+    // Klik (bukan seret) teks di diagram saat mode Edit.
+    const canvas = $('#diagramCanvas');
+    let down = null;
+    canvas.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; }, true);
+    canvas.addEventListener('click', (e) => {
+      if (!diagram.edit || diagram.busy || !down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return;
+      const label = diagramLabelAt(e.clientX, e.clientY);
+      if (label) renameDiagramLabel(label);
     });
     $('#diagramZoomIn').onclick = () => zoomAtCenter(1.25);
     $('#diagramZoomOut').onclick = () => zoomAtCenter(1 / 1.25);

@@ -111,3 +111,79 @@ test('format salah dicoba ulang sekali tanpa kredit tambahan; catatan bernomor t
   assert.equal(retry.at(-2).role, 'assistant');
   assert.match(retry.at(-1).content, /first line is flowchart/);
 });
+
+test('stream: proses AI (berpikir & kode Mermaid) dikirim selama diagram dibuat', { skip }, async () => {
+  const user = await stack.register('diagramlive');
+  const stream = async (body) => {
+    const res = await user.raw('POST', '/api/diagrams/generate', { body: { ...body, stream: true } });
+    const text = await res.text();
+    return { status: res.status, type: res.headers.get('content-type'), events: res.headers.get('content-type')?.includes('ndjson') ? text.split('\n').filter(Boolean).map((l) => JSON.parse(l)) : JSON.parse(text) };
+  };
+
+  stack.ai.script.push({ reasoning: 'Ada satu tabel tamu.', chunks: ERD.match(/[\s\S]{1,40}/g) });
+  const ok = await stream({ kind: 'erd' });
+  assert.equal(ok.status, 200);
+  assert.match(ok.type, /ndjson/);
+  const { events } = ok;
+  assert.equal(events.find((e) => e.type === 'reasoning').text, 'Ada satu tabel tamu.');
+  assert.deepEqual(events.filter((e) => e.type === 'step'), [
+    { type: 'step', id: 1, tool: 'diagram', target: 'erd', state: 'run' },
+    { type: 'step', id: 1, state: 'ok' },
+  ]);
+  assert.equal(events.filter((e) => e.type === 'draft').map((e) => e.text).join(''), ERD);
+  const done = events.at(-1);
+  assert.equal(done.type, 'done');
+  assert.match(done.diagram.code, /^erDiagram/);
+  assert.equal(typeof done.credits.remaining, 'number');
+
+  // Gagal setelah AI menjawab: event error dengan status & pesan; ditolak sebelum mulai: error HTTP biasa.
+  stack.ai.script.push({ text: 'NONE: Belum ada tabel.' });
+  const none = await stream({ kind: 'erd' });
+  assert.equal(none.status, 200);
+  assert.deepEqual([none.events.at(-1).type, none.events.at(-1).status], ['error', 422]);
+  assert.match(none.events.at(-1).error, /Belum ada yang bisa digambar/);
+  const bad = await stream({ kind: 'pie' });
+  assert.equal(bad.status, 400);
+});
+
+test('edit diagram: kode disimpan tanpa kredit; ubah dengan AI memakai kode di editor sebagai dasar', { skip }, async () => {
+  const user = await stack.register('diagramedit');
+  const save = (kind, code) => user.put(`/api/diagrams/saved/${kind}`, { code });
+
+  // Simpan manual: catatan AI tetap, kredit tidak terpakai; jenis & baris pertama diperiksa.
+  stack.ai.script.push({ text: ERD });
+  assert.equal((await generate(user, { kind: 'erd' })).status, 200);
+  const credits = (await user.credits()).remaining;
+  const edited = 'erDiagram\n  tamu {\n    number id PK\n    text nama_lengkap\n  }';
+  const res = await save('erd', `  ${edited}\n`);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.diagram.code, edited);
+  assert.equal(res.body.diagram.notes.length, 2);
+  assert.equal((await user.get('/api/diagrams/saved')).body.diagrams.erd.code, edited);
+  assert.equal((await user.credits()).remaining, credits);
+  assert.equal((await save('erd', 'flowchart LR\n  A --> B')).status, 400, 'jenis lain ditolak');
+  assert.equal((await save('pie', edited)).status, 400);
+  assert.equal((await save('erd', 'erDiagram\n' + 'x'.repeat(70_000))).status, 400);
+  // Jenis yang belum pernah dibuat AI juga bisa ditulis sendiri.
+  assert.equal((await save('state', 'stateDiagram-v2\n  [*] --> Baru')).status, 200);
+
+  // Ubah dengan AI: kode dari editor (belum disimpan) + permintaan dikirim ke AI; hasilnya disimpan.
+  const draft = edited.replace('nama_lengkap', 'nama');
+  stack.ai.script.push({ text: '```mermaid\nerDiagram\n  tamu {\n    number id PK\n    text nama\n  }\n  bayar {\n    number id PK\n  }\n  tamu ||--o{ bayar : "membayar"\n```\n- [info] Ditambah tabel bayar.' });
+  const changed = await generate(user, { kind: 'erd', instruction: 'tambahkan tabel bayar', code: draft });
+  assert.equal(changed.status, 200);
+  assert.match(changed.body.diagram.code, /bayar/);
+  assert.deepEqual(changed.body.diagram.notes, [{ level: 'info', text: 'Ditambah tabel bayar.' }]);
+  assert.equal(changed.body.credits.remaining, credits - 1);
+  const sent = stack.ai.requests.at(-1).messages;
+  assert.equal(sent.at(-2).content, '```mermaid\n' + draft + '\n```');
+  assert.match(sent.at(-1).content, /tambahkan tabel bayar/);
+
+  // Tanpa kode dari editor: memakai yang tersimpan. Kode dasar berjenis salah dan dua mode sekaligus ditolak.
+  stack.ai.script.push({ text: ERD });
+  assert.equal((await generate(user, { kind: 'erd', instruction: 'rapikan' })).status, 200);
+  assert.match(stack.ai.requests.at(-1).messages.at(-2).content, /bayar/);
+  assert.equal((await generate(user, { kind: 'erd', instruction: 'x', code: 'graph TD\n A' })).status, 400);
+  assert.equal((await generate(user, { kind: 'erd', instruction: 'x', renderError: 'Parse error' })).status, 400);
+  assert.equal((await generate(user, { kind: 'usecase', instruction: 'x' })).status, 404, 'belum ada diagram untuk diubah');
+});

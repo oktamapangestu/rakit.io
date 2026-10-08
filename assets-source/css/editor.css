@@ -1905,6 +1905,21 @@ button.credit-badge:disabled { cursor: default; }
 .diagram-update svg { width: 13px; height: 13px; fill: currentColor; }
 .diagram-update:hover:not(:disabled) { background: #c2410c; }
 .diagram-update:disabled { opacity: 0.5; cursor: default; }
+.diagram-edit { display: inline-flex; align-items: center; gap: 6px; height: 28px; margin-right: 6px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 8px; background: none; color: var(--text); font: 600 12px var(--ui); white-space: nowrap; cursor: pointer; }
+.diagram-edit svg { width: 13px; height: 13px; fill: currentColor; }
+.diagram-edit:hover:not(:disabled), .diagram-edit.active { border-color: var(--accent-text); color: var(--accent-text); }
+.diagram-edit:disabled { opacity: 0.5; cursor: default; }
+/* Mode Edit diagram: panel kode Mermaid di kiri kanvas. */
+.diagram-editor { width: 360px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; min-height: 0; padding: 10px 12px; border-right: 1px solid var(--line); background: var(--panel); }
+.diagram-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.diagram-editor-head div { display: flex; gap: 6px; }
+.diagram-code { flex: 1; min-height: 120px; resize: none; padding: 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel-2); color: var(--text); font: 12px/1.55 var(--mono); tab-size: 2; white-space: pre; overflow: auto; }
+.diagram-code:focus { outline: 2px solid var(--accent-line); outline-offset: -1px; }
+.diagram-code-error { margin: 0; color: var(--danger-text); font: 12px/1.45 var(--mono); max-height: 72px; overflow: auto; }
+.diagram-editor-hint { margin: 0; color: var(--faint); font-size: 12px; }
+.diagram-editor-ai { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.diagram-editor-ai textarea { resize: vertical; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel-2); color: var(--text); font: 13px var(--ui); }
+.diagram-editor-ai button { align-self: flex-end; }
 .diagram-info h4 { margin: 14px 0 4px; color: var(--white); font-size: 12.5px; }
 .diagram-info p { margin: 0; color: var(--text); font-size: 13px; line-height: 1.55; }
 .diagram-info dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; }
@@ -1964,6 +1979,9 @@ button.credit-badge:disabled { cursor: default; }
 .diagram-stage { position: absolute; top: 0; left: 0; transform-origin: 0 0; user-select: none; }
 .diagram-stage svg { display: block; max-width: none; height: auto; }
 .diagram-loading { display: flex; align-items: center; gap: 10px; margin: auto; color: var(--muted); }
+/* Selama AI membuat diagram: status + panel proses AI, bisa digulir sendiri (kanvas menangani gestur). */
+.diagram-progress { margin: auto; width: min(640px, 100% - 32px); max-height: 100%; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 12px; cursor: auto; touch-action: pan-y; }
+.diagram-progress .diagram-loading { margin: 0 auto; text-align: center; }
 .diagram-error { font: 12px var(--mono); color: var(--danger-text); }
 .diagram-hint {
   position: absolute;
@@ -2017,6 +2035,7 @@ button.credit-badge:disabled { cursor: default; }
 @container (max-width: 640px) {
   .diagram-body { flex-direction: column; }
   .diagram-findings { width: auto; max-height: 40%; border-left: 0; border-top: 1px solid var(--line); }
+  .diagram-editor { width: auto; max-height: 50%; border-right: 0; border-bottom: 1px solid var(--line); }
   .diagram-tools { flex-wrap: wrap; row-gap: 6px; }
 }
 

@@ -245,6 +245,18 @@ func (h *Handler) diagrams(q *request) error {
 		}
 		return q.json(200, out)
 
+	// Kode diagram yang diedit pemilik (tanpa AI).
+	case q.is("PUT", "saved", ":"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		code, _ := q.body["code"].(string)
+		out, err := h.svc.AI.SaveDiagram(project, q.rest[1], code)
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
+
 	case q.is("POST", "generate"):
 		if err := q.load(); err != nil {
 			return err
@@ -253,12 +265,16 @@ func (h *Handler) diagrams(q *request) error {
 		if !ai.ValidDiagramKind(kind) {
 			return httpx.Errorf(400, "Jenis diagram tidak dikenal")
 		}
-		renderError, _ := q.body["renderError"].(string)
+		text := func(key string) string { v, _ := q.body[key].(string); return strings.TrimSpace(v) }
+		req := ai.DiagramRequest{Kind: kind, RenderError: text("renderError"), Instruction: text("instruction"), Code: text("code")}
 		facts, err := h.diagramFacts(q.r.Context(), project)
 		if err != nil {
 			return err
 		}
-		out, err := h.svc.AI.GenerateDiagram(q.r.Context(), q.user, project, kind, facts, strings.TrimSpace(renderError))
+		if stream, _ := q.body["stream"].(bool); stream {
+			return h.svc.AI.StreamDiagram(q.w, q.r.Context(), q.user, project, req, facts)
+		}
+		out, err := h.svc.AI.GenerateDiagram(q.r.Context(), q.user, project, req, facts, nil)
 		if err != nil {
 			return err
 		}

@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,11 +26,12 @@ import (
 // Bila Mermaid gagal menggambar hasilnya, editor boleh minta perbaikan gratis beberapa kali.
 
 const (
-	diagramTimeout      = 280 * time.Second // di bawah proxy_read_timeout nginx (300 detik)
-	maxDiagramFacts     = 30_000
-	maxDiagramCode      = 60_000
-	maxDiagramNotes     = 4
-	maxFreeDiagramFixes = 2
+	diagramTimeout        = 280 * time.Second // di bawah proxy_read_timeout nginx (300 detik)
+	maxDiagramFacts       = 30_000
+	maxDiagramCode        = 60_000
+	maxDiagramNotes       = 4
+	maxFreeDiagramFixes   = 2
+	maxDiagramInstruction = 2000
 )
 
 type diagramKind struct {
@@ -176,12 +179,7 @@ func parseDiagram(kind, text string) (string, []DiagramNote, error) {
 		return "", nil, &failure{"bad_output", "AI tidak mengirim kode diagram. Coba lagi. Kredit dikembalikan."}
 	}
 	code := strings.TrimSpace(m[1])
-	first := strings.Fields(diagramHeader(code))
-	ok := false
-	for _, h := range diagramKinds[kind].header {
-		ok = ok || (len(first) > 0 && first[0] == h)
-	}
-	if !ok || len(code) > maxDiagramCode {
+	if checkDiagramCode(kind, code) != nil {
 		return "", nil, &failure{"bad_output", "AI mengirim diagram yang tidak sesuai. Coba lagi. Kredit dikembalikan."}
 	}
 	notes := []DiagramNote{}
@@ -198,6 +196,42 @@ func parseDiagram(kind, text string) (string, []DiagramNote, error) {
 		notes = append(notes, DiagramNote{level, jsconv.Slice(text, 300)})
 	}
 	return code, notes, nil
+}
+
+// checkDiagramCode: kode Mermaid berjenis sesuai (baris pertamanya) dan tidak terlalu panjang.
+func checkDiagramCode(kind, code string) error {
+	first := strings.Fields(diagramHeader(code))
+	spec := diagramKinds[kind]
+	if len(first) == 0 || !slices.Contains(spec.header, first[0]) {
+		return httpx.Errorf(400, "Kode diagram ini harus diawali %s", spec.header[0])
+	}
+	if len(code) > maxDiagramCode {
+		return httpx.Errorf(400, "Kode diagram terlalu panjang (maks. %d karakter)", maxDiagramCode)
+	}
+	return nil
+}
+
+// SaveDiagram menyimpan kode diagram yang diedit pemilik (tanpa AI). Catatan AI yang ada tetap disimpan.
+func (s *Service) SaveDiagram(project *store.Project, kind, code string) (any, error) {
+	if _, ok := diagramKinds[kind]; !ok {
+		return nil, httpx.Errorf(400, "Jenis diagram tidak dikenal")
+	}
+	code = strings.TrimSpace(code)
+	if err := checkDiagramCode(kind, code); err != nil {
+		return nil, err
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO project_diagrams (project_id, kind, code, notes, fixes, updated_at) VALUES (?, ?, ?, '[]', 0, ?)
+		ON CONFLICT (project_id, kind) DO UPDATE SET code = excluded.code, updated_at = excluded.updated_at`,
+		project.ID, kind, code, time.Now().UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	saved, err := s.diagram(project.ID, kind)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"diagram": saved}, nil
 }
 
 // diagramHeader: baris pertama yang berisi kode (melewati front matter "---" dan komentar "%%").
@@ -217,18 +251,51 @@ func diagramHeader(code string) string {
 	return ""
 }
 
-// GenerateDiagram membuat (atau, bila renderError diisi, memperbaiki) diagram satu jenis lalu menyimpannya.
-// facts: hasil analisis otomatis project (bahan diagram lama), dikirim ke AI sebagai bantuan.
-func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project *store.Project, kind string, facts any, renderError string) (any, error) {
+// DiagramRequest: permintaan diagram ke AI. Kosong selain Kind = buat (ulang) dari project.
+type DiagramRequest struct {
+	Kind        string
+	RenderError string // perbaiki diagram tersimpan yang gagal digambar Mermaid (gratis, terbatas)
+	Instruction string // ubah diagram sesuai permintaan pemilik
+	Code        string // dasar yang diubah Instruction (kode di editor, mungkin belum disimpan); kosong = yang tersimpan
+}
+
+// GenerateDiagram membuat, memperbaiki, atau mengubah (lihat DiagramRequest) diagram satu jenis lalu
+// menyimpannya. facts: hasil analisis otomatis project (bahan diagram lama), dikirim ke AI sebagai bantuan.
+// send (boleh nil): menerima proses AI selama diagram dibuat (event activity, antrean, coba ulang).
+func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project *store.Project, req DiagramRequest, facts any, send func(event)) (any, error) {
 	if !s.models.Enabled() {
 		return nil, httpx.Errorf(503, "Fitur AI belum dikonfigurasi di server")
 	}
+	kind, renderError := req.Kind, req.RenderError
 	spec, ok := diagramKinds[kind]
 	if !ok {
 		return nil, httpx.Errorf(400, "Jenis diagram tidak dikenal")
 	}
-	fixing := renderError != ""
+	fixing, changing := renderError != "", req.Instruction != ""
+	if fixing && changing {
+		return nil, httpx.Errorf(400, "Pilih salah satu: perbaiki atau ubah diagram")
+	}
+	if jsconv.Len(req.Instruction) > maxDiagramInstruction {
+		return nil, httpx.Errorf(400, "Permintaan terlalu panjang (maks. %d karakter)", maxDiagramInstruction)
+	}
 	var previous *savedDiagram
+	if changing {
+		base := req.Code
+		if base == "" {
+			saved, err := s.diagram(project.ID, kind)
+			if err != nil {
+				return nil, err
+			}
+			if saved == nil {
+				return nil, httpx.Errorf(404, "Diagram belum dibuat")
+			}
+			base = saved.Code
+		}
+		if err := checkDiagramCode(kind, base); err != nil {
+			return nil, err
+		}
+		previous = &savedDiagram{Code: base}
+	}
 	if fixing {
 		var err error
 		if previous, err = s.diagram(project.ID, kind); err != nil {
@@ -287,9 +354,27 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 				message{"role": "user", "content": "Mermaid could not render that diagram:\n" + jsconv.Slice(renderError, 1000) +
 					"\n\nFix the syntax (keep the content) and answer again in the same format."})
 		}
+		if changing {
+			convo = append(convo,
+				message{"role": "assistant", "content": "```mermaid\n" + previous.Code + "\n```"},
+				message{"role": "user", "content": "The owner edited this diagram and asks for this change:\n" + req.Instruction +
+					"\n\nApply it to the diagram above. Keep everything else as it is unless the change requires it, " +
+					"and answer again in the same format (```mermaid block, then 1-4 notes)."})
+		}
+		h := hooks{ctx: ctx, onModel: func(model string) { usedModel = model }}
+		var act *activity
+		if send != nil {
+			act = newActivity(send)
+			h.onStart, h.onReasoning, h.onContent = act.start, act.reasoning, act.textStep("diagram", kind)
+			h.onQueued = func(position, total int) { send(event{"type": "queued", "position": position, "total": total}) }
+			h.onRetry = func(attempt, seconds int) {
+				send(event{"type": "retry", "attempt": attempt, "max": 3, "seconds": seconds})
+			}
+			defer act.textDone()
+		}
 		// Format salah (mis. digambar dengan karakter ASCII): minta sekali lagi, tanpa kredit tambahan.
 		for attempt := 0; ; attempt++ {
-			r, err := s.callAI(request{task: aimodels.TaskDiagram, messages: convo}, hooks{ctx: ctx, onModel: func(model string) { usedModel = model }})
+			r, err := s.callAI(request{task: aimodels.TaskDiagram, messages: convo}, h)
 			if err != nil {
 				return "", nil, err
 			}
@@ -319,6 +404,8 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 		detail := kind
 		if fixing {
 			detail += " (perbaiki)"
+		} else if changing {
+			detail += " (ubah: " + excerpt(req.Instruction) + ")"
 		}
 		s.logRequest(user.ID, project.ID, "diagram", detail, usedModel, status, inTokens, outTokens)
 	}()
@@ -367,4 +454,53 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 		return nil, err
 	}
 	return map[string]any{"diagram": saved, "credits": s.credits.Info(user.ID)}, nil
+}
+
+// StreamDiagram: GenerateDiagram yang mengirim proses AI langsung ke editor (NDJSON): event activity,
+// antrean & coba ulang selama AI bekerja, lalu {type: "done", diagram, credits} atau
+// {type: "error", error, code, status}. Kesalahan sebelum AI mulai (kredit habis, AI sibuk) tetap
+// dijawab sebagai error HTTP biasa.
+func (s *Service) StreamDiagram(w http.ResponseWriter, ctx context.Context, user *store.User, project *store.Project, req DiagramRequest, facts any) error {
+	flusher, _ := w.(http.Flusher)
+	started := false
+	write := func(ev event) {
+		if !started {
+			started = true
+			h := w.Header()
+			h.Set("Content-Type", "application/x-ndjson; charset=utf-8")
+			h.Set("Cache-Control", "no-store")
+			h.Set("X-Accel-Buffering", "no")
+			w.WriteHeader(http.StatusOK)
+		}
+		raw, _ := marshal(ev)
+		w.Write(append(raw, '\n'))
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+	out, err := s.GenerateDiagram(ctx, user, project, req, facts, write)
+	if err != nil {
+		if !started {
+			return err
+		}
+		ev := event{"type": "error", "error": err.Error(), "status": 500}
+		var he *httpx.Error
+		if errors.As(err, &he) {
+			ev["status"] = he.Status
+			if he.Code != "" {
+				ev["code"] = he.Code
+			}
+		} else {
+			log.Printf("ai: diagram %s/%s: %v", project.Slug, req.Kind, err)
+			ev["error"] = "Terjadi kesalahan saat menyimpan diagram."
+		}
+		write(ev)
+		return nil
+	}
+	done := event{"type": "done"}
+	for k, v := range out.(map[string]any) {
+		done[k] = v
+	}
+	write(done)
+	return nil
 }

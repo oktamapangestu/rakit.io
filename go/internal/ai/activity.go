@@ -166,6 +166,32 @@ func (a *activity) toolResult(n int, call toolCall, result string) {
 
 func (a *activity) note(text string) { a.emit(event{"type": "note", "text": text}) }
 
+// textCall: kunci di calls untuk jawaban teks yang ditampilkan sebagai langkah (lihat textStep).
+const textCall = -1
+
+// textStep: isi jawaban model ditampilkan sebagai satu langkah beserta isinya (mis. kode Mermaid diagram),
+// bukan sebagai teks jawaban. Hasilnya dipakai sebagai hooks.onContent.
+func (a *activity) textStep(tool, target string) func(string) {
+	return func(text string) {
+		d := a.calls[textCall]
+		if d == nil {
+			a.seq++
+			d = &toolDraft{index: textCall, id: a.seq, name: tool, target: target, started: true}
+			a.calls[textCall] = d
+			a.emit(event{"type": "step", "id": d.id, "tool": tool, "target": target, "state": "run"})
+		}
+		a.add("draft", d.id, text)
+	}
+}
+
+// textDone: langkah dari textStep selesai.
+func (a *activity) textDone() {
+	if d := a.calls[textCall]; d != nil && d.started {
+		d.started = false
+		a.emit(event{"type": "step", "id": d.id, "state": "ok"})
+	}
+}
+
 // ---------- Membaca argumen JSON yang belum lengkap ----------
 
 // jsonField: nilai string kunci `key` di objek JSON yang mungkin belum lengkap. done = string-nya sudah
