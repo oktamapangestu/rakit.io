@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cheat Sheet Prompt — rakit.io</title>
+<title>Panduan — rakit.io</title>
+<meta name="description" content="Panduan lengkap rakit.io: cara memakai editor, AI Builder, database, fungsi serverless, diagram, riwayat versi, publikasi, kredit, plus cheat sheet menulis prompt.">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,35 +25,32 @@
   html{scroll-behavior:smooth}
   body{margin:0;padding-top:64px;background:var(--bg);color:var(--ink);font:15px/1.65 var(--font);-webkit-font-smoothing:antialiased}
   ::selection{background:var(--accent);color:var(--ink)}
-  .topnav{position:fixed;top:0;left:0;right:0;z-index:50;height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;
-    padding:0 max(20px,calc((100vw - 960px)/2));background:rgba(255,248,231,.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .topnav{position:fixed;top:0;left:0;right:0;z-index:50;height:64px;display:flex;align-items:center;gap:16px;
+    padding:0 max(20px,calc((100vw - 1240px)/2 + 20px));background:rgba(255,248,231,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
   .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink)}
   .brand img{width:30px;height:30px;display:block}
   .brand b{font-size:19px;font-weight:800;letter-spacing:-.035em}
   .brand b span{color:var(--faint);font-weight:600}
-  .wrap{max-width:960px;margin:0 auto;padding:16px 20px 80px}
-  header{text-align:center;padding:28px 0 8px}
-  .back{display:inline-flex;align-items:center;height:36px;font-size:14px;font-weight:600;color:var(--ink);text-decoration:none;
+  .wrap{min-width:0;max-width:880px;width:100%;padding:8px 44px 80px;outline:none}
+  header{padding:30px 0 8px}
+  .back{display:inline-flex;align-items:center;gap:6px;height:36px;flex-shrink:0;font-size:14px;font-weight:600;color:var(--ink);text-decoration:none;
     padding:0 14px;border:1px solid var(--line-strong);border-radius:10px;background:var(--card)}
   .back:hover{border-color:var(--ink)}
   .logo{display:block;color:var(--muted);font:600 12px var(--mono);letter-spacing:.14em;text-transform:uppercase}
   h1{font-size:clamp(30px,5vw,44px);font-weight:900;margin:10px 0 8px;letter-spacing:-.035em;line-height:1.05}
   h1 em{font-style:normal;background:linear-gradient(transparent 58%,var(--accent) 58%);padding:0 .08em}
   .sub{color:var(--muted);font-size:16px;margin:0}
-  .toc{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:24px 0 8px}
-  .toc a{font:12.5px var(--mono);text-decoration:none;color:var(--ink);background:var(--card);
-    border:1px solid var(--line);padding:5px 11px;border-radius:8px}
-  .toc a:hover{border-color:var(--ink);background:var(--bg-2)}
-  h2{font-size:22px;margin:44px 0 6px;padding-top:20px;border-top:1px solid var(--line);letter-spacing:-.02em}
+  h2{font-size:22px;margin:44px 0 6px;padding-top:20px;border-top:1px solid var(--line);letter-spacing:-.02em;scroll-margin-top:72px}
   h2 .n{display:inline-grid;place-items:center;min-width:30px;height:30px;margin-right:10px;padding:0 6px;border-radius:8px;
     background:var(--accent);color:var(--ink);font:700 14px var(--mono);vertical-align:2px}
   .lead{color:var(--muted);margin:0 0 14px;font-size:14.5px}
-  h3{font-size:15.5px;margin:22px 0 8px;letter-spacing:-.01em}
+  h3{font-size:15.5px;margin:22px 0 8px;letter-spacing:-.01em;scroll-margin-top:84px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:12px 0}
   .prompt{background:var(--terminal);color:var(--terminal-ink);border-radius:12px;padding:13px 15px;margin:8px 0;
     font:13.5px/1.6 var(--mono);white-space:pre-wrap;position:relative;border:0;box-shadow:inset 3px 0 0 var(--accent)}
   .prompt .lbl{display:block;color:#a99f8a;font-size:11px;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;font-family:inherit}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid>*,.grid3>*{min-width:0}
   @media(max-width:680px){.grid{grid-template-columns:1fr}}
   .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
   @media(max-width:680px){.grid3{grid-template-columns:1fr}}
@@ -78,42 +76,999 @@
   .kw{color:var(--brand);font-weight:600}
   footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:var(--faint);font:12px var(--mono);text-align:center}
   .pill{font-size:11px;background:var(--tip-soft);color:var(--tip);padding:2px 7px;border-radius:5px;font-weight:600;margin-left:6px}
+  .part{margin:56px 0 4px;padding:22px 24px;border-radius:16px;background:var(--terminal);color:var(--terminal-ink)}
+  .part .k{display:block;font:600 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+  .part h2{margin:6px 0 6px;padding:0;border:0;color:var(--terminal-ink);font-size:26px}
+  .part p{margin:0;color:#d9cfb6;font-size:14.5px}
+  kbd{display:inline-block;font:600 11.5px/1.5 var(--mono);background:var(--card);color:var(--ink);border:1px solid var(--line-strong);
+    border-bottom-width:2px;border-radius:5px;padding:0 6px;white-space:nowrap}
+  ol.steps{list-style:none;padding-left:0;margin:10px 0;counter-reset:step}
+  ol.steps>li{counter-increment:step;position:relative;padding-left:36px;margin:9px 0}
+  ol.steps>li::before{content:counter(step);position:absolute;left:0;top:1px;width:25px;height:25px;display:grid;place-items:center;
+    border-radius:7px;background:var(--accent-soft);border:1px solid var(--line-strong);font:700 12px var(--mono)}
+  .ui{font-weight:600;color:var(--ink);background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:0 6px;white-space:nowrap}
+  .table-scroll{overflow-x:auto;margin:10px 0}
+  .table-scroll table{margin:0;min-width:520px}
+  @media(max-width:680px){.part{padding:18px}.part h2{font-size:22px}.card{padding:14px}}
+  /* ---------- Tata letak dokumentasi ---------- */
+  .skip{position:absolute;left:-999px;top:8px;z-index:100;background:var(--ink);color:#fff;padding:8px 12px;border-radius:8px}
+  .skip:focus{left:8px}
+  .menu-btn{display:none;width:38px;height:38px;place-items:center;flex-shrink:0;border:1px solid var(--line-strong);border-radius:10px;background:var(--card);color:var(--ink);cursor:pointer}
+  .menu-btn svg{width:18px;height:18px;fill:currentColor}
+  .docs-tag{margin-left:8px;font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:var(--ink);padding:3px 7px;border-radius:6px}
+  .search{flex:1;min-width:0;max-width:420px;margin-left:auto;display:flex;align-items:center;gap:8px;height:38px;padding:0 10px;
+    background:var(--card);border:1px solid var(--line-strong);border-radius:10px;color:var(--muted)}
+  .search:focus-within{border-color:var(--ink);box-shadow:0 0 0 3px var(--accent-soft)}
+  .search svg{width:15px;height:15px;fill:currentColor;flex-shrink:0}
+  .search input{flex:1;min-width:0;width:100%;border:0;background:none;outline:none;font:14px var(--font);color:var(--ink)}
+  .search input::placeholder{color:var(--faint)}
+  .layout{display:grid;grid-template-columns:272px minmax(0,1fr);max-width:1240px;margin:0 auto}
+  .sidebar{position:sticky;top:64px;height:calc(100vh - 64px);overflow-y:auto;padding:22px 14px 48px 20px;border-right:1px solid var(--line);overscroll-behavior:contain}
+  .nav-group{margin:18px 0 6px 10px;font:700 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .nav-group:first-child{margin-top:0}
+  .nav-list{list-style:none;margin:0;padding:0}
+  .nav-list>li{margin:1px 0}
+  .nav-link{display:flex;align-items:baseline;gap:9px;padding:5px 10px;border-radius:8px;font-size:13.5px;line-height:1.4;color:var(--muted);text-decoration:none}
+  .nav-link:hover{background:var(--bg-2);color:var(--ink)}
+  .nav-link.active{background:var(--brand-soft);color:var(--ink);font-weight:600;box-shadow:inset 3px 0 0 var(--accent)}
+  .nav-n{min-width:24px;font:600 11px var(--mono);color:var(--faint)}
+  .nav-link.active .nav-n{color:var(--brand)}
+  .nav-sub{list-style:none;margin:2px 0 8px 43px;padding:0 0 0 10px;border-left:1px solid var(--line-strong)}
+  .nav-sub a{display:block;padding:3px 6px;font-size:12.5px;line-height:1.4;color:var(--muted);text-decoration:none;border-radius:6px}
+  .nav-sub a:hover{color:var(--ink);background:var(--bg-2)}
+  .nav-empty{margin:12px 10px;color:var(--faint);font-size:13px}
+  .scrim{position:fixed;inset:64px 0 0;z-index:39;background:rgba(26,19,32,.35)}
+  .anchor{margin-left:8px;color:var(--faint);text-decoration:none;font-weight:500;opacity:0;transition:opacity .15s}
+  h2:hover .anchor,h3:hover .anchor,.anchor:focus{opacity:1}
+  .anchor:hover{color:var(--brand)}
+  .quick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:24px 0 4px}
+  .quick-card{display:flex;flex-direction:column;gap:3px;padding:13px 15px;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--ink);text-decoration:none}
+  .quick-card:hover{border-color:var(--ink);background:var(--bg-2)}
+  .quick-card b{font-size:14.5px}
+  .quick-card span{font-size:13px;color:var(--muted);line-height:1.45}
+  a{color:var(--brand)}
+  /* ---------- Blok kode ---------- */
+  figure.code{margin:12px 0;border-radius:12px;overflow:hidden;background:var(--terminal);border:1px solid #2c2433}
+  figure.code figcaption{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;padding:7px 10px 7px 14px;background:#241b2b;border-bottom:1px solid #362b40;font:12px var(--mono);color:#b3a991}
+  figure.code .file{color:var(--terminal-ink);font-weight:600}
+  figure.code .desc{flex:1;min-width:160px;font-family:var(--font);font-size:12.5px}
+  figure.code .lang{margin-left:auto;font-size:10.5px;letter-spacing:.1em;color:#b3a991}
+  figure.code pre{margin:0;padding:14px 16px;overflow-x:auto;font:13px/1.65 var(--mono);color:var(--terminal-ink);tab-size:2;font-variant-ligatures:none}
+  code,.prompt{font-variant-ligatures:none}
+  pre code{background:none;border:0;padding:0;color:inherit;font:inherit;border-radius:0}
+  .tk-c{color:#9d93a6;font-style:italic}.tk-s{color:#bfe39a}.tk-k{color:#ffca54}.tk-n{color:#f9a87a}.tk-f{color:#8fd0ff}.tk-t{color:#ff9fbc}.tk-a{color:#ffd88a}
+  .copy-btn{font:600 11.5px var(--mono);color:var(--terminal-ink);background:#30263a;border:1px solid #4a3d56;border-radius:6px;padding:3px 9px;cursor:pointer}
+  .copy-btn:hover{border-color:var(--accent)}
+  .copy-btn.done{color:var(--ink);background:var(--accent);border-color:var(--accent)}
+  .prompt{padding-right:72px}
+  .prompt .copy-btn{position:absolute;top:9px;right:9px}
+  @media(max-width:1100px){.wrap{padding:8px 28px 80px}.quick{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:960px){
+    .layout{display:block}
+    .menu-btn{display:grid}
+    .sidebar{position:fixed;top:64px;left:0;bottom:0;height:auto;width:min(300px,86vw);z-index:40;background:var(--bg);
+      transform:translateX(-102%);transition:transform .2s ease;box-shadow:8px 0 24px rgba(26,19,32,.12)}
+    .sidebar.open{transform:none}
+    .wrap{margin:0 auto;padding:4px 20px 80px}
+  }
+  @media(max-width:680px){
+    .topnav{gap:10px;padding:0 12px}
+    .brand b{font-size:17px}.brand .docs-tag,.back{display:none}
+    .search-key{display:none}
+    .wrap{padding:4px 16px 72px}
+    .quick{grid-template-columns:1fr}
+    figure.code .desc{order:3;flex-basis:100%;min-width:0}
+    h2{font-size:20px}
+  }
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.sidebar{transition:none}}
 </style>
 </head>
 <body>
+<a class="skip" href="#konten-utama">Lewati ke isi</a>
 <nav class="topnav" aria-label="Navigasi">
-  <a class="brand" href="/"><img src="/logo.svg" alt=""><b>rakit<span>.io</span></b></a>
-  <a class="back" href="/">← Kembali</a>
+  <button type="button" class="menu-btn" id="menuBtn" aria-controls="sidebar" aria-expanded="false" aria-label="Buka daftar isi">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12v1H2zm0 4h12v1H2zm0 4h12v1H2z"/></svg>
+  </button>
+  <a class="brand" href="/"><img src="/logo.svg" alt=""><b>rakit<span>.io</span></b><span class="docs-tag">Docs</span></a>
+  <label class="search">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 0 1 4.38 8.83l3.9 3.9-.7.7-3.9-3.9A5.5 5.5 0 1 1 6.5 1m0 1a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9"/></svg>
+    <input id="docSearch" type="search" placeholder="Cari di panduan…" aria-label="Cari di panduan" autocomplete="off" spellcheck="false">
+    <kbd class="search-key">/</kbd>
+  </label>
+  <a class="back" href="/editor">Buka editor <span aria-hidden="true">→</span></a>
 </nav>
-<div class="wrap">
+<div class="layout">
+  <aside class="sidebar" id="sidebar" aria-label="Daftar isi">
+    <p class="nav-group">Panduan Fitur</p>
+    <ul class="nav-list">
+      <li><a class="nav-link" href="#f-mulai"><span class="nav-n">F1</span><span class="nav-t">Memulai &amp; Mengenal Editor</span></a></li>
+      <li><a class="nav-link" href="#f-project"><span class="nav-n">F2</span><span class="nav-t">Project</span></a></li>
+      <li><a class="nav-link" href="#f-file"><span class="nav-n">F3</span><span class="nav-t">File, Folder &amp; Gambar</span></a></li>
+      <li><a class="nav-link" href="#f-kode"><span class="nav-n">F4</span><span class="nav-t">Editor Kode</span></a></li>
+      <li><a class="nav-link" href="#f-preview"><span class="nav-n">F5</span><span class="nav-t">Preview &amp; Pilih Blok</span></a></li>
+      <li><a class="nav-link" href="#f-ai"><span class="nav-n">F6</span><span class="nav-t">Asisten AI (Builder &amp; Plan)</span></a></li>
+      <li><a class="nav-link" href="#f-data"><span class="nav-n">F7</span><span class="nav-t">Database (Tab Data)</span></a></li>
+      <li><a class="nav-link" href="#f-fungsi"><span class="nav-n">F8</span><span class="nav-t">Fungsi Serverless (Backend)</span></a></li>
+      <li><a class="nav-link" href="#f-provider"><span class="nav-n">F9</span><span class="nav-t">AI di Fungsi (Provider AI)</span></a></li>
+      <li><a class="nav-link" href="#f-diagram"><span class="nav-n">F10</span><span class="nav-t">Diagram Buatan AI</span></a></li>
+      <li><a class="nav-link" href="#f-riwayat"><span class="nav-n">F11</span><span class="nav-t">Riwayat Versi</span></a></li>
+      <li><a class="nav-link" href="#f-console"><span class="nav-n">F12</span><span class="nav-t">Console</span></a></li>
+      <li><a class="nav-link" href="#f-publikasi"><span class="nav-n">F13</span><span class="nav-t">Publikasi: Langsung Tayang atau Dev/Prod</span></a></li>
+      <li><a class="nav-link" href="#f-kredit"><span class="nav-n">F14</span><span class="nav-t">Kredit AI, Langganan &amp; Pembayaran</span></a></li>
+      <li><a class="nav-link" href="#f-pengaturan"><span class="nav-n">F15</span><span class="nav-t">Pengaturan &amp; Pintasan Keyboard</span></a></li>
+      <li><a class="nav-link" href="#f-masalah"><span class="nav-n">F16</span><span class="nav-t">Masalah Umum &amp; Solusinya</span></a></li>
+    </ul>
+    <p class="nav-group">Cheat Sheet Prompt</p>
+    <ul class="nav-list">
+      <li><a class="nav-link" href="#dasar"><span class="nav-n">1</span><span class="nav-t">Dasar</span></a></li>
+      <li><a class="nav-link" href="#struktur"><span class="nav-n">2</span><span class="nav-t">Struktur &amp; Halaman</span></a></li>
+      <li><a class="nav-link" href="#desain"><span class="nav-n">3</span><span class="nav-t">Desain &amp; Gaya Visual</span></a></li>
+      <li><a class="nav-link" href="#responsive"><span class="nav-n">4</span><span class="nav-t">Responsive Design</span></a></li>
+      <li><a class="nav-link" href="#seo"><span class="nav-n">5</span><span class="nav-t">SEO &amp; Berbagi di Media Sosial</span></a></li>
+      <li><a class="nav-link" href="#aksesibilitas"><span class="nav-n">6</span><span class="nav-t">Aksesibilitas</span></a></li>
+      <li><a class="nav-link" href="#form"><span class="nav-n">7</span><span class="nav-t">Form &amp; Validasi Input</span></a></li>
+      <li><a class="nav-link" href="#animasi"><span class="nav-n">8</span><span class="nav-t">Animasi &amp; Interaksi Lanjutan</span></a></li>
+      <li><a class="nav-link" href="#media"><span class="nav-n">9</span><span class="nav-t">Gambar, Media &amp; Ikon</span></a></li>
+      <li><a class="nav-link" href="#navigasi"><span class="nav-n">10</span><span class="nav-t">Navigasi &amp; Multi-Halaman</span></a></li>
+      <li><a class="nav-link" href="#kinerja"><span class="nav-n">11</span><span class="nav-t">Kinerja &amp; Kecepatan</span></a></li>
+      <li><a class="nav-link" href="#konten"><span class="nav-n">12</span><span class="nav-t">Konten &amp; Tulisan</span></a></li>
+      <li><a class="nav-link" href="#keamanan"><span class="nav-n">13</span><span class="nav-t">Keamanan &amp; Data Pribadi</span></a></li>
+      <li><a class="nav-link" href="#integrasi"><span class="nav-n">14</span><span class="nav-t">Integrasi Pihak Ketiga (CDN &amp; Layanan)</span></a></li>
+      <li><a class="nav-link" href="#dashboard"><span class="nav-n">15</span><span class="nav-t">Tabel Data &amp; Dashboard</span></a></li>
+      <li><a class="nav-link" href="#pola-lanjutan"><span class="nav-n">16</span><span class="nav-t">Pola Prompt Lanjutan</span></a></li>
+      <li><a class="nav-link" href="#database"><span class="nav-n">17</span><span class="nav-t">Database</span></a></li>
+      <li><a class="nav-link" href="#interaksi"><span class="nav-n">18</span><span class="nav-t">Interaksi &amp; Fitur JavaScript</span></a></li>
+      <li><a class="nav-link" href="#contoh"><span class="nav-n">19</span><span class="nav-t">Contoh Prompt Lengkap (Siap Pakai)</span></a></li>
+      <li><a class="nav-link" href="#lanjutan"><span class="nav-n">20</span><span class="nav-t">Memperbaiki &amp; Mengubah</span></a></li>
+      <li><a class="nav-link" href="#batasan"><span class="nav-n">21</span><span class="nav-t">Batasan &amp; Tips Teknis</span></a></li>
+      <li><a class="nav-link" href="#template"><span class="nav-n">★</span><span class="nav-t">Template Prompt Universal</span></a></li>
+    </ul>
+    <p class="nav-empty" id="navEmpty" hidden>Tidak ada bagian yang cocok.</p>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+  <main class="wrap" id="konten-utama" tabindex="-1">
 
 <header>
-  <span class="logo">Panduan belajar</span>
-  <h1>Cheat Sheet <em>Prompt</em></h1>
-  <p class="sub">Panduan menulis perintah ke AI Builder untuk membangun website</p>
-  <nav class="toc">
-    <a href="#dasar">Dasar</a>
-    <a href="#struktur">Struktur</a>
-    <a href="#desain">Desain</a>
-    <a href="#responsive">Responsive</a>
-    <a href="#seo">SEO</a>
-    <a href="#aksesibilitas">Aksesibilitas</a>
-    <a href="#form">Form</a>
-    <a href="#animasi">Animasi</a>
-    <a href="#media">Media</a>
-    <a href="#navigasi">Navigasi</a>
-    <a href="#kinerja">Kinerja</a>
-    <a href="#konten">Konten</a>
-    <a href="#keamanan">Keamanan</a>
-    <a href="#integrasi">Integrasi</a>
-    <a href="#dashboard">Dashboard</a>
-    <a href="#database">Database</a>
-    <a href="#interaksi">Interaksi</a>
-    <a href="#contoh">Contoh</a>
-    <a href="#pola-lanjutan">Pola Lanjutan</a>
-    <a href="#batasan">Batasan</a>
-  </nav>
+  <span class="logo">Dokumentasi rakit.io</span>
+  <h1>Panduan <em>Lengkap</em></h1>
+  <p class="sub">Cara memakai setiap fitur rakit.io — dari editor, AI Builder, database, sampai fungsi serverless — plus cheat sheet menulis perintah ke AI.</p>
+  <div class="quick">
+    <a class="quick-card" href="#f-mulai"><b>Baru mulai?</b><span>Daftar, kenali editor &amp; project pertamamu.</span></a>
+    <a class="quick-card" href="#f-ai"><b>Bangun dengan AI</b><span>Mode Builder &amp; Plan, lampiran gambar, Pilih blok.</span></a>
+    <a class="quick-card" href="#f-data"><b>Simpan data</b><span>Tabel, akses, dan API <code>/api/db</code>.</span></a>
+    <a class="quick-card" href="#f-fungsi"><b>Kode backend</b><span>Fungsi serverless, referensi API &amp; contoh kode.</span></a>
+    <a class="quick-card" href="#dasar"><b>Menulis prompt</b><span>Rumus prompt &amp; contoh siap salin.</span></a>
+    <a class="quick-card" href="#f-masalah"><b>Ada masalah?</b><span>Penyebab umum &amp; solusinya.</span></a>
+  </div>
 </header>
+
+<!-- ══════════════════════════ BAGIAN 1: PANDUAN FITUR ══════════════════════════ -->
+<div class="part">
+  <span class="k">Bagian 1</span>
+  <h2 style="margin-top:6px">Panduan Fitur</h2>
+  <p>Kenali setiap bagian editor rakit.io: di mana letaknya, apa gunanya, dan cara memakainya langkah demi langkah.
+  Di editor, tombol <b>ⓘ</b> di samping setiap fitur juga membuka penjelasan singkatnya.</p>
+</div>
+
+<!-- ══════════════ F1. MEMULAI ══════════════ -->
+<h2 id="f-mulai"><span class="n">F1</span>Memulai &amp; Mengenal Editor</h2>
+<p class="lead">Dari daftar akun sampai paham letak setiap tombol di layar.</p>
+
+<h3>Daftar &amp; masuk</h3>
+<ol class="steps">
+  <li>Buka halaman depan rakit.io, klik <span class="ui">Daftar</span>. Isi <b>username</b>, <b>email</b>, dan <b>password</b> — atau pilih <span class="ui">Lanjutkan dengan Google</span>.</li>
+  <li>Setelah daftar, website pertamamu langsung online di <code>namamu.rakit.io</code> dan editor terbuka otomatis.</li>
+  <li>Akun baru mendapat <b>bonus kredit AI</b> sekali pakai, ditambah <b>kredit gratis setiap hari</b> (lihat <a href="#f-kredit">Kredit &amp; Paket</a>).</li>
+</ol>
+<div class="note">🔐 Akun yang didaftarkan dengan email + password tetap masuk memakai password, walaupun emailnya sama dengan akun Google-mu. Akun tidak digabung otomatis demi keamanan.</div>
+
+<h3>Dua tampilan editor: Simple &amp; Coding</h3>
+<p style="margin:6px 0">Pilih di tombol tengah atas. Pilihanmu diingat di browser.</p>
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">✦ Simple</h3>
+    <p style="margin:6px 0">Hanya <b>chat AI</b> dan <b>preview</b>. Cocok kalau kamu cukup bercerita ke AI dan melihat hasilnya tanpa menyentuh kode.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">&lt;/&gt; Coding</h3>
+    <p style="margin:6px 0">Tampilan lengkap: panel file, editor kode, database, fungsi, diagram, riwayat, dan console. Fitur yang butuh tampilan ini otomatis memindahkanmu ke Coding.</p>
+  </div>
+</div>
+
+<h3>Peta layar (tampilan Coding)</h3>
+<table>
+  <tr><th>Bagian</th><th>Isinya</th></tr>
+  <tr><td><b>Bilah atas kiri</b></td><td>Logo, tombol panel file, <b>chip alamat website</b> (tombol folder = ganti/buat project, tautan situs, tombol salin URL).</td></tr>
+  <tr><td><b>Bilah atas tengah</b></td><td>Pilihan <span class="ui">Simple</span> / <span class="ui">Coding</span> dan status penyimpanan.</td></tr>
+  <tr><td><b>Bilah atas kanan</b></td><td><span class="ui">Preview</span> (tampil/sembunyi), <span class="ui">Panduan</span>, <span class="ui">Publikasikan</span> (hanya di mode publikasi manual), <span class="ui">Lihat situs</span>, badge paket, dan <b>avatar</b> (menu akun).</td></tr>
+  <tr><td><b>Panel kiri</b></td><td>Daftar file &amp; folder project, tombol file/folder baru, upload gambar, dan pemakaian kuota.</td></tr>
+  <tr><td><b>Area tengah</b></td><td>Tab <span class="ui">Code</span> · <span class="ui">AI</span> · <span class="ui">Data</span> · <span class="ui">Diagram</span> · <span class="ui">Fungsi</span> · <span class="ui">Riwayat</span> · <span class="ui">Console</span>. Tombol <b>ⓘ</b> menjelaskan tab yang sedang dibuka.</td></tr>
+  <tr><td><b>Panel kanan</b></td><td>Preview website, pilihan ukuran layar, dan <span class="ui">Pilih blok</span>.</td></tr>
+</table>
+
+<h3>Menu avatar (pojok kanan atas)</h3>
+<table>
+  <tr><th>Menu</th><th>Fungsi</th></tr>
+  <tr><td>Buka website publik · Salin URL website</td><td>Membuka atau menyalin alamat website project aktif.</td></tr>
+  <tr><td>Mode publikasi</td><td>Pilih <b>langsung tayang</b> atau <b>manual (dev/prod)</b> — lihat <a href="#f-publikasi">Publikasi</a>.</td></tr>
+  <tr><td>Simpan semua</td><td>Menyimpan semua file yang masih terbuka &amp; belum tersimpan.</td></tr>
+  <tr><td>Pengaturan</td><td>Tema terang/gelap dan prediksi kode AI.</td></tr>
+  <tr><td>Langganan &amp; kredit AI</td><td>Lihat paket, beli kredit, atau berlangganan.</td></tr>
+  <tr><td>Keluar</td><td>Keluar dari akun di browser ini.</td></tr>
+</table>
+
+<div class="tip">📱 <b>Di HP</b>, editor memakai navigasi bawah: <span class="ui">File</span> · <span class="ui">Editor</span> (atau <span class="ui">Chat AI</span> di tampilan Simple) · <span class="ui">Preview</span>. Menu project ada di menu avatar.</div>
+
+<!-- ══════════════ F2. PROJECT ══════════════ -->
+<h2 id="f-project"><span class="n">F2</span>Project — Banyak Website dalam Satu Akun</h2>
+<p class="lead">Setiap project adalah website terpisah: alamat, file, database, riwayat versi, dan percakapan AI sendiri.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Membuat project baru</h3>
+    <ol class="steps">
+      <li>Klik <b>tombol folder</b> di chip alamat website (kiri atas).</li>
+      <li>Pilih <span class="ui">Project baru</span>.</li>
+      <li>Isi <b>alamat website</b> (huruf kecil, angka, tanda <code>-</code>), mis. <code>tokokue</code> → <code>tokokue.rakit.io</code>.</li>
+      <li>Isi <b>nama project</b> (opsional), lalu <span class="ui">Buat project</span>.</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Ganti, ganti nama, hapus</h3>
+    <ul>
+      <li><b>Ganti project</b>: klik tombol folder, pilih project dari daftar.</li>
+      <li><span class="ui">Ganti nama project…</span>: mengubah nama tampilan (alamat tetap).</li>
+      <li><span class="ui">Hapus project ini…</span>: menghapus file, database, dan riwayatnya. Project terakhir tidak bisa dihapus.</li>
+    </ul>
+  </div>
+</div>
+
+<table>
+  <tr><th>Hal</th><th>Keterangan</th></tr>
+  <tr><td>Jumlah project</td><td>Maksimal <b>5</b> per akun.</td></tr>
+  <tr><td>Kredit AI</td><td>Milik <b>akun</b>, dipakai bersama semua project.</td></tr>
+  <tr><td>Kuota file &amp; database</td><td>Dihitung <b>per project</b> (besarnya mengikuti paket).</td></tr>
+  <tr><td>Prompt AI berjalan</td><td>Satu prompt sekaligus per akun, di project mana pun.</td></tr>
+</table>
+
+<!-- ══════════════ F3. FILE & GAMBAR ══════════════ -->
+<h2 id="f-file"><span class="n">F3</span>File, Folder &amp; Gambar</h2>
+<p class="lead">Semua bagian website tersimpan sebagai file di panel kiri. <code>index.html</code> adalah halaman utama.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Membuat &amp; mengelola file</h3>
+    <ul>
+      <li>Tombol <b>File baru</b> / <b>Folder baru</b> di atas daftar file. Tulis path lengkap untuk membuat di dalam folder, mis. <code>css/style.css</code>.</li>
+      <li><b>Klik kanan</b> (atau tombol ⋯) pada file: Buka, Preview halaman ini, Salin URL publik, Ganti nama (<kbd>F2</kbd>), Hapus (<kbd>Del</kbd>).</li>
+      <li>Klik kanan pada folder: File baru, Folder baru, Upload gambar ke folder itu.</li>
+      <li>Tombol <b>Muat ulang</b> dan <b>Tutup semua folder</b> ada di sebelahnya.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Upload gambar</h3>
+    <ul>
+      <li>Klik tombol <b>Upload gambar</b>, klik kanan → <span class="ui">Upload gambar…</span>, atau <b>seret file</b> langsung ke daftar file.</li>
+      <li>Format: <code>.png .jpg .jpeg .gif .webp .svg .ico .avif</code> — isi file diperiksa, jadi file lain yang diganti ekstensinya ditolak.</li>
+      <li>Nama dirapikan otomatis (huruf kecil, spasi → <code>-</code>). Bila nama sudah ada: <span class="ui">Ganti</span>, <span class="ui">Simpan sebagai baru</span>, atau <span class="ui">Lewati</span>.</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Memakai gambar di halaman</h3>
+<p style="margin:6px 0">Klik gambar di panel file untuk melihatnya (ukuran piksel &amp; file), lalu salin <b>path</b>, tag <code>&lt;img&gt;</code>, atau <code>url()</code> CSS.</p>
+<figure class="code" data-lang="html"><figcaption><span class="file">index.html</span></figcaption><pre><code>&lt;img src="/images/logo.png" alt="Logo Toko Kue"&gt;</code></pre></figure>
+<figure class="code" data-lang="css"><figcaption><span class="file">style.css</span></figcaption><pre><code>.hero { background-image: url('/images/hero.jpg'); }</code></pre></figure>
+<div class="tip">💡 AI tahu daftar gambar di project-mu, jadi kamu bisa menulis: <i>“pakai gambar /images/hero.jpg sebagai latar bagian hero”</i>. AI tidak bisa membuat atau mengubah gambar — upload sendiri gambar yang dibutuhkan.</div>
+
+<table>
+  <tr><th>Batas</th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>Ukuran satu file kode</td><td colspan="3">512 KB (.html · .css · .js)</td></tr>
+  <tr><td>Ukuran satu gambar</td><td>1 MB</td><td>5 MB</td><td>10 MB</td></tr>
+  <tr><td>Total storage per project</td><td>20 MB</td><td>100 MB</td><td>250 MB</td></tr>
+  <tr><td>Jumlah file &amp; folder</td><td>500</td><td>2.000</td><td>5.000</td></tr>
+</table>
+
+<!-- ══════════════ F4. EDITOR KODE ══════════════ -->
+<h2 id="f-kode"><span class="n">F4</span>Editor Kode</h2>
+<p class="lead">Editor ala VS Code untuk mengubah HTML, CSS, dan JavaScript secara langsung.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Menyimpan</h3>
+    <ul>
+      <li><b>Auto-save</b> (sakelar di bawah editor): tersimpan sendiri saat mengetik, preview ikut berubah.</li>
+      <li><kbd>Ctrl/⌘</kbd> <kbd>S</kbd> simpan file aktif · menu avatar → <span class="ui">Simpan semua</span>.</li>
+      <li>Saat menutup tab yang belum tersimpan, kamu ditanya: Simpan / Jangan simpan / Batal.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Prediksi kode (AI) — gratis</h3>
+    <ul>
+      <li>Berhenti mengetik sebentar → AI menebak lanjutannya dalam <b>teks abu-abu</b>.</li>
+      <li><kbd>Tab</kbd> menerima · <kbd>Esc</kbd> atau lanjut mengetik mengabaikan.</li>
+      <li>Tidak memakai kredit (ada batas harian). Matikan di <span class="ui">Pengaturan</span>.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Klik kanan → ✦ AI</h3>
+    <ul>
+      <li>Blok (pilih) beberapa baris kode, lalu klik kanan:</li>
+      <li><span class="ui">✦ Minta AI mengubah kode ini</span> — mengisi kotak AI dengan kode itu.</li>
+      <li><span class="ui">✦ Tanya AI tentang kode ini</span> — untuk penjelasan.</li>
+      <li>Permintaan tidak langsung dikirim; kamu bisa melengkapinya dulu.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Cari &amp; navigasi</h3>
+    <ul>
+      <li><kbd>Ctrl/⌘</kbd> <kbd>F</kbd> cari di file · <kbd>Ctrl/⌘</kbd> <kbd>B</kbd> tampil/sembunyi panel file.</li>
+      <li>Breadcrumb di atas editor menunjukkan lokasi file.</li>
+      <li>Bilah bawah: posisi kursor dan bahasa file.</li>
+    </ul>
+  </div>
+</div>
+
+<h3>📖 Baca Alur Kode — AI menjelaskan kodemu (gratis)</h3>
+<p style="margin:6px 0">Tombol <span class="ui">Baca Alur Kode</span> di atas editor (untuk file .html, .css, .js) membuka panel penjelasan di samping editor. AI menjelaskan kode <b>berurutan seperti saat dijalankan</b>, bukan urut baris.</p>
+<ol class="steps">
+  <li>Buka file, klik <span class="ui">Baca Alur Kode</span>. Tunggu AI menyusun langkah-langkahnya.</li>
+  <li>Setiap langkah berisi judul, jenis (mulai, keputusan, perulangan, menunggu aksi, permintaan…), baris yang terlibat, penjelasan, contoh nilai nyata, dan istilah penting (klik untuk melihat artinya).</li>
+  <li><b>Klik langkah</b> → barisnya disorot di editor. <b>Klik baris</b> di editor → langkahnya terbuka. Pakai tombol ‹ ›, ▶ (putar otomatis), atau panah keyboard.</li>
+  <li>Langkah yang merujuk file lain (halaman, class CSS, fungsi <code>/api/fn/…</code>) bisa diklik untuk membukanya, lalu <span class="ui">← Kembali</span>.</li>
+  <li>Lihat juga <b>diagram alur</b>, <b>catatan</b> (bug, perlu dicek, saran), dan <b>kecepatan kode</b>. Pakai <span class="ui">Tanya AI</span> untuk bertanya tentang langkah yang sedang dibuka.</li>
+</ol>
+<div class="note">💾 Hasil penjelasan disimpan per file. Membuka ulang file yang sama tidak bertanya ke AI lagi. Bila isi file berubah, panel memberi tanda dan tombol <span class="ui">Perbarui</span>. Gratis, dengan batas harian per akun.</div>
+
+<!-- ══════════════ F5. PREVIEW ══════════════ -->
+<h2 id="f-preview"><span class="n">F5</span>Preview &amp; Pilih Blok</h2>
+<p class="lead">Lihat website seperti yang dilihat pengunjung, di berbagai ukuran layar.</p>
+
+<table>
+  <tr><th>Kontrol</th><th>Fungsi</th></tr>
+  <tr><td>Kolom alamat</td><td>Ubah path halaman (mis. <code>/tentang</code>) lalu tekan <kbd>Enter</kbd> untuk membuka halaman lain. <kbd>Esc</kbd> batal.</td></tr>
+  <tr><td>Desktop · Tablet · HP</td><td>Mengubah lebar preview: penuh, 768 px, atau 390 px — untuk mengecek tampilan responsif.</td></tr>
+  <tr><td>↻ Muat ulang</td><td>Memuat ulang preview.</td></tr>
+  <tr><td>↗ Buka di tab baru</td><td>Membuka halaman yang sedang di-preview di tab browser baru.</td></tr>
+  <tr><td>Badge <b>DEV</b></td><td>Muncul di mode publikasi manual: preview menampilkan versi dev, bukan website publik.</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>\</kbd></td><td>Tampilkan/sembunyikan panel preview.</td></tr>
+</table>
+
+<h3>🎯 Pilih blok — ubah bagian tertentu saja</h3>
+<p style="margin:6px 0">Daripada menjelaskan “bagian yang di bawah judul kedua…”, tunjuk langsung bagiannya di preview.</p>
+<ol class="steps">
+  <li>Klik <span class="ui">Pilih blok</span> di atas preview.</li>
+  <li>Arahkan kursor ke halaman, lalu <b>klik bagian</b> yang ingin diubah (maks. <b>5 blok</b>, boleh dari beberapa halaman — pindah halaman lewat link di preview).</li>
+  <li>Klik <span class="ui">Tulis perintah</span>. Blok terpilih muncul di atas kotak AI.</li>
+  <li>Tulis perubahannya, mis. <i>“jadikan 3 kolom dan beri ikon”</i>, lalu kirim. AI fokus ke blok itu dan tidak mengubah bagian lain.</li>
+  <li>Klik <span class="ui">Selesai</span> untuk keluar dari mode memilih.</li>
+</ol>
+
+<!-- ══════════════ F6. ASISTEN AI ══════════════ -->
+<h2 id="f-ai"><span class="n">F6</span>Asisten AI (Builder &amp; Plan)</h2>
+<p class="lead">Buka tab <span class="ui">AI</span> atau tekan <kbd>Ctrl/⌘</kbd> <kbd>I</kbd>. Teknik menulis prompt ada di <a href="#dasar">Bagian 2</a>.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">🔨 Builder</h3>
+    <p style="margin:6px 0">AI langsung menulis/mengubah/menghapus file dan membuat tabel database.</p>
+    <ol class="steps">
+      <li>Pilih <span class="ui">Builder</span> di bawah kotak prompt.</li>
+      <li>Tulis permintaan, tekan <kbd>Enter</kbd> (<kbd>Shift</kbd>+<kbd>Enter</kbd> = baris baru).</li>
+      <li>Lihat progres &amp; daftar file yang diubah. Klik file untuk melihat perbedaannya.</li>
+      <li>Pilih <span class="ui">Simpan</span> untuk menerima atau <span class="ui">Batalkan</span> untuk mengembalikan semuanya.</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">🧭 Plan</h3>
+    <p style="margin:6px 0">AI hanya berdiskusi &amp; menyusun rencana, tanpa mengubah file.</p>
+    <ol class="steps">
+      <li>Pilih <span class="ui">Plan</span>, ceritakan idemu.</li>
+      <li>Tanya-jawab sampai rencananya pas.</li>
+      <li>Tekan <span class="ui">Jalankan rencana ini</span> — AI pindah ke Builder dan mengerjakannya.</li>
+    </ol>
+  </div>
+</div>
+
+<h3>Fitur kotak prompt</h3>
+<table>
+  <tr><th>Fitur</th><th>Cara pakai</th></tr>
+  <tr><td>📎 Lampirkan gambar</td><td>Tombol <span class="ui">Gambar</span>, tempel (<kbd>Ctrl/⌘</kbd> <kbd>V</kbd>), atau seret file. Maks. <b>3 gambar</b> (JPG/PNG/WEBP, maks. 2 MB) — desain contoh, sketsa, atau screenshot error. Prompt bergambar memakai <b>2 kredit</b>.</td></tr>
+  <tr><td>🎯 Blok terpilih</td><td>Dari <a href="#f-preview">Pilih blok</a>. Hapus satu blok dengan tombol × pada chip-nya.</td></tr>
+  <tr><td>⏹ Stop</td><td>Menghentikan AI di tengah jalan. Kreditnya dikembalikan.</td></tr>
+  <tr><td>Panjang prompt</td><td>Maks. <b>20.000 karakter</b>.</td></tr>
+</table>
+
+<h3>Percakapan &amp; riwayat</h3>
+<ul>
+  <li><b>🕘 Riwayat percakapan</b> (ikon jam): buka percakapan lama untuk melanjutkannya.</li>
+  <li><b>↻ Percakapan baru</b>: mulai topik baru. AI tidak membawa konteks obrolan sebelumnya, jadi lebih hemat dan fokus.</li>
+  <li><b>🗑 Hapus semua riwayat</b>: menghapus semua percakapan di project ini.</li>
+  <li>Riwayat disimpan di server (maks. 50 percakapan, terhapus setelah 90 hari tidak dipakai).</li>
+</ul>
+
+<div class="note">⚙️ <b>Prompt tetap berjalan walau tab ditutup.</b> Setiap prompt dikerjakan di server. Refresh atau tutup tab tidak membatalkannya; saat editor dibuka lagi, progresnya tersambung kembali dan tombol Simpan/Batalkan tetap tersedia. Saat AI sedang ramai, panel menampilkan <b>posisi antrean</b>.</div>
+<div class="tip">💰 <b>Kredit aman.</b> Kredit dipotong saat prompt dikirim, dan <b>dikembalikan</b> bila prompt gagal, kamu hentikan, atau antrean penuh. Sebelum AI mengubah file, versi otomatis disimpan di <a href="#f-riwayat">Riwayat</a>.</div>
+
+<h3>Tombol “✦ … dengan AI” di fitur lain</h3>
+<p style="margin:6px 0">Banyak fitur punya tombol bertanda ✦ yang <b>mengisi kotak AI</b> dengan permintaan beserta konteksnya (tidak langsung dikirim):</p>
+<table>
+  <tr><th>Di mana</th><th>Contoh tombol</th></tr>
+  <tr><td>Fungsi</td><td>Buat dengan AI, Ubah, Perbaiki dengan AI (dari log/uji coba yang gagal)</td></tr>
+  <tr><td>Database</td><td>Pakai tabel di website, Buat form dengan AI</td></tr>
+  <tr><td>Diagram</td><td>Perbaiki temuan dengan AI</td></tr>
+  <tr><td>Console</td><td>Perbaiki dengan AI pada baris error</td></tr>
+  <tr><td>Editor kode</td><td>Klik kanan → ubah / tanya tentang kode terpilih</td></tr>
+  <tr><td>Penjelasan fitur (ⓘ)</td><td>Coba sekarang — contoh prompt untuk fitur itu</td></tr>
+</table>
+
+<!-- ══════════════ F7. DATABASE ══════════════ -->
+<h2 id="f-data"><span class="n">F7</span>Database (Tab Data)</h2>
+<p class="lead">Simpan data pengunjung &amp; konten secara permanen — mirip spreadsheet, langsung bisa dipakai dari halaman website.</p>
+
+<h3>Membuat tabel</h3>
+<ol class="steps">
+  <li>Buka tab <span class="ui">Data</span>, klik <span class="ui">+</span> (Tabel baru) atau <span class="ui">+ Buat tabel</span>.</li>
+  <li>Isi nama tabel (mis. <code>ucapan</code>), lalu tambahkan kolom: nama, <b>tipe</b>, centang <b>Wajib</b> bila harus diisi, dan <b>Privat</b> bila tidak boleh terlihat pengunjung.</li>
+  <li>Klik <span class="ui">Buat tabel</span>. Kolom <code>id</code> dan <code>created_at</code> dibuat otomatis.</li>
+</ol>
+<div class="tip">💡 Lebih cepat: minta AI di mode Builder — <i>“buat buku tamu dengan form nama dan pesan”</i> — tabel dan halamannya dibuat sekaligus.</div>
+
+<h3>Tipe kolom</h3>
+<table>
+  <tr><th>Tipe</th><th>Untuk</th><th>Contoh nilai</th></tr>
+  <tr><td>Teks</td><td>Nama, pesan, alamat (maks. 10.000 karakter)</td><td><code>Budi</code></td></tr>
+  <tr><td>Angka</td><td>Harga, jumlah, skor</td><td><code>150000</code></td></tr>
+  <tr><td>Ya/tidak</td><td>Hadir, setuju, sudah dibayar</td><td><code>true</code> / <code>false</code></td></tr>
+  <tr><td>Tanggal</td><td>Tanggal lahir, jadwal acara</td><td><code>2026-12-31</code> atau <code>2026-12-31T19:00</code></td></tr>
+  <tr><td>Relasi</td><td>Menunjuk baris di tabel lain (mis. pesanan → produk)</td><td><code>12</code> (id baris tujuan)</td></tr>
+  <tr><td>Gambar</td><td>Foto produk, avatar, bukti transfer</td><td><code>/uploads/produk/abc.jpg</code></td></tr>
+</table>
+<div class="warn">⚠️ <b>Tipe kolom tidak bisa diubah</b> setelah dibuat. Nama kolom &amp; tabel bisa diganti (klik nama, ubah, tekan <kbd>Enter</kbd>).</div>
+
+<h3>Akses: siapa boleh apa</h3>
+<p style="margin:6px 0">Klik <span class="ui">Atur</span> pada tabel. Setiap operasi bisa <b>Publik</b> (semua pengunjung) atau <b>Hanya kamu</b> (pemilik, lewat editor). Bawaannya semua <b>Hanya kamu</b>.</p>
+<table>
+  <tr><th>Operasi</th><th>Artinya</th><th>Saran umum</th></tr>
+  <tr><td><code>list</code></td><td>Membaca daftar data</td><td>Publik untuk buku tamu, katalog, papan skor</td></tr>
+  <tr><td><code>view</code></td><td>Membaca satu data</td><td>Publik untuk halaman detail produk</td></tr>
+  <tr><td><code>create</code></td><td>Menambah data</td><td>Publik untuk form kontak, RSVP, pesanan</td></tr>
+  <tr><td><code>update</code></td><td>Mengubah data</td><td><b>Hanya kamu</b> (pengunjung anonim)</td></tr>
+  <tr><td><code>delete</code></td><td>Menghapus data</td><td><b>Hanya kamu</b></td></tr>
+</table>
+<p style="margin:6px 0;font-size:14px">Kolom <b>Privat</b> tidak pernah dikirim ke pengunjung walau <code>list</code> publik — cocok untuk email, nomor HP, alamat.</p>
+
+<h3>Mengelola isi tabel</h3>
+<ul>
+  <li><span class="ui">+ Baris</span> menambah data manual. <b>Klik dua kali</b> sel untuk mengubah. Ikon tempat sampah menghapus baris.</li>
+  <li>Kolom gambar tampil sebagai thumbnail; klik dua kali untuk upload, ganti, atau kosongkan (bisa juga tempel alamat <code>https://…</code>).</li>
+  <li>Data banyak dibagi per halaman — pakai tombol Sebelumnya / Berikutnya.</li>
+  <li>Bagian <span class="ui">Pakai di websitemu</span> menampilkan contoh kode siap salin (membaca, menambah, mengubah, menghapus, menangani error) dan memberi tanda bila aksesnya belum publik.</li>
+  <li><span class="ui">Hapus tabel</span> ada di pengaturan tabel — klik sekali lagi untuk memastikan.</li>
+</ul>
+
+<h3>Memakai database dari kode website</h3>
+<div class="table-scroll"><table>
+  <tr><th>Request</th><th>Fungsi</th></tr>
+  <tr><td><code>GET /api/db/&lt;tabel&gt;?sort=-created_at&amp;limit=20&amp;offset=0</code></td><td>Daftar baris → <code>{ rows, total }</code>. Tambah <code>&amp;kolom=nilai</code> untuk menyaring.</td></tr>
+  <tr><td><code>GET /api/db/&lt;tabel&gt;/&lt;id&gt;</code></td><td>Satu baris</td></tr>
+  <tr><td><code>POST /api/db/&lt;tabel&gt;</code></td><td>Tambah baris (body JSON)</td></tr>
+  <tr><td><code>PATCH /api/db/&lt;tabel&gt;/&lt;id&gt;</code></td><td>Ubah baris</td></tr>
+  <tr><td><code>DELETE /api/db/&lt;tabel&gt;/&lt;id&gt;</code></td><td>Hapus baris</td></tr>
+  <tr><td><code>POST /api/db/&lt;tabel&gt;/upload?column=&lt;kolom&gt;</code></td><td>Upload gambar untuk kolom Gambar → <code>{ url }</code></td></tr>
+  <tr><td><code>GET /api/db/&lt;tabel&gt;?expand=&lt;kolom_relasi&gt;</code></td><td>Ikut mengambil data dari tabel yang ditunjuk kolom relasi</td></tr>
+</table></div>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">script.js</span><span class="desc">simpan &amp; tampilkan ucapan</span></figcaption><pre><code>// simpan
+const res = await fetch('/api/db/ucapan', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ nama, pesan }),
+});
+if (!res.ok) alert((await res.json()).error);
+
+// tampilkan 20 terbaru
+const { rows } = await (await fetch('/api/db/ucapan?sort=-created_at&amp;limit=20')).json();</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">script.js</span><span class="desc">upload foto lalu simpan alamatnya</span></figcaption><pre><code>const up = await fetch('/api/db/produk/upload?column=gambar', { method: 'POST', body: fileInput.files[0] });
+const { url } = await up.json();          // mis. "/uploads/produk/lx3k-9f2a.jpg"
+await fetch('/api/db/produk', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ nama, gambar: url }),
+});</code></pre></figure>
+
+<div class="warn">⚠️ <b>Jangan simpan gambar sebagai base64</b> di kolom teks — akan ditolak. Pakai kolom bertipe <b>Gambar</b> dan upload seperti contoh di atas. Pengunjung hanya bisa upload bila akses <code>create</code> atau <code>update</code> tabel itu publik.</div>
+
+<table>
+  <tr><th>Batas database</th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>Ukuran per project</td><td>10 MB</td><td>50 MB</td><td>100 MB</td></tr>
+  <tr><td>Jumlah tabel · kolom</td><td colspan="3">20 tabel · 30 kolom per tabel</td></tr>
+  <tr><td>Request dari pengunjung</td><td colspan="3">300 baca &amp; 60 tulis per menit per pengunjung · maks. 20 upload / 10 menit</td></tr>
+</table>
+
+<!-- ══════════════ F8. FUNGSI SERVERLESS ══════════════ -->
+<h2 id="f-fungsi"><span class="n">F8</span>Fungsi Serverless (Backend)</h2>
+<p class="lead">Kode JavaScript yang berjalan di <b>server</b>, bukan di browser pengunjung — untuk kunci API rahasia, perhitungan yang tidak boleh diakali, notifikasi, atau memanggil layanan lain.</p>
+
+<h3>Membuat &amp; mencoba fungsi</h3>
+<ol class="steps">
+  <li>Buka tab <span class="ui">Fungsi</span>, klik <span class="ui">+ Fungsi baru</span>. Beri nama (huruf kecil, angka, <code>-</code> atau <code>_</code>, maks. 40), mis. <code>kirim-pesan</code>.</li>
+  <li>File <code>functions/kirim-pesan.js</code> dibuat dengan kode contoh. Klik <span class="ui">Buka kode</span> untuk mengubahnya.</li>
+  <li>Klik <span class="ui">Coba</span>: pilih method, isi query &amp; body JSON, lalu jalankan. Hasil, status, waktu, dan <code>console.log</code> tampil langsung.</li>
+  <li>Panggil dari halaman website lewat <code>/api/fn/kirim-pesan</code>. <span class="ui">Salin URL</span> menyalin alamat lengkapnya.</li>
+</ol>
+<div class="tip">💡 Atau klik <span class="ui">✦ Buat dengan AI</span> dan ceritakan fungsinya, mis. <i>“kirim notifikasi Telegram setiap ada pesan baru dari form kontak”</i>.</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Bentuk kode fungsi</h3>
+    <figure class="code" data-lang="js"><figcaption><span class="file">functions/pesan.js</span></figcaption><pre><code>export default async function (req, { db, env, fetch, ai }) {
+  // req: { method, query, headers, body }
+  const row = await db.insert('pesanan', {
+    nama: req.body.nama, total: 150000,
+  });
+  return { ok: true, id: row.id }; // dikirim sbg JSON
+}</code></pre></figure>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Memanggil dari halaman</h3>
+    <figure class="code" data-lang="js"><figcaption><span class="file">script.js</span></figcaption><pre><code>const res = await fetch('/api/fn/pesan', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ nama: 'Ani' }),
+});
+const data = await res.json();</code></pre></figure>
+  </div>
+</div>
+
+<h3>Yang tersedia di dalam fungsi</h3>
+<table>
+  <tr><th>Objek</th><th>Kegunaan</th></tr>
+  <tr><td><code>req</code></td><td><code>method</code>, <code>query</code>, <code>headers</code>, <code>body</code> (sudah di-parse bila JSON). Untuk jalan terjadwal, <code>req.method</code> bernilai <code>"CRON"</code>.</td></tr>
+  <tr><td><code>db</code></td><td>Database project <b>sebagai pemilik</b> (aturan akses publik tidak berlaku): <code>db.list(tabel, { sort, limit, offset, filter })</code>, <code>db.get</code>, <code>db.insert</code>, <code>db.update</code>, <code>db.delete</code>.</td></tr>
+  <tr><td><code>env</code></td><td>Nilai rahasia dari <span class="ui">Rahasia (env)</span>, mis. <code>env.TELEGRAM_TOKEN</code>.</td></tr>
+  <tr><td><code>fetch</code></td><td>Memanggil API luar (maks. 10 per eksekusi; tidak bisa ke website rakit.io — pakai <code>db</code>).</td></tr>
+  <tr><td><code>ai</code></td><td>Memakai AI dengan API key-mu sendiri — lihat <a href="#f-provider">AI di Fungsi</a>.</td></tr>
+  <tr><td>Balasan</td><td>Nilai biasa dikirim sebagai JSON. Untuk kendali penuh: <code>new Response(teks, { status, headers })</code> atau <code>Response.json(data, { status })</code>. Error yang dilempar → status 500 <code>{ error }</code>.</td></tr>
+</table>
+<div class="note">🧩 Fungsi berjalan di <b>sandbox</b>, bukan Node.js: tidak ada <code>require</code>, paket npm, atau akses file. Kode di folder <code>functions/</code> <b>tidak pernah</b> bisa dibaca pengunjung.</div>
+
+<h3>Referensi lengkap</h3>
+<div class="table-scroll"><table>
+  <tr><th>API</th><th>Keterangan</th></tr>
+  <tr><td><code>req.method</code></td><td><code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>… atau <code>CRON</code> saat dijalankan jadwal.</td></tr>
+  <tr><td><code>req.path</code></td><td>Path yang dipanggil, mis. <code>/api/fn/pesan</code>.</td></tr>
+  <tr><td><code>req.query</code></td><td>Objek parameter URL (nilainya teks): <code>/api/fn/cari?q=kue</code> → <code>req.query.q</code>.</td></tr>
+  <tr><td><code>req.headers</code></td><td>Header request (nama huruf kecil). <code>req.headers['x-client-ip']</code> = IP pengunjung. Cookie tidak diteruskan.</td></tr>
+  <tr><td><code>req.body</code></td><td>Objek bila request mengirim JSON (<code>Content-Type: application/json</code>), selain itu teks mentah. Maks. 1 MB.</td></tr>
+  <tr><td><code>await req.text()</code> · <code>await req.json()</code></td><td>Body sebagai teks / di-parse sebagai JSON.</td></tr>
+  <tr><td><code>db.list(tabel, { sort, limit, offset, filter })</code></td><td>→ <code>{ rows, total }</code>. <code>sort: '-created_at'</code> (tanda <code>-</code> = terbaru dulu), <code>limit</code> maks. 100, <code>filter: { status: 'baru' }</code> = kolom sama dengan nilai.</td></tr>
+  <tr><td><code>db.get(tabel, id)</code></td><td>Satu baris (error bila tidak ada).</td></tr>
+  <tr><td><code>db.insert(tabel, data)</code></td><td>Menambah baris → baris baru beserta <code>id</code> &amp; <code>created_at</code>.</td></tr>
+  <tr><td><code>db.update(tabel, id, data)</code></td><td>Mengubah kolom yang dikirim saja → baris terbaru.</td></tr>
+  <tr><td><code>db.delete(tabel, id)</code></td><td>Menghapus baris → <code>{ ok: true }</code>.</td></tr>
+  <tr><td><code>env.NAMA</code></td><td>Rahasia project (maks. 30 rahasia, nama HURUF_BESAR). Belum diisi → <code>undefined</code>.</td></tr>
+  <tr><td><code>await fetch(url, { method, headers, body })</code></td><td>Memanggil layanan luar. <code>body</code> berupa objek otomatis dijadikan JSON. Hasil: <code>ok</code>, <code>status</code>, <code>headers.get(nama)</code>, <code>await text()</code>, <code>await json()</code>. Maks. 10 panggilan, 8 detik &amp; 2 MB jawaban per panggilan.</td></tr>
+  <tr><td><code>console.log/info/warn/error</code></td><td>Tampil di Coba, Log eksekusi, dan tab Console (BE). Objek dicetak sebagai JSON. Juga ada <code>console.time/timeEnd</code>, <code>count</code>, <code>table</code>, <code>assert</code>.</td></tr>
+  <tr><td><code>return nilai</code></td><td>Status 200 + JSON. <code>return</code> tanpa nilai → status 204 (kosong).</td></tr>
+  <tr><td><code>Response.json(data, { status, headers })</code></td><td>JSON dengan status sendiri, mis. 400 untuk input salah.</td></tr>
+  <tr><td><code>new Response(teks, { status, headers })</code></td><td>Balasan teks/HTML/CSV. Header yang boleh: <code>content-type</code>, <code>cache-control</code>, <code>content-disposition</code>, <code>location</code>, <code>etag</code>, <code>access-control-*</code>, dan <code>x-…</code>.</td></tr>
+  <tr><td><code>Response.redirect(url, 302)</code></td><td>Mengalihkan pengunjung ke alamat lain.</td></tr>
+  <tr><td><code>throw new Error('…')</code></td><td>Status 500. Di versi dev &amp; uji coba pesan lengkapnya tampil; di website publik pengunjung hanya melihat “Fungsi gagal dijalankan”, detailnya di Log.</td></tr>
+</table></div>
+
+<h3>Contoh kode siap pakai</h3>
+<p style="margin:6px 0">Salin ke <code>functions/&lt;nama&gt;.js</code>, sesuaikan nama tabel/kolom, lalu uji dengan tombol <span class="ui">Coba</span>.</p>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/kontak.js</span><span class="desc">validasi, simpan, kirim notifikasi Telegram</span></figcaption><pre><code>export default async function (req, { db, env, fetch }) {
+  if (req.method !== 'POST') return Response.json({ error: 'Pakai POST' }, { status: 405 });
+
+  const { nama, email, pesan } = req.body || {};
+  if (!nama || !pesan) return Response.json({ error: 'Nama dan pesan wajib diisi' }, { status: 400 });
+
+  // tabel "pesan" cukup "Hanya kamu": db di fungsi bekerja sebagai pemilik
+  const row = await db.insert('pesan', { nama, email, pesan });
+
+  // rahasia: TELEGRAM_TOKEN &amp; TELEGRAM_CHAT_ID (tab Fungsi → Rahasia)
+  const tg = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: { chat_id: env.TELEGRAM_CHAT_ID, text: `Pesan baru dari ${nama}:\n${pesan}` },
+  });
+  if (!tg.ok) console.warn('Telegram gagal', tg.status, await tg.text());
+
+  return { ok: true, id: row.id };
+}</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/checkout.js</span><span class="desc">hitung total di server (harga tidak bisa diakali)</span></figcaption><pre><code>export default async function (req, { db }) {
+  const { nama, telepon, items } = req.body || {};   // items: [{ id: 3, jumlah: 2 }, …]
+  if (!Array.isArray(items) || !items.length) {
+    return Response.json({ error: 'Keranjang kosong' }, { status: 400 });
+  }
+
+  let total = 0;
+  const rincian = [];
+  for (const it of items) {
+    const p = await db.get('produk', it.id);           // harga diambil dari database, bukan dari browser
+    const jumlah = Math.max(1, Math.min(99, Number(it.jumlah) || 1));
+    if (p.stok &lt; jumlah) return Response.json({ error: `Stok ${p.nama} tidak cukup` }, { status: 409 });
+    total += p.harga * jumlah;
+    rincian.push(`${p.nama} x${jumlah}`);
+    await db.update('produk', p.id, { stok: p.stok - jumlah });
+  }
+
+  const order = await db.insert('pesanan', { nama, telepon, item: rincian.join(', '), total, status: 'baru' });
+  return { ok: true, nomor: order.id, total };
+}</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/cuaca.js</span><span class="desc">memanggil API luar tanpa membocorkan API key (GET)</span></figcaption><pre><code>export default async function (req, { env, fetch }) {
+  const kota = req.query.kota || 'Jakarta';
+  const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(kota)}`
+            + `&amp;units=metric&amp;lang=id&amp;appid=${env.OWM_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) return Response.json({ error: 'Data cuaca tidak tersedia' }, { status: 502 });
+
+  const d = await res.json();
+  return Response.json(
+    { kota: d.name, suhu: d.main.temp, cuaca: d.weather[0].description },
+    { headers: { 'cache-control': 'public, max-age=600' } },   // cache 10 menit
+  );
+}
+// dipanggil dari halaman: fetch('/api/fn/cuaca?kota=Bandung')</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/admin-pesanan.js</span><span class="desc">satu fungsi, beberapa method + kunci sederhana</span></figcaption><pre><code>export default async function (req, { db, env }) {
+  // kunci sederhana untuk halaman admin pribadi (rahasia ADMIN_KEY)
+  if (req.headers['x-admin-key'] !== env.ADMIN_KEY) {
+    return Response.json({ error: 'Tidak diizinkan' }, { status: 401 });
+  }
+
+  switch (req.method) {
+    case 'GET':
+      return db.list('pesanan', { sort: '-created_at', limit: 50, filter: req.query.status ? { status: req.query.status } : {} });
+    case 'PATCH':
+      return db.update('pesanan', req.query.id, { status: req.body.status });
+    case 'DELETE':
+      return db.delete('pesanan', req.query.id);
+    default:
+      return Response.json({ error: 'Method tidak didukung' }, { status: 405 });
+  }
+}
+// dari halaman: fetch('/api/fn/admin-pesanan?status=baru', { headers: { 'X-Admin-Key': kunci } })</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/laporan-harian.js</span><span class="desc">dijalankan jadwal (Pro/Unlimited)</span></figcaption><pre><code>export default async function (req, { db, env, fetch }) {
+  if (req.method !== 'CRON') return Response.json({ error: 'Hanya untuk jadwal' }, { status: 403 });
+
+  const sejak = Date.now() - 24 * 3600e3;                     // 24 jam terakhir (created_at dalam UTC)
+  const hariIni = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);   // tanggal WIB untuk judul
+  const { rows } = await db.list('pesanan', { sort: '-created_at', limit: 100 });
+  const baru = rows.filter((r) =&gt; Date.parse(r.created_at) &gt;= sejak);
+  const omzet = baru.reduce((n, r) =&gt; n + (r.total || 0), 0);
+
+  console.log(`Laporan ${hariIni}: ${baru.length} pesanan, Rp${omzet}`);
+  await fetch('https://api.resend.com/emails', {                 // kirim email via Resend
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' },
+    body: { from: 'toko@domainmu.com', to: env.EMAIL_SAYA, subject: `Laporan ${hariIni}`,
+            html: `&lt;p&gt;${baru.length} pesanan, total Rp${omzet}&lt;/p&gt;` },
+  });
+}
+// atur di tab Fungsi → Jadwal → "Setiap hari jam 21:00"</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/unduh-csv.js</span><span class="desc">balasan file &amp; redirect</span></figcaption><pre><code>export default async function (req, { db, env }) {
+  if (req.query.key !== env.ADMIN_KEY) return Response.redirect('/', 302);   // bukan pemilik → ke beranda
+
+  const { rows } = await db.list('pendaftar', { sort: 'id', limit: 100 });
+  const csv = ['id,nama,email', ...rows.map((r) =&gt; `${r.id},"${r.nama}","${r.email}"`)].join('\n');
+  return new Response(csv, {
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': 'attachment; filename="pendaftar.csv"',
+    },
+  });
+}</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/cs.js</span><span class="desc">chatbot dengan riwayat (butuh Provider AI)</span></figcaption><pre><code>export default async function (req, { ai }) {
+  const riwayat = (req.body?.messages || []).slice(-10);      // [{ role: 'user'|'assistant', content }]
+  const { text } = await ai.chat({
+    system: 'Kamu CS Toko Kue Bu Sari. Jam buka 08.00–20.00. Jawab singkat &amp; ramah.',
+    messages: riwayat,
+    maxTokens: 400,
+  });
+  return { reply: text };
+}</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">script.js</span><span class="desc">Memanggil fungsi &amp; menangani error di halaman</span></figcaption><pre><code>async function kirim(data) {
+  const res = await fetch('/api/fn/kontak', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const hasil = await res.json().catch(() =&gt; ({}));
+  if (!res.ok) throw new Error(hasil.error || 'Gagal mengirim');   // pesan dari Response.json({ error })
+  return hasil;
+}</code></pre></figure>
+
+<div class="tip">💡 <b>Kebiasaan baik:</b> periksa input dulu dan balas <code>400</code> dengan pesan jelas · jangan percaya harga/total dari browser · simpan semua kunci di Rahasia · pakai <code>console.log</code> lalu lihat hasilnya di <span class="ui">Coba</span> atau Log · batas waktu 10 detik, jadi hindari banyak <code>fetch</code> berurutan.</div>
+
+<table>
+  <tr><th>Batas lain</th><th>Nilai</th></tr>
+  <tr><td>Request ke satu website</td><td>120 per menit (semua pengunjung) · 60 per menit per pengunjung</td></tr>
+  <tr><td>Body request · jawaban <code>fetch</code></td><td>1 MB · 2 MB</td></tr>
+  <tr><td>Output console per eksekusi</td><td>16 KB (sisanya dipotong)</td></tr>
+  <tr><td>Versi dev (publikasi manual)</td><td>Fungsi dev dipanggil di <code>namamu--dev.rakit.io/api/fn/…</code> dan memakai database dev</td></tr>
+</table>
+
+<h3>Rahasia, jadwal, dan log</h3>
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">🔑 Rahasia (env)</h3>
+    <p style="margin:6px 0">Isi nama (mis. <code>TELEGRAM_TOKEN</code>) dan nilainya, klik <span class="ui">Simpan</span>. Baca di kode lewat <code>env.TELEGRAM_TOKEN</code>. Nilai tidak ditampilkan lagi di editor.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">⏱ Jadwal <span class="pill">Pro / Unlimited</span></h3>
+    <p style="margin:6px 0">Klik <span class="ui">Jadwal</span> pada fungsi: setiap 5/15/30 menit, setiap jam, setiap hari jam tertentu, setiap minggu, atau cron kustom (waktu WIB). Paling sering: Pro 15 menit, Unlimited 5 menit.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">📜 Log eksekusi</h3>
+    <p style="margin:6px 0">Daftar eksekusi terakhir (dipicu pengunjung, uji coba, atau jadwal) dengan status, durasi, error, dan console. Eksekusi gagal punya tombol <span class="ui">✦ Perbaiki dengan AI</span>.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">📊 Kuota</h3>
+    <p style="margin:6px 0">Meteran di atas tab menunjukkan eksekusi hari ini. Batas: <b>10 detik</b> &amp; <b>64 MB</b> per eksekusi.</p>
+  </div>
+</div>
+<table>
+  <tr><th>Eksekusi per hari (WIB)</th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>Semua fungsi di akun</td><td>1.000</td><td>20.000</td><td>100.000</td></tr>
+</table>
+<div class="warn">⚠️ <b>Jangan pernah menulis API key/token di file .html atau .js halaman</b> — siapa pun bisa melihatnya. Simpan di Rahasia (env) dan pakai lewat fungsi.</div>
+
+<!-- ══════════════ F9. AI DI FUNGSI ══════════════ -->
+<h2 id="f-provider"><span class="n">F9</span>AI di Fungsi (Provider AI)</h2>
+<p class="lead">Bangun fitur AI di websitemu — chatbot, ringkasan, ekstraksi data, cek gambar — memakai API key milikmu sendiri.</p>
+
+<h3>Menambahkan provider</h3>
+<ol class="steps">
+  <li>Tab <span class="ui">Fungsi</span> → bagian <span class="ui">Provider AI</span> → tambah provider.</li>
+  <li>Pilih jenis: <b>OpenAI</b>, <b>Anthropic Claude</b>, <b>Google Gemini</b>, atau <b>kompatibel OpenAI</b> (ada tombol cepat DeepSeek, Groq, OpenRouter, Mistral, Together).</li>
+  <li>Isi nama (dipakai di kode), API key, model chat, dan model embedding (opsional). Tandai satu sebagai <b>default</b>.</li>
+  <li>Klik <span class="ui">Simpan &amp; tes</span> untuk memastikan key dan modelnya berfungsi. Maks. 10 provider per project.</li>
+</ol>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/bantu.js</span></figcaption><pre><code>export default async function (req, { ai }) {
+  const { text } = await ai.chat(req.body.pertanyaan, { system: 'Kamu CS toko kue. Jawab singkat.' });
+  const data = await ai.json('Ambil nama &amp; HP dari: ' + req.body.pesan, { nama: 'string', hp: 'string' });
+  const cek  = await ai.chat('Apakah ini bukti transfer?', { images: ['/uploads/bukti/abc.jpg'] });
+  const [a, b] = await ai.embed(['kue coklat', 'brownies']);
+  return { text, data, cek: cek.text, mirip: ai.similarity(a, b) };
+}</code></pre></figure>
+
+<table>
+  <tr><th>Perintah</th><th>Hasil</th></tr>
+  <tr><td><code>ai.chat(prompt, { system, images, provider, model, temperature, maxTokens })</code></td><td><code>{ text, model, provider, usage }</code></td></tr>
+  <tr><td><code>ai.json(prompt, bentuk)</code></td><td>Objek sesuai bentuk yang diminta</td></tr>
+  <tr><td><code>ai.embed(teks | [teks])</code></td><td>Vektor untuk pencarian makna (Anthropic tidak punya embedding)</td></tr>
+  <tr><td><code>ai.similarity(a, b)</code></td><td>Kemiripan dua vektor (0–1)</td></tr>
+  <tr><td><code>ai.providers()</code></td><td>Daftar provider terpasang (tanpa key)</td></tr>
+</table>
+<div class="note">🛡️ <b>API key-mu aman.</b> Key disimpan di server, tidak pernah dikirim ke browser maupun ke kode fungsi (editor hanya menampilkan 4 karakter terakhir), dan ikut terhapus saat provider dihapus. Biaya ditagih provider ke akunmu — rakit.io tidak memotong kredit. Pasang <b>batas pengeluaran</b> di dashboard provider.</div>
+<p style="margin:6px 0;font-size:14px">Batas: maks. <b>5 panggilan</b> <code>ai.*</code> per eksekusi, 60 detik per panggilan, gambar maks. 4 (5 MB). Waktu menunggu AI tidak dihitung ke batas 10 detik fungsi. Pemakaian per provider tampil di tab Fungsi.</p>
+
+<!-- ══════════════ F10. DIAGRAM ══════════════ -->
+<h2 id="f-diagram"><span class="n">F10</span>Diagram Buatan AI</h2>
+<p class="lead">AI menggambar struktur websitemu dari file &amp; database — untuk memahami gambaran besar, dokumentasi, atau tugas kuliah.</p>
+
+<table>
+  <tr><th>Jenis</th><th>Menunjukkan</th></tr>
+  <tr><td>Use Case</td><td>Aktor dan apa yang bisa mereka lakukan di website</td></tr>
+  <tr><td>Activity</td><td>Alur proses utama pengunjung, dengan cabang keputusan</td></tr>
+  <tr><td>Sequence</td><td>Urutan interaksi Pengunjung → Halaman → API → database/layanan luar</td></tr>
+  <tr><td>Class</td><td>Tabel dan modul JavaScript beserta atribut, method, dan relasinya</td></tr>
+  <tr><td>State</td><td>Perubahan status objek penting (mis. pesanan)</td></tr>
+  <tr><td>ERD</td><td>Tabel, kolom, tipe, wajib/privat, dan relasi</td></tr>
+  <tr><td>Peta halaman</td><td>Halaman, link antarhalaman, file CSS/JS — link rusak &amp; file hilang ditandai</td></tr>
+  <tr><td>Alur data</td><td>Halaman/script/fungsi mana memakai tabel apa — request yang akan ditolak ditandai</td></tr>
+</table>
+
+<ol class="steps">
+  <li>Buka tab <span class="ui">Diagram</span>, pilih jenisnya.</li>
+  <li>Klik <span class="ui">Update diagram</span> — AI menggambar dari kondisi terbaru (memakai <b>1 kredit</b>, dikembalikan bila gagal). Diagram tersimpan dan <b>tidak berubah sendiri</b>.</li>
+  <li>Baca panel <span class="ui">Temuan</span>: catatan AI seperti tabel yang bisa dihapus siapa pun atau link rusak.</li>
+  <li>Bila gambar gagal ditampilkan, klik <span class="ui">Perbaiki dengan AI</span> (gratis, maks. 2 kali per diagram).</li>
+  <li>Salin kode Mermaid atau unduh sebagai SVG. Tombol ⓘ menjelaskan cara membaca jenis diagram yang dibuka.</li>
+</ol>
+
+<h3>Zoom &amp; geser</h3>
+<table>
+  <tr><th></th><th>Zoom</th><th>Geser</th></tr>
+  <tr><td>Mouse</td><td>Scroll roda; klik dua kali (<kbd>Shift</kbd> = perkecil)</td><td>Seret; <kbd>Shift</kbd> + scroll = mendatar</td></tr>
+  <tr><td>Touchpad</td><td>Cubit, atau <kbd>Ctrl/⌘</kbd> + scroll</td><td>Geser dua jari</td></tr>
+  <tr><td>Layar sentuh</td><td>Cubit dua jari</td><td>Seret satu jari</td></tr>
+  <tr><td>Keyboard</td><td><kbd>+</kbd> / <kbd>−</kbd>, <kbd>0</kbd> pas layar, <kbd>1</kbd> ukuran asli</td><td>Tombol panah</td></tr>
+</table>
+
+<!-- ══════════════ F11. RIWAYAT ══════════════ -->
+<h2 id="f-riwayat"><span class="n">F11</span>Riwayat Versi</h2>
+<p class="lead">“Save point” untuk seluruh file project. Bereksperimen tanpa takut merusak.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Kapan versi tersimpan</h3>
+    <ul>
+      <li><b>Otomatis</b> saat kamu mulai mengedit (paling sering tiap 10 menit).</li>
+      <li><b>Otomatis</b> sebelum AI mengubah file.</li>
+      <li><b>Otomatis</b> sebelum mengembalikan versi (jadi restore pun bisa dibatalkan).</li>
+      <li><b>Manual</b>: tombol <span class="ui">Simpan versi sekarang</span> dengan nama sendiri, mis. “sebelum ganti desain”.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Mengembalikan</h3>
+    <ol class="steps">
+      <li>Buka tab <span class="ui">Riwayat</span>, pilih versi.</li>
+      <li>Lihat file berlabel <b>Berbeda</b>, <b>Sudah dihapus</b>, atau <b>File baru</b>. Klik <span class="ui">Lihat perbedaan</span>.</li>
+      <li><span class="ui">Kembalikan file ini</span> untuk satu file, atau <span class="ui">Kembalikan ke versi ini</span> untuk seluruh project.</li>
+    </ol>
+  </div>
+</div>
+<div class="warn">⚠️ <b>Database tidak ikut</b> disimpan/dikembalikan, supaya data kiriman pengunjung tidak hilang. Mengembalikan seluruh project juga menghapus file yang dibuat setelah versi itu.</div>
+<table>
+  <tr><th>Batas riwayat per project</th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>Disimpan selama</td><td>7 hari</td><td>30 hari</td><td>90 hari</td></tr>
+  <tr><td>Jumlah versi</td><td>20</td><td>200</td><td>2.000</td></tr>
+</table>
+<p style="margin:6px 0;font-size:14px">Riwayat tidak dihitung ke kuota storage.</p>
+
+<!-- ══════════════ F12. CONSOLE ══════════════ -->
+<h2 id="f-console"><span class="n">F12</span>Console — Mencari Penyebab Error</h2>
+<p class="lead">Semua pesan dari websitemu di satu tempat. Angka merah di tab menandakan error baru.</p>
+
+<table>
+  <tr><th>Sumber</th><th>Isinya</th></tr>
+  <tr><td><b>FE</b> (frontend)</td><td><code>console.log</code> dan error dari halaman di preview</td></tr>
+  <tr><td><b>BE</b> (backend)</td><td>Log dan error fungsi serverless</td></tr>
+  <tr><td><b>Jaringan</b></td><td>Request halaman ke server (mis. <code>fetch('/api/db/produk')</code>) beserta status-nya</td></tr>
+  <tr><td><b>Sistem</b></td><td>Catatan seperti halaman yang dimuat</td></tr>
+</table>
+<ul>
+  <li>Saring per sumber, centang <span class="ui">Hanya error</span>, atau ketik di <span class="ui">Cari log…</span>.</li>
+  <li>Tombol ↻ memuat ulang preview, 🗑 membersihkan log.</li>
+  <li>Pada baris error, klik <span class="ui">✦ Perbaiki dengan AI</span> — pesan error ikut dikirim sebagai konteks.</li>
+</ul>
+<table>
+  <tr><th>Status</th><th>Artinya</th></tr>
+  <tr><td><span class="badge b-ok">2xx</span></td><td>Berhasil</td></tr>
+  <tr><td><span class="badge b-warn">4xx</span></td><td>Permintaan ditolak — mis. 403 akses tabel belum publik, 404 tabel/halaman tidak ada, 400 data tidak valid</td></tr>
+  <tr><td><span class="badge b-no">5xx</span></td><td>Error di server/fungsi</td></tr>
+</table>
+
+<!-- ══════════════ F13. PUBLIKASI ══════════════ -->
+<h2 id="f-publikasi"><span class="n">F13</span>Publikasi: Langsung Tayang atau Dev/Prod</h2>
+<p class="lead">Atur kapan perubahan terlihat oleh pengunjung. Buka menu avatar → <span class="ui">Mode publikasi</span>.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">⚡ Langsung tayang <span class="pill">bawaan</span></h3>
+    <p style="margin:6px 0">Setiap perubahan langsung terlihat di <code>namamu.rakit.io</code>. Cocok untuk belajar dan mencoba-coba.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">🚀 Publikasi manual (dev/prod)</h3>
+    <p style="margin:6px 0">Kamu mengedit <b>versi dev</b> di <code>namamu--dev.rakit.io</code> (bisa dibagikan untuk minta pendapat). Website publik baru berubah saat kamu menekan <span class="ui">Publikasikan</span>. Database dev terpisah untuk uji coba.</p>
+  </div>
+</div>
+
+<h3>Mempublikasikan perubahan</h3>
+<ol class="steps">
+  <li>Titik pada tombol <span class="ui">Publikasikan</span> (kanan atas) menandakan ada perubahan yang belum tayang.</li>
+  <li>Klik tombolnya — tampil daftar file <b>baru</b>, <b>diubah</b>, <b>dihapus</b>, dan perubahan struktur database.</li>
+  <li>Klik <span class="ui">Publikasikan</span>. Data &amp; gambar kiriman pengunjung di website publik tetap aman; data uji coba dev tidak ikut.</li>
+  <li>Bila ada tabel/kolom yang akan dihapus, centang konfirmasi dulu — datanya akan hilang dari website publik.</li>
+</ol>
+<div class="warn">⚠️ Kembali dari manual ke <b>langsung tayang</b> membuat perubahan yang belum dipublikasikan langsung tayang, dan data uji coba di dev diganti data asli dari website publik.</div>
+
+<!-- ══════════════ F14. KREDIT & PAKET ══════════════ -->
+<h2 id="f-kredit"><span class="n">F14</span>Kredit AI, Langganan &amp; Pembayaran</h2>
+<p class="lead">Badge kredit di panel AI menunjukkan sisa kreditmu. Klik badge itu atau menu avatar → <span class="ui">Langganan &amp; kredit AI</span>.</p>
+
+<h3>Berapa biaya tiap fitur?</h3>
+<table>
+  <tr><th>Fitur</th><th>Biaya</th></tr>
+  <tr><td>Prompt AI (Builder / Plan)</td><td><b>1 kredit</b></td></tr>
+  <tr><td>Prompt dengan gambar</td><td><b>2 kredit</b></td></tr>
+  <tr><td>Update diagram</td><td><b>1 kredit</b></td></tr>
+  <tr><td>Prediksi kode, Baca Alur Kode, perbaikan diagram</td><td><span class="badge b-ok">Gratis</span> (ada batas harian)</td></tr>
+  <tr><td>AI di fungsi (<code>ai.*</code>)</td><td>Ditagih provider ke API key-mu, bukan kredit rakit.io</td></tr>
+  <tr><td>Prompt gagal / dihentikan / antrean penuh</td><td>Kredit <b>dikembalikan</b></td></tr>
+</table>
+
+<h3>Sumber kredit (dipakai berurutan)</h3>
+<ol class="steps">
+  <li><b>Kuota langganan</b> — bila berlangganan Pro/Unlimited.</li>
+  <li><b>Bonus awal</b> untuk akun baru (sekali pakai), lalu <b>kredit gratis harian</b> — reset pukul 00.00 WIB, sisanya tidak menumpuk.</li>
+  <li><b>Kredit yang dibeli</b> — tidak hangus.</li>
+</ol>
+
+<h3>Paket</h3>
+<div class="table-scroll"><table>
+  <tr><th></th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>AI</td><td>Kredit gratis harian</td><td>Kuota kredit tiap 30 hari</td><td>Tanpa kuota bulanan, ada batas prompt per hari</td></tr>
+  <tr><td>Storage file / project</td><td>20 MB</td><td>100 MB</td><td>250 MB</td></tr>
+  <tr><td>Database / project</td><td>10 MB</td><td>50 MB</td><td>100 MB</td></tr>
+  <tr><td>File &amp; folder</td><td>500</td><td>2.000</td><td>5.000</td></tr>
+  <tr><td>Ukuran gambar</td><td>1 MB</td><td>5 MB</td><td>10 MB</td></tr>
+  <tr><td>Riwayat versi</td><td>7 hari / 20</td><td>30 hari / 200</td><td>90 hari / 2.000</td></tr>
+  <tr><td>Eksekusi fungsi / hari</td><td>1.000</td><td>20.000</td><td>100.000</td></tr>
+  <tr><td>Jadwal fungsi</td><td><span class="badge b-no">—</span></td><td>min. 15 menit</td><td>min. 5 menit</td></tr>
+</table></div>
+<p style="margin:6px 0;font-size:14px">Harga dan kuota AI terbaru tampil di menu <span class="ui">Langganan &amp; kredit AI</span>.</p>
+
+<h3>Membayar dengan QRIS</h3>
+<ol class="steps">
+  <li>Pilih paket kredit atau langganan, lalu klik bayar.</li>
+  <li>Pindai kode QRIS dengan aplikasi bank atau e-wallet mana pun.</li>
+  <li>Biarkan jendela pembayaran terbuka — kredit/paket aktif otomatis begitu pembayaran diterima.</li>
+</ol>
+<ul>
+  <li><b>Langganan 30 hari</b>, sekali bayar tanpa tagihan otomatis.</li>
+  <li><b>Perpanjang</b> paket yang sama: masa aktif ditambah 30 hari dari tanggal berakhir.</li>
+  <li><b>Upgrade</b> Pro → Unlimited: langsung aktif, sisa hari Pro dikonversi sesuai harga.</li>
+  <li>Saat langganan berakhir, batas kembali ke Gratis. File tidak dihapus, tetapi file baru/lebih besar ditolak sampai pemakaian di bawah batas.</li>
+</ul>
+
+<!-- ══════════════ F15. PENGATURAN & PINTASAN ══════════════ -->
+<h2 id="f-pengaturan"><span class="n">F15</span>Pengaturan &amp; Pintasan Keyboard</h2>
+<p class="lead">Menu avatar → <span class="ui">Pengaturan</span>. Pengaturan disimpan di browser yang sedang dipakai.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Tampilan</h3>
+    <p style="margin:6px 0">Tema <b>Terang</b> (kertas krem) atau <b>Gelap</b>. Warna editor kode dan diagram ikut menyesuaikan.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Editor kode</h3>
+    <p style="margin:6px 0"><b>Prediksi kode otomatis (AI)</b> — nyalakan/matikan tebakan kode abu-abu.</p>
+  </div>
+</div>
+
+<table>
+  <tr><th>Pintasan</th><th>Aksi</th></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>S</kbd></td><td>Simpan file</td></tr>
+  <tr><td><kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>S</kbd></td><td>Simpan semua</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>F</kbd></td><td>Cari di file</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>B</kbd></td><td>Tampil/sembunyi panel file</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>\</kbd></td><td>Tampil/sembunyi preview</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>I</kbd></td><td>Buka Asisten AI</td></tr>
+  <tr><td><kbd>Enter</kbd> · <kbd>Shift</kbd> <kbd>Enter</kbd></td><td>Kirim prompt · baris baru</td></tr>
+  <tr><td><kbd>Tab</kbd> · <kbd>Esc</kbd></td><td>Terima · abaikan prediksi kode</td></tr>
+  <tr><td><kbd>F2</kbd> · <kbd>Del</kbd></td><td>Ganti nama · hapus file terpilih</td></tr>
+  <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Pindah langkah di Baca Alur Kode</td></tr>
+</table>
+
+<!-- ══════════════ F16. MASALAH UMUM ══════════════ -->
+<h2 id="f-masalah"><span class="n">F16</span>Masalah Umum &amp; Solusinya</h2>
+<p class="lead">Cek di sini dulu sebelum bingung.</p>
+
+<table>
+  <tr><th>Masalah</th><th>Penyebab &amp; solusi</th></tr>
+  <tr><td>Form tidak tersimpan, Console menunjukkan <b>403</b></td><td>Akses <code>create</code> tabel masih “Hanya kamu”. Buka tab Data → <span class="ui">Atur</span> → jadikan Publik.</td></tr>
+  <tr><td>Data tidak muncul, status <b>404</b></td><td>Nama tabel di kode berbeda dengan di tab Data (perhatikan huruf &amp; garis bawah).</td></tr>
+  <tr><td>Kolom email tidak tampil di halaman</td><td>Kolom bertanda <b>Privat</b> memang tidak dikirim ke pengunjung. Lihat di tab Data.</td></tr>
+  <tr><td>Gambar tidak muncul</td><td>Path salah (huruf besar/kecil berpengaruh). Klik gambar di panel file → salin path-nya.</td></tr>
+  <tr><td>Perubahan tidak terlihat di website publik</td><td>Mode publikasi manual aktif — tekan <span class="ui">Publikasikan</span>. Atau file belum tersimpan.</td></tr>
+  <tr><td>Hasil AI tidak sesuai</td><td>Tekan <span class="ui">Batalkan</span>, lalu tulis ulang lebih spesifik, atau pakai <span class="ui">Pilih blok</span>. Bisa juga kembali lewat tab Riwayat.</td></tr>
+  <tr><td>“AI sedang penuh”</td><td>Antrean sedang ramai; kredit dikembalikan. Coba lagi sebentar.</td></tr>
+  <tr><td>Kredit habis</td><td>Tunggu reset 00.00 WIB, beli kredit, atau berlangganan.</td></tr>
+  <tr><td>File/gambar ditolak karena kuota</td><td>Hapus file yang tidak dipakai, perkecil gambar, atau upgrade paket.</td></tr>
+  <tr><td>Fungsi error / timeout</td><td>Lihat Log eksekusi di tab Fungsi, lalu <span class="ui">✦ Perbaiki dengan AI</span>. Pastikan rahasia (env) yang dipakai sudah diisi.</td></tr>
+  <tr><td>Tombol diam saja saat diklik</td><td>Buka tab Console → saring FE → baca error merah → <span class="ui">✦ Perbaiki dengan AI</span>.</td></tr>
+</table>
+
+<!-- ══════════════════════════ BAGIAN 2: CHEAT SHEET PROMPT ══════════════════════════ -->
+<div class="part">
+  <span class="k">Bagian 2</span>
+  <h2 style="margin-top:6px">Cheat Sheet Prompt</h2>
+  <p>Cara menulis perintah ke AI Builder agar hasilnya tepat sejak percobaan pertama — lengkap dengan contoh siap salin.</p>
+</div>
 
 <!-- ══════════════ 1. DASAR ══════════════ -->
 <h2 id="dasar"><span class="n">1</span>Dasar — Cara AI Bekerja</h2>
@@ -487,8 +1442,8 @@ Simpan ke database setelah valid.</div>
     <div class="prompt"><span class="lbl">Builder</span>Form dengan input gambar:
 - Pilih foto, tampilkan pratinjau sebelum kirim
 - Batasi ukuran maksimal 2 MB
-- Setelah dikirim, tampilkan gambar di galeri
-(ubah gambar jadi teks terenkode)</div>
+- Simpan ke kolom bertipe gambar di database
+- Setelah dikirim, tampilkan gambar di galeri</div>
   </div>
   <div class="card">
     <h3 style="margin-top:0">Menampilkan data masuk</h3>
@@ -550,9 +1505,10 @@ HP mereka secara otomatis saat pertama dibuka.</div>
 <p class="lead">Cara meminta gambar, ilustrasi, peta, video, dan ikon tanpa file sendiri.</p>
 
 <div class="note">
-  🖼️ Situs user hanya berupa <code>.html</code> · <code>.css</code> · <code>.js</code> — tidak bisa menyimpan
-  file gambar besar. Untuk gambar, gunakan <b>tautan gambar dari internet</b> (mis. layanan gratis)
-  atau simpan sebagai teks terenkode di database.
+  🖼️ Punya foto sendiri? <b>Upload</b> lewat panel File (lihat <a href="#f-file">File &amp; Gambar</a>), lalu sebut
+  path-nya di prompt, mis. <i>“pakai /images/hero.jpg untuk latar hero”</i>. AI tidak bisa membuat gambar,
+  jadi untuk sementara bisa memakai <b>tautan gambar dari internet</b>. Gambar kiriman pengunjung disimpan
+  lewat kolom bertipe <b>Gambar</b> di database.
 </div>
 
 <div class="grid">
@@ -709,6 +1665,8 @@ untuk bisnis kuliner rumahan di Bandung,
   <tr><td>Anti-spam</td><td><code>tambahkan kolom "ketik hasil 3+2" untuk mencegah bot mengirim form</code></td></tr>
   <tr><td>Data tidak hilang</td><td><code>simpan semua data pengunjung ke database, jangan hanya di browser</code></td></tr>
   <tr><td>Kata sandi</td><td><code>kalau ada area pribadi, jangan simpan kata sandi di situs — pakai pemilik saja</code></td></tr>
+  <tr><td>API key / token</td><td><code>simpan token Telegram di fungsi serverless, baca dari env.TELEGRAM_TOKEN — jangan tulis di halaman</code></td></tr>
+  <tr><td>Harga tidak bisa diakali</td><td><code>hitung total pesanan di fungsi serverless, bukan di browser</code></td></tr>
 </table>
 
 <div class="warn">⚠️ <b>Prinsip aman:</b> untuk data pengunjung yang bersifat pribadi (email, telepon, alamat), selalu atur sebagai <b>khusus pemilik</b>. Kamu melihat &amp; mengelolanya lewat tab <b>Database</b> di editor.</div>
@@ -732,7 +1690,12 @@ untuk bisnis kuliner rumahan di Bandung,
   <tr><td>Kerangka UI</td><td><code>pakai Bootstrap 5 dari CDN untuk tata letaknya</code></td></tr>
   <tr><td>Tanggal</td><td><code>pakai date picker yang rapi dan mudah dipakai di HP</code></td></tr>
   <tr><td>Kalender acara</td><td><code>tampilkan kalender bulanan untuk memilih tanggal kunjungan</code></td></tr>
+  <tr><td>Notifikasi Telegram</td><td><code>buat fungsi serverless yang mengirim pesan Telegram setiap ada pesanan baru (token di env.TELEGRAM_TOKEN)</code></td></tr>
+  <tr><td>API layanan lain</td><td><code>buat fungsi yang mengambil kurs dari API luar, simpan API key di rahasia</code></td></tr>
+  <tr><td>Fitur AI sendiri</td><td><code>buat fungsi yang meringkas ulasan pelanggan pakai ai.chat (provider default saya)</code></td></tr>
+  <tr><td>Laporan otomatis</td><td><code>buat fungsi laporan penjualan harian; saya akan atur jadwalnya tiap jam 07.00</code></td></tr>
 </table>
+<div class="tip">💡 Butuh kunci rahasia atau logika di server? Lihat <a href="#f-fungsi">Fungsi Serverless</a>. Setelah AI membuat fungsinya, isi rahasianya sendiri di tab Fungsi → <b>Rahasia (env)</b>.</div>
 
 <!-- ══════════════ 15. TABEL DATA & DASHBOARD ══════════════ -->
 <h2 id="dashboard"><span class="n">15</span>Tabel Data &amp; Dashboard</h2>
@@ -885,7 +1848,8 @@ email (teks, wajib, privat),
 telepon (teks, privat),
 tanggal_lahir (tanggal),
 jumlah_orang (angka),
-setuju_syarat (ya/tidak).
+setuju_syarat (ya/tidak),
+foto (gambar).
 Tampilkan konfirmasi setelah kirim.</div>
   </div>
   <div class="card">
@@ -941,8 +1905,8 @@ dan tombol tutup.</div>
   <div class="card">
     <h3 style="margin-top:0">Unggah &amp; tampilkan gambar</h3>
     <div class="prompt"><span class="lbl">Builder</span>Form dengan input file gambar,
-tampilkan pratinjau sebelum dikirim.
-(kirim base64 ke database)</div>
+tampilkan pratinjau sebelum dikirim,
+lalu upload ke kolom gambar di database.</div>
   </div>
 </div>
 
@@ -1018,7 +1982,7 @@ Gaya ceria, warna-warni, animasi halus.</div>
 
 <div class="tip">💡 <b>Perbaikan makin presisi jika menyebut bagiannya.</b> Sebut nama halaman/bagian (“di bagian footer”, “di halaman kontak”) agar AI mengubah yang tepat, bukan seluruh situs.</div>
 
-<div class="note">🔄 <b>Semua perubahan bisa dibatalkan.</b> Di mode Builder, perubahan ditampilkan dengan tombol <b>Simpan / Batalkan</b> sebelum diterapkan. Ada juga riwayat percakapan — buka kembali untuk melanjutkan.</div>
+<div class="note">🔄 <b>Semua perubahan bisa dibatalkan.</b> Di mode Builder, perubahan ditampilkan dengan tombol <b>Simpan / Batalkan</b> sebelum diterapkan. Ada juga riwayat percakapan — buka kembali untuk melanjutkan — dan tab <a href="#f-riwayat">Riwayat</a> untuk kembali ke versi mana pun.</div>
 
 <!-- ══════════════ 21. BATASAN ══════════════ -->
 <h2 id="batasan"><span class="n">21</span>Batasan &amp; Tips Teknis</h2>
@@ -1026,18 +1990,18 @@ Gaya ceria, warna-warni, animasi halus.</div>
 
 <table>
   <tr><th>Aspek</th><th>Batas</th></tr>
-  <tr><td>Jenis file</td><td><span class="badge b-ok">.html · .css · .js</span> saja</td></tr>
-  <tr><td>Ukuran per file</td><td>Maks <b>512 KB</b></td></tr>
-  <tr><td>Total per akun</td><td>Maks <b>20 MB</b> (500 berkas/folder)</td></tr>
-  <tr><td>Panjang satu prompt</td><td>Maks <b>4.000 karakter</b></td></tr>
-  <tr><td>Kode server (PHP/Node sendiri)</td><td><span class="badge b-no">Tidak bisa</span> — pakai database bawaan</td></tr>
+  <tr><td>Jenis file</td><td><span class="badge b-ok">.html · .css · .js</span> + gambar yang di-upload</td></tr>
+  <tr><td>Ukuran per file kode</td><td>Maks <b>512 KB</b></td></tr>
+  <tr><td>Total per project</td><td><b>20 MB</b> &amp; 500 file/folder (lebih besar di paket Pro/Unlimited)</td></tr>
+  <tr><td>Panjang satu prompt</td><td>Maks <b>20.000 karakter</b>, maks. 3 gambar lampiran</td></tr>
+  <tr><td>Kode server</td><td><span class="badge b-warn">fungsi serverless</span> JavaScript di <code>functions/</code> — bukan PHP/Node.js, tanpa npm</td></tr>
   <tr><td>Build step / npm</td><td><span class="badge b-no">Tidak ada</span> — pakai CDN untuk library</td></tr>
   <tr><td>Akun pengunjung</td><td><span class="badge b-no">Belum ada</span> — pengunjung anonim</td></tr>
-  <tr><td>Operasi database</td><td><span class="badge b-ok">read · create · update · delete</span></td></tr>
-  <tr><td>Tipe kolom database</td><td><span class="badge b-ok">text · number · boolean · date</span></td></tr>
+  <tr><td>Operasi database</td><td><span class="badge b-ok">list · view · create · update · delete</span></td></tr>
+  <tr><td>Tipe kolom database</td><td><span class="badge b-ok">teks · angka · ya/tidak · tanggal · relasi · gambar</span></td></tr>
   <tr><td>Responsive</td><td><span class="badge b-ok">bawaan responsif</span> · bisa dikunci mobile/desktop saja</td></tr>
   <tr><td>SEO &amp; pratinjau berbagi</td><td><span class="badge b-warn">harus diminta</span> — AI tidak menambah otomatis</td></tr>
-  <tr><td>Gambar/media</td><td><span class="badge b-warn">lewat tautan</span> — tidak bisa menyimpan file gambar sendiri</td></tr>
+  <tr><td>Gambar/media</td><td><span class="badge b-ok">upload gambar</span> · AI tidak bisa membuat gambar · video lewat YouTube</td></tr>
 </table>
 
 <div class="grid">
@@ -1057,7 +2021,8 @@ Gaya ceria, warna-warni, animasi halus.</div>
     <ul>
       <li>Prompt super singkat: “buat website”</li>
       <li>Campur 5 perubahan berbeda dalam satu prompt</li>
-      <li>Minta PHP / backend sendiri</li>
+      <li>Minta PHP / Node.js / npm (pakai fungsi serverless)</li>
+      <li>Menulis API key di file halaman</li>
       <li>Simpan data penting di <code>localStorage</code></li>
       <li>Asumsi pengunjung punya akun</li>
       <li>Ganti-ganti gaya tanpa menyebut bagiannya</li>
@@ -1065,10 +2030,10 @@ Gaya ceria, warna-warni, animasi halus.</div>
   </div>
 </div>
 
-<div class="warn">⚠️ <b>Hemat kredit AI.</b> Setiap prompt memakai kredit (akun baru dapat <b>bonus awal 20 kredit</b> sekali, lalu <b>3 kredit gratis per hari</b>, ditambah langganan & isi ulang). Rencanakan dulu dengan Mode Plan, baru jalankan — agar tidak bolak-balik memperbaiki.</div>
+<div class="warn">⚠️ <b>Hemat kredit AI.</b> Setiap prompt memakai kredit (prompt bergambar 2 kredit; akun baru dapat <b>bonus awal</b> sekali, lalu <b>kredit gratis per hari</b>, ditambah langganan &amp; isi ulang — lihat <a href="#f-kredit">Kredit &amp; Paket</a>). Rencanakan dulu dengan Mode Plan, baru jalankan — agar tidak bolak-balik memperbaiki.</div>
 
 <!-- ══════════════ TEMPLATE ══════════════ -->
-<h2><span class="n">★</span>Template Prompt Universal</h2>
+<h2 id="template"><span class="n">★</span>Template Prompt Universal</h2>
 <p class="lead">Salin, isi bagian dalam <code>[ ]</code>, lalu kirim.</p>
 
 <div class="prompt">Buat website [jenis] untuk [siapa &amp; tujuannya].
@@ -1085,12 +2050,14 @@ Gaya: warna [utama] &amp; [aksen], font [nama font],
 Pastikan responsif di HP dan mudah dipakai.</div>
 
 <footer>
-  <p><b>Cheat Sheet Prompt — rakit.io</b><br>
-  Dibuat berdasarkan perilaku AI Builder yang sebenarnya: mode Plan &amp; Builder,
-  database bawaan (<code>/api/db/&lt;tabel&gt;</code>), dan batas platform
-  (.html/.css/.js, 512 KB/berkas, 4.000 karakter/prompt).</p>
+  <p><b>Panduan rakit.io</b><br>
+  Dibuat berdasarkan perilaku editor &amp; AI Builder yang sebenarnya: mode Plan &amp; Builder,
+  database bawaan (<code>/api/db/&lt;tabel&gt;</code>), fungsi serverless (<code>/api/fn/&lt;nama&gt;</code>),
+  dan batas platform (512 KB/file kode, 20.000 karakter/prompt).</p>
 </footer>
 
+  </main>
 </div>
+<script src="/js/panduan.js" defer></script>
 </body>
 </html>

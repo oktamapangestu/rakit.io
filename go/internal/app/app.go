@@ -262,7 +262,7 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) bool {
 			h.sendHTML(w, r, "admin.html", "no-store")
 		}
 	case "/panduan":
-		// Panduan publik: cheat sheet prompt untuk AI Builder (tanpa perlu login).
+		// Panduan publik: dokumentasi fitur & cheat sheet prompt untuk AI Builder (tanpa perlu login).
 		securityHeaders(w)
 		h.sendHTML(w, r, "panduan.html", "public, max-age=3600")
 	default:
