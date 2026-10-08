@@ -126,3 +126,15 @@ test('hanya alt diubah: srcset tetap; gambar yang tidak cocok ditolak', () => {
   assert.deepEqual(editImage(GALLERY, sel, { src: '/dari-js.png', alt: '' }, { src: '/b.png' }), { error: 'mismatch' });
   assert.deepEqual(editImage(GALLERY, 'body > figure:nth-of-type(1)', { src: '' }, { src: '/b.png' }), { error: 'missing' });
 });
+
+test('teks dari JavaScript: string utuh di file JS ditemukan & ditulis ulang dengan escape yang benar', () => {
+  const { findLiterals, encodeLiteral } = context.rakitTextEdit;
+  const js = `msg('Password minimal 6 karakter.');\nel.textContent = isDark ? '☀️' : "🌙";\ncount.textContent = \`Kamu sudah klik \${n} kali\`;\nconst t = 'it\\'s';`;
+  assert.deepEqual(Array.from(findLiterals(js, 'Password minimal 6 karakter.'), (l) => js.slice(l.start, l.end)), ['Password minimal 6 karakter.']);
+  assert.equal(findLiterals(js, '🌙')[0].quote, '"');
+  assert.equal(findLiterals(js, "it's").length, 1);
+  assert.equal(findLiterals(js, 'Kamu sudah klik 3 kali').length, 0); // dirakit dari data: tidak bisa
+  assert.equal(findLiterals(js, 'karakter').length, 0); // hanya string utuh
+  assert.equal(encodeLiteral("Jangan 'lupa'\nya", "'"), "Jangan \\'lupa\\'\\nya");
+  assert.equal(encodeLiteral('Rp ${harga}', '`'), 'Rp \\${harga}');
+});

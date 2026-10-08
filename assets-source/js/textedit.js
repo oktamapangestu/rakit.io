@@ -300,5 +300,29 @@
     return { edits };
   }
 
-  root.rakitTextEdit = { apply, applyImage, parse, find };
+  // ---------- Teks dari JavaScript ----------
+  // Teks yang ditulis skrip (mis. el.textContent = 'Password minimal 6 karakter.') dicari sebagai string
+  // utuh di file JS: '…', "…" atau `…` (tanpa ${}). Hanya ditulis persis seperti ini; teks yang dirakit
+  // dari data (`Kamu sudah klik ${n} kali`) tidak akan cocok, dan memang tidak bisa diubah dari preview.
+  function encodeLiteral(text, quote) {
+    let s = text.replace(/\\/g, '\\\\').replace(/\r/g, '\\r').replace(/\n/g, '\\n').split(quote).join(`\\${quote}`);
+    if (quote === '`') s = s.replace(/\$\{/g, '\\${');
+    return s;
+  }
+
+  // findLiterals: posisi isi string JS yang nilainya persis `text`: [{start, end, quote}].
+  function findLiterals(src, text) {
+    const out = [];
+    if (!text) return out;
+    for (const quote of ["'", '"', '`']) {
+      const needle = quote + encodeLiteral(text, quote) + quote;
+      for (let i = src.indexOf(needle); i >= 0; i = src.indexOf(needle, i + 1)) {
+        if (src[i - 1] === '\\') continue; // bagian dari string lain (\'…\')
+        out.push({ start: i + 1, end: i + needle.length - 1, quote });
+      }
+    }
+    return out;
+  }
+
+  root.rakitTextEdit = { apply, applyImage, parse, find, encodeLiteral, findLiterals };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -847,6 +847,8 @@
         renderBlocks();
         // Blok pertama dipilih: tampilkan kotak prompt (di Coding bisa saja sedang di tab lain).
         if (first && $('#editorArea').dataset.mode !== 'ai') setMode('ai');
+      } else if (m.type === 'textCheck' && textEdit.on) {
+        checkTextEdit(m);
       } else if (m.type === 'textEdit' && textEdit.on) {
         applyTextEdit(m);
       } else if (m.type === 'imageEdit' && textEdit.on) {
@@ -900,29 +902,59 @@
     reloadPreview(); // kembalikan teks di preview sesuai file
   }
 
-  // Model Monaco untuk file HTML halaman `page` di preview (dimuat bila belum dibuka).
-  // Hasil: { path, model } atau null (pesan error sudah ditampilkan).
-  async function pageModel(page) {
-    const path = pageFile(String(page));
-    const fail = (message) => {
-      textEditFailed(message);
-      return null;
-    };
-    if (!path) return fail('Halaman ini tidak ditemukan di file project, jadi tidak bisa diubah dari preview.');
+  // Model Monaco file `path` (dimuat bila belum dibuka). Hasil: { path, model } atau { error }.
+  async function fileModel(path) {
     try {
       await editorReady;
     } catch {
-      return fail('Editor kode gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.');
+      return { error: 'Editor kode gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.' };
     }
     if (!state.models.has(path)) {
       try {
         const { content } = await api('GET', `/api/files/content?path=${encodeURIComponent(path)}`);
         if (!state.models.has(path)) createModel(path, content);
       } catch (err) {
-        return fail(err.message);
+        return { error: err.message };
       }
     }
     return { path, model: state.models.get(path) };
+  }
+
+  // Model file HTML halaman `page` di preview. Hasil: { path, model } atau { error }.
+  function pageModel(page) {
+    const path = pageFile(String(page));
+    return path ? fileModel(path) : Promise.resolve({ error: 'Halaman ini tidak ditemukan di file project, jadi tidak bisa diubah dari preview.' });
+  }
+
+  // Tempat teks elemen di sumber: HTML halaman, atau string di file JS project bila teksnya ditulis skrip.
+  // after = before untuk sekadar memeriksa (saat teks diklik, sebelum diketik).
+  // Hasil: { path, model, edits } atau { error }.
+  async function findText(m, after) {
+    const page = await pageModel(m.page);
+    if (page.error) return page;
+    const res = window.rakitTextEdit.apply(page.model.getValue(), m.selector, m.before, after, decodeHtml);
+    if (!res.error) return { ...page, edits: res.edits };
+
+    // Hanya teks polos satu bagian (tanpa tebal/tautan di dalamnya) yang dicari di JS.
+    const filled = m.before.map((t, i) => [t, i]).filter(([t]) => /\S/.test(t));
+    const old = filled.length === 1 ? filled[0][0].trim() : '';
+    const next = (typeof after === 'string' ? after : filled.length === 1 ? after[filled[0][1]] : '').trim();
+    const notFound = { error: `Teks ini tidak tertulis di ${page.path} atau file JS mana pun — kemungkinan dirakit JavaScript dari data (mis. hitungan atau nama pengguna). Ubah lewat kode atau minta AI.` };
+    if (!old) return notFound;
+    const found = [];
+    for (const e of state.entries) {
+      if (e.type !== 'file' || extOf(e.path) !== 'js' || (e.size ?? 0) > 1048576) continue;
+      const file = await fileModel(e.path);
+      if (file.error) continue;
+      for (const lit of window.rakitTextEdit.findLiterals(file.model.getValue(), old)) found.push({ ...file, lit });
+    }
+    if (found.length > 1) {
+      return { error: `Teks ini ditulis JavaScript dan muncul ${found.length} kali di file JS, jadi tidak jelas mana yang diubah. Ubah lewat kode atau minta AI.` };
+    }
+    if (!found.length) return notFound;
+    const [{ path, model, lit }] = found;
+    const edits = next === old ? [] : [{ start: lit.start, end: lit.end, text: window.rakitTextEdit.encodeLiteral(next, lit.quote) }];
+    return { path, model, edits };
   }
 
   // Terapkan perubahan ke model sebagai satu langkah undo, lalu simpan tanpa memuat ulang preview.
@@ -944,13 +976,17 @@
     const valid = typeof m.selector === 'string' && Array.isArray(m.before) && m.before.every((t) => typeof t === 'string')
       && (typeof m.after === 'string' || (Array.isArray(m.after) && m.after.length === m.before.length && m.after.every((t) => typeof t === 'string')));
     if (!valid) return;
-    const page = await pageModel(m.page);
-    if (!page) return;
-    const res = window.rakitTextEdit.apply(page.model.getValue(), m.selector, m.before, m.after, decodeHtml);
-    if (res.error) {
-      return textEditFailed(`Teks ini tidak ditemukan di ${page.path}: mungkin dibuat JavaScript atau dimuat dari file lain. Ubah lewat kode atau minta AI.`);
-    }
-    if (res.edits.length) commitEdits(page.path, page.model, res.edits, 'Teks');
+    const res = await findText(m, m.after);
+    if (res.error) return textEditFailed(res.error);
+    if (res.edits.length) commitEdits(res.path, res.model, res.edits, 'Teks');
+  }
+
+  // Teks diklik di preview: periksa dulu apakah ada di sumber, supaya pengguna tidak mengetik sia-sia.
+  async function checkTextEdit(m) {
+    if (typeof m.selector !== 'string' || !Array.isArray(m.before) || !m.before.every((t) => typeof t === 'string')) return;
+    const res = await findText(m, m.before);
+    toPicker({ type: 'textChecked', id: m.id, ok: !res.error, file: res.path });
+    if (res.error) toast(res.error, 'error');
   }
 
   // ---------- Ganti gambar di preview ----------
@@ -1041,7 +1077,7 @@
       close();
       if (!Object.keys(changes).length) return;
       const page = await pageModel(m.page);
-      if (!page) return;
+      if (page.error) return textEditFailed(page.error);
       const res = window.rakitTextEdit.applyImage(page.model.getValue(), m.selector, { src: m.src, alt: m.alt }, changes, decodeHtml);
       if (res.error) {
         return textEditFailed(`Gambar ini tidak ditemukan di ${page.path}: mungkin dibuat JavaScript atau dimuat dari file lain. Ubah lewat kode atau minta AI.`);

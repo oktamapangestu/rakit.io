@@ -123,6 +123,8 @@
       .box.txt{border-color:#3b82f6;background:rgb(59 130 246/.06)}
       .box.txt .tag{background:#2563eb}
       .box.txt.sel{border-style:solid;background:none;box-shadow:0 0 0 3px rgb(59 130 246/.25)}
+      .box.txt.no{border-color:#dc2626;box-shadow:0 0 0 3px rgb(220 38 38/.2)}
+      .box.txt.no .tag{background:#dc2626}
     </style><div class="layer"></div>`;
     document.documentElement.append(host);
     hoverBox = document.createElement('div');
@@ -155,7 +157,7 @@
 
   // ---------- Interaksi ----------
   function onMove(e) {
-    if (mode === 'text') hovered = editing && editing.el.contains(e.target) ? null : imageTarget(e.target) || textTarget(e.target);
+    if (mode === 'text') hovered = (editing && editing.el.contains(e.target)) || (notice && notice.el.contains(e.target)) ? null : imageTarget(e.target) || textTarget(e.target);
     else hovered = blockOf(e.target);
   }
   // Alt+klik link = pindah halaman tanpa keluar dari mode pilih/edit. Dikerjakan sendiri: bawaan Chrome
@@ -184,7 +186,9 @@
   // ---------- Edit teks ----------
   // Klik teks di halaman untuk mengubahnya langsung (contenteditable). Saat selesai, isi tiap text node
   // elemen sebelum & sesudah dikirim ke editor, yang menerapkannya ke HTML sumber (textedit.js).
-  let editing = null; // { el, nodes, before, html }
+  let editing = null; // { el, nodes, before, html, id }
+  let checks = 0; // nomor pemeriksaan teks terakhir (balasan lama diabaikan)
+  let notice = null; // { el, text, until }: keterangan merah sebentar di elemen yang tidak bisa diedit
   // Teks di dalam elemen ini bukan teks halaman (sama dengan NO_TEXT di textedit.js).
   const NO_TEXT = new Set(['script', 'style', 'template', 'noscript', 'textarea', 'title', 'svg', 'math']);
   const NOT_EDITABLE = 'input,textarea,select,option,script,style,svg,math,iframe,video,audio,canvas,[contenteditable]';
@@ -236,7 +240,10 @@
 
   function startEdit(el, x, y) {
     const nodes = textNodes(el);
-    editing = { el, nodes, before: nodes.map((n) => n.data), html: el.innerHTML };
+    editing = { el, nodes, before: nodes.map((n) => n.data), html: el.innerHTML, id: ++checks };
+    notice = null;
+    // Editor memeriksa apakah teks ini ada di sumber; bila tidak, edit dibatalkan (lihat onChecked).
+    send({ type: 'textCheck', id: editing.id, page: location.pathname, selector: selectorOf(el), before: editing.before });
     try {
       el.contentEditable = 'plaintext-only';
     } catch {
@@ -286,6 +293,14 @@
       return send({ type: 'textError', reason: 'structure' });
     }
     send({ type: 'textEdit', page: location.pathname, selector: selectorOf(el), before, after });
+  }
+
+  function onChecked(m) {
+    if (m.ok || !editing || editing.id !== m.id) return;
+    const { el } = editing;
+    finishEdit(false);
+    el.blur();
+    notice = { el, text: 'Dibuat JavaScript — ubah lewat kode/AI', until: Date.now() + 3500 };
   }
 
   function onEditKey(e) {
@@ -354,14 +369,18 @@
 
   function drawText() {
     const layer = host.shadowRoot.querySelector('.layer');
-    while (layer.children.length < (editing ? 1 : 0)) {
+    if (notice && (Date.now() > notice.until || !notice.el.isConnected)) notice = null;
+    const shown = editing || notice;
+    while (layer.children.length < (shown ? 1 : 0)) {
       const box = document.createElement('div');
-      box.className = 'box txt sel';
       box.innerHTML = '<span class="tag"></span>';
       layer.append(box);
     }
-    while (layer.children.length > (editing ? 1 : 0)) layer.lastChild.remove();
-    if (editing) place(layer.firstChild, editing.el, 'Enter simpan · Esc batal');
+    while (layer.children.length > (shown ? 1 : 0)) layer.lastChild.remove();
+    if (shown) {
+      layer.firstChild.className = editing ? 'box txt sel' : 'box txt sel no';
+      place(layer.firstChild, shown.el, editing ? 'Enter simpan · Esc batal' : notice.text);
+    }
     hoverBox.classList.add('txt');
     if (hovered) place(hoverBox, hovered, hovered.localName === 'img' ? 'Klik untuk ganti gambar' : 'Klik untuk ubah teks');
     else hoverBox.style.display = 'none';
@@ -403,6 +422,8 @@
         selected = m.restore.map((sel) => { try { return document.querySelector(sel); } catch { return null; } }).filter((el) => el && isBlock(el)).slice(0, max);
         report();
       }
+    } else if (m.type === 'textChecked') {
+      if (mode === 'text') onChecked(m);
     } else if (m.type === 'setImage') {
       if (mode === 'text') setImage(m);
     } else if (mode !== 'pick') {
