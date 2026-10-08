@@ -357,6 +357,10 @@
             <svg viewBox="0 0 16 16"><path d="M1 1h4v1H2v3H1zm10 0h4v4h-1V2h-3zM1 11h1v3h3v1H1zm6-4 7.5 3-3.1 1.2 2.3 2.4-1.1 1.1-2.3-2.4L9 15z"/></svg>
             <span>Pilih blok</span>
           </button>
+          <button class="pick-btn" id="editText" title="Klik teks di preview untuk mengubahnya, atau klik gambar untuk menggantinya" aria-pressed="false">
+            <svg viewBox="0 0 16 16"><path d="M11.1 1.6a1.6 1.6 0 0 1 2.3 0l1 1a1.6 1.6 0 0 1 0 2.3L5.3 14H2v-3.3zm1.6.7a.6.6 0 0 0-.9 0l-1 1 1.9 1.9 1-1a.6.6 0 0 0 0-.9zM11.9 5.9 10 4 3 11v2h2z"/></svg>
+            <span>Edit</span>
+          </button>
           <button class="icon-btn feature-info-btn" id="previewInfo" title="Apa itu preview &amp; website online?" aria-label="Penjelasan preview">
             <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1m0 1a6 6 0 1 0 0 12A6 6 0 0 0 8 2m.5 5v5h-1V7zM8 4.25a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5"/></svg>
           </button>
@@ -382,6 +386,10 @@
           <span class="pick-hint" id="pickHint"></span>
           <button type="button" class="pick-go" id="pickGo">Tulis perintah</button>
           <button type="button" class="pick-done" id="pickDone">Selesai</button>
+        </div>
+        <div class="pick-bar text-bar" id="textBar" hidden>
+          <span class="pick-hint">Klik teks lalu ketik (<kbd>Enter</kbd> simpan, <kbd>Esc</kbd> batal), atau klik gambar untuk menggantinya.</span>
+          <button type="button" class="pick-done" id="textDone">Selesai</button>
         </div>
         <div class="stage" id="stage" data-device="desktop">
           <iframe id="previewFrame" title="Preview website"></iframe>
@@ -423,6 +431,7 @@
       },
     };
   </script>
+  <script src="/js/textedit.js" defer></script>
   <script src="/js/editor.js" defer></script>
 </body>
 </html>

@@ -185,7 +185,7 @@
       <li><a class="nav-link" href="#f-project"><span class="nav-n">F2</span><span class="nav-t">Project</span></a></li>
       <li><a class="nav-link" href="#f-file"><span class="nav-n">F3</span><span class="nav-t">File, Folder &amp; Gambar</span></a></li>
       <li><a class="nav-link" href="#f-kode"><span class="nav-n">F4</span><span class="nav-t">Editor Kode</span></a></li>
-      <li><a class="nav-link" href="#f-preview"><span class="nav-n">F5</span><span class="nav-t">Preview &amp; Pilih Blok</span></a></li>
+      <li><a class="nav-link" href="#f-preview"><span class="nav-n">F5</span><span class="nav-t">Preview, Pilih Blok &amp; Edit</span></a></li>
       <li><a class="nav-link" href="#f-ai"><span class="nav-n">F6</span><span class="nav-t">Asisten AI (Builder &amp; Plan)</span></a></li>
       <li><a class="nav-link" href="#f-data"><span class="nav-n">F7</span><span class="nav-t">Database (Tab Data)</span></a></li>
       <li><a class="nav-link" href="#f-fungsi"><span class="nav-n">F8</span><span class="nav-t">Fungsi Serverless (Backend)</span></a></li>
@@ -283,7 +283,7 @@
   <tr><td><b>Bilah atas kanan</b></td><td><span class="ui">Preview</span> (tampil/sembunyi), <span class="ui">Panduan</span>, <span class="ui">Publikasikan</span> (hanya di mode publikasi manual), <span class="ui">Lihat situs</span>, badge paket, dan <b>avatar</b> (menu akun).</td></tr>
   <tr><td><b>Panel kiri</b></td><td>Daftar file &amp; folder project, tombol file/folder baru, upload gambar, dan pemakaian kuota.</td></tr>
   <tr><td><b>Area tengah</b></td><td>Tab <span class="ui">Code</span> · <span class="ui">AI</span> · <span class="ui">Data</span> · <span class="ui">Diagram</span> · <span class="ui">Fungsi</span> · <span class="ui">Riwayat</span> · <span class="ui">Console</span>. Tombol <b>ⓘ</b> menjelaskan tab yang sedang dibuka.</td></tr>
-  <tr><td><b>Panel kanan</b></td><td>Preview website, pilihan ukuran layar, dan <span class="ui">Pilih blok</span>.</td></tr>
+  <tr><td><b>Panel kanan</b></td><td>Preview website, pilihan ukuran layar, <span class="ui">Pilih blok</span>, dan <span class="ui">Edit</span> (teks &amp; gambar).</td></tr>
 </table>
 
 <h3>Menu avatar (pojok kanan atas)</h3>
@@ -421,7 +421,7 @@
 <div class="note">💾 Hasil penjelasan disimpan per file. Membuka ulang file yang sama tidak bertanya ke AI lagi. Bila isi file berubah, panel memberi tanda dan tombol <span class="ui">Perbarui</span>. Gratis, dengan batas harian per akun.</div>
 
 <!-- ══════════════ F5. PREVIEW ══════════════ -->
-<h2 id="f-preview"><span class="n">F5</span>Preview &amp; Pilih Blok</h2>
+<h2 id="f-preview"><span class="n">F5</span>Preview, Pilih Blok &amp; Edit</h2>
 <p class="lead">Lihat website seperti yang dilihat pengunjung, di berbagai ukuran layar.</p>
 
 <table>
@@ -443,6 +443,17 @@
   <li>Tulis perubahannya, mis. <i>“jadikan 3 kolom dan beri ikon”</i>, lalu kirim. AI fokus ke blok itu dan tidak mengubah bagian lain.</li>
   <li>Klik <span class="ui">Selesai</span> untuk keluar dari mode memilih.</li>
 </ol>
+
+<h3>✏️ Edit — ubah tulisan &amp; gambar langsung di preview</h3>
+<p style="margin:6px 0">Untuk mengganti judul, paragraf, label tombol, isi daftar, atau gambar tanpa membuka kode dan tanpa memakai kredit AI.</p>
+<ol class="steps">
+  <li>Klik <span class="ui">Edit</span> di atas preview.</li>
+  <li>Arahkan kursor ke halaman — teks yang bisa diubah diberi kotak biru — lalu <b>klik teksnya</b> dan ketik.</li>
+  <li>Tekan <kbd>Enter</kbd> atau klik di tempat lain untuk menyimpan. <kbd>Esc</kbd> membatalkan.</li>
+  <li>Klik <span class="ui">Selesai</span> untuk keluar dari mode edit.</li>
+</ol>
+<p style="margin:6px 0">Perubahan ditulis ke file HTML halaman itu (mis. <code>index.html</code>) di tempat yang sama persis — format seperti tebal atau tautan di dalam teks tetap ada. File-nya ikut terbuka di tab Code, jadi bisa dibatalkan dengan <kbd>Ctrl/⌘</kbd> <kbd>Z</kbd>. Teks yang dibuat JavaScript atau dimuat dari file lain tidak bisa diubah dari sini; ubah lewat kode atau minta AI. Pindah halaman: <kbd>Alt</kbd>+klik link.</p>
+<p style="margin:6px 0"><b>Ganti gambar:</b> di mode <span class="ui">Edit</span>, klik gambarnya. Pilih gambar lain dari project, klik <span class="ui">Upload gambar baru…</span>, atau tempel alamat gambar (<code>https://…</code>). Isi juga <b>teks alternatif (alt)</b> — deskripsi singkat gambar untuk pembaca layar dan mesin pencari — lalu <span class="ui">Simpan</span>. Yang bisa diganti di sini hanya gambar <code>&lt;img&gt;</code>; gambar latar dari CSS dan gambar <code>&lt;picture&gt;</code> dengan beberapa versi diubah lewat kode atau AI.</p>
 
 <!-- ══════════════ F6. ASISTEN AI ══════════════ -->
 <h2 id="f-ai"><span class="n">F6</span>Asisten AI (Builder &amp; Plan)</h2>

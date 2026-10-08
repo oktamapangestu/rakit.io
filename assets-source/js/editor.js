@@ -401,6 +401,7 @@
 
   async function doSave(path) {
     clearTimeout(state.saveTimers.get(path));
+    const quiet = quietSaves.delete(path); // perubahan dari mode Edit di preview: sudah tampil di sana
     const model = state.models.get(path);
     if (!model) return true;
     const content = model.getValue();
@@ -413,7 +414,7 @@
       setSaveStatus(`Tersimpan ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`, 'saved');
       renderTabs();
       $(`#tree .row[data-path="${CSS.escape(path)}"]`)?.classList.toggle('dirty', isDirty(path));
-      schedulePreviewReload();
+      if (!quiet) schedulePreviewReload();
       refreshUsageSoon();
       return true;
     } catch (err) {
@@ -574,7 +575,9 @@
     });
   }
 
-  async function uploadImages(files, dir, replacePath = null) {
+  // Hasil: path gambar yang berhasil diunggah. reload: false = preview tidak dimuat ulang (mis. Ganti gambar
+  // di preview, yang memperbarui gambarnya sendiri).
+  async function uploadImages(files, dir, replacePath = null, { reload = true } = {}) {
     const limit = state.limits?.imageSize ?? 1048576;
     const accepted = [];
     for (const file of files) {
@@ -586,10 +589,9 @@
         accepted.push(file);
       }
     }
-    if (!accepted.length) return;
+    if (!accepted.length) return [];
 
-    let done = 0;
-    let last = null;
+    const uploaded = [];
     setSaveStatus(`Mengunggah ${accepted.length} gambar…`, 'saving');
     for (const file of accepted) {
       let path = replacePath ?? joinPath(dir, cleanFileName(file.name));
@@ -613,8 +615,7 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
-        done++;
-        last = data.path;
+        uploaded.push(data.path);
         // Catat segera supaya cek "sudah ada" untuk file berikutnya tetap akurat.
         if (!state.entries.some((e) => e.path === data.path)) state.entries.push({ path: data.path, name: baseName(data.path), type: 'file', size: file.size });
       } catch (err) {
@@ -623,12 +624,15 @@
       }
     }
     setSaveStatus('');
-    if (!done) return;
+    if (!uploaded.length) return uploaded;
+    const last = uploaded[uploaded.length - 1];
     if (dir) state.expanded.add(dir);
-    if (last) { expandTo(last); state.selected = last; }
+    expandTo(last);
+    state.selected = last;
     await loadTree().catch(() => {});
-    schedulePreviewReload();
-    toast(done === 1 ? `Gambar diunggah: /${last}` : `${done} gambar diunggah`);
+    if (reload) schedulePreviewReload();
+    toast(uploaded.length === 1 ? `Gambar diunggah: /${last}` : `${uploaded.length} gambar diunggah`);
+    return uploaded;
   }
 
   function openImage(path) {
@@ -775,6 +779,7 @@
   function setPick(on) {
     pick.on = on;
     if (!on) pick.blocks = [];
+    if (on && textEdit.on) setTextEdit(false, { quiet: true });
     $('#pickBlocks').classList.toggle('active', on);
     $('#pickBlocks').setAttribute('aria-pressed', String(on));
     toPicker({ type: 'pick', on, limit: pageLimit(), restore: on ? blocksOn(pick.page).map((b) => b.selector) : undefined });
@@ -817,6 +822,8 @@
     $('#pickBlocks').onclick = () => setPick(!pick.on);
     $('#pickDone').onclick = () => setPick(false);
     $('#pickGo').onclick = () => { setMobileView('editor'); setMode('ai'); };
+    $('#editText').onclick = () => setTextEdit(!textEdit.on);
+    $('#textDone').onclick = () => setTextEdit(false);
     window.addEventListener('message', (e) => {
       const m = e.data;
       if (e.source !== $('#previewFrame').contentWindow || e.origin !== siteOrigin() || m?.rakit !== true) return;
@@ -825,6 +832,7 @@
       } else if (m.type === 'ready') {
         // Halaman preview dimuat (ulang/pindah halaman): aktifkan lagi dengan blok milik halaman ini.
         pick.page = m.page;
+        if (textEdit.on) toPicker({ type: 'textMode', on: true });
         if (!pick.on) return;
         toPicker({ type: 'pick', on: true, limit: pageLimit(), restore: blocksOn(m.page).map((b) => b.selector) });
         renderBlocks();
@@ -839,12 +847,229 @@
         renderBlocks();
         // Blok pertama dipilih: tampilkan kotak prompt (di Coding bisa saja sedang di tab lain).
         if (first && $('#editorArea').dataset.mode !== 'ai') setMode('ai');
+      } else if (m.type === 'textEdit' && textEdit.on) {
+        applyTextEdit(m);
+      } else if (m.type === 'imageEdit' && textEdit.on) {
+        openImageEdit(m);
+      } else if (m.type === 'textError') {
+        textEditFailed('Sebagian format teks (tebal, tautan) ikut terhapus, jadi perubahannya tidak disimpan. Ubah teksnya saja, atau pilih semua teks lalu ketik ulang.');
       } else if (m.type === 'limit') {
         toast(`Maksimal ${MAX_BLOCKS} blok sekaligus (termasuk di halaman lain)`, 'error');
       } else if (m.type === 'top') {
         toast('Ini sudah bagian terbesar');
       }
     });
+  }
+
+  // ---------- Edit teks di preview ----------
+  // Mode Edit: klik teks di preview lalu ketik langsung (klik gambar: lihat "Ganti gambar" di bawah). Skrip preview (picker.js) mengirim isi text node elemen sebelum
+  // & sesudah diubah; di sini perubahan itu dicari di HTML sumber (textedit.js) dan diterapkan ke model
+  // Monaco, jadi bisa di-undo dan tersimpan seperti ketikan biasa.
+  const textEdit = { on: false };
+  // Disimpan tanpa memuat ulang preview: teks barunya sudah tampil di sana.
+  const quietSaves = new Set();
+  const htmlDecoder = document.createElement('textarea');
+  const decodeHtml = (raw) => { htmlDecoder.innerHTML = raw; return htmlDecoder.value; };
+
+  function setTextEdit(on, { quiet = false } = {}) {
+    textEdit.on = on;
+    if (on && pick.on) setPick(false);
+    $('#editText').classList.toggle('active', on);
+    $('#editText').setAttribute('aria-pressed', String(on));
+    $('#textBar').hidden = !on;
+    if (!quiet) toPicker({ type: 'textMode', on });
+  }
+
+  // File HTML untuk pathname halaman di preview, seperti server menyajikannya ("/" -> index.html,
+  // "/tentang" -> tentang.html).
+  function pageFile(pathname) {
+    let rel;
+    try {
+      rel = decodeURIComponent(pathname).replace(/^\/+/, '');
+    } catch {
+      return null;
+    }
+    if (!rel || rel.endsWith('/')) rel += 'index.html';
+    const exists = (p) => state.entries.some((e) => e.type === 'file' && e.path === p);
+    if (exists(rel)) return extOf(rel) === 'html' ? rel : null;
+    return !/\.[^/]*$/.test(rel) && exists(`${rel}.html`) ? `${rel}.html` : null;
+  }
+
+  function textEditFailed(message) {
+    toast(message, 'error');
+    reloadPreview(); // kembalikan teks di preview sesuai file
+  }
+
+  // Model Monaco untuk file HTML halaman `page` di preview (dimuat bila belum dibuka).
+  // Hasil: { path, model } atau null (pesan error sudah ditampilkan).
+  async function pageModel(page) {
+    const path = pageFile(String(page));
+    const fail = (message) => {
+      textEditFailed(message);
+      return null;
+    };
+    if (!path) return fail('Halaman ini tidak ditemukan di file project, jadi tidak bisa diubah dari preview.');
+    try {
+      await editorReady;
+    } catch {
+      return fail('Editor kode gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.');
+    }
+    if (!state.models.has(path)) {
+      try {
+        const { content } = await api('GET', `/api/files/content?path=${encodeURIComponent(path)}`);
+        if (!state.models.has(path)) createModel(path, content);
+      } catch (err) {
+        return fail(err.message);
+      }
+    }
+    return { path, model: state.models.get(path) };
+  }
+
+  // Terapkan perubahan ke model sebagai satu langkah undo, lalu simpan tanpa memuat ulang preview.
+  function commitEdits(path, model, edits, what) {
+    // File dibuka sebagai tab (tanpa pindah tab), supaya perubahannya terlihat & bisa di-undo.
+    if (!state.tabs.includes(path)) state.tabs.push(path);
+    if (state.autosave) quietSaves.add(path);
+    model.pushEditOperations([], edits.map((e) => ({
+      range: monaco.Range.fromPositions(model.getPositionAt(e.start), model.getPositionAt(e.end)),
+      text: e.text,
+    })), () => null);
+    model.pushStackElement();
+    renderTabs();
+    if (state.autosave) save(path);
+    toast(state.autosave ? `${what} diubah di ${path}` : `${what} diubah di ${path} (belum disimpan)`);
+  }
+
+  async function applyTextEdit(m) {
+    const valid = typeof m.selector === 'string' && Array.isArray(m.before) && m.before.every((t) => typeof t === 'string')
+      && (typeof m.after === 'string' || (Array.isArray(m.after) && m.after.length === m.before.length && m.after.every((t) => typeof t === 'string')));
+    if (!valid) return;
+    const page = await pageModel(m.page);
+    if (!page) return;
+    const res = window.rakitTextEdit.apply(page.model.getValue(), m.selector, m.before, m.after, decodeHtml);
+    if (res.error) {
+      return textEditFailed(`Teks ini tidak ditemukan di ${page.path}: mungkin dibuat JavaScript atau dimuat dari file lain. Ubah lewat kode atau minta AI.`);
+    }
+    if (res.edits.length) commitEdits(page.path, page.model, res.edits, 'Teks');
+  }
+
+  // ---------- Ganti gambar di preview ----------
+  // Klik <img> di mode Edit: pilih gambar dari project, upload baru, atau pakai alamat URL, dan ubah alt-nya.
+  // src ditulis sebagai "/path" (sama dengan "Salin path" di daftar file).
+  const isStr = (v) => v === null || typeof v === 'string';
+
+  // Path file project untuk alamat gambar di preview (hanya gambar di website ini), atau null.
+  function projectImage(url) {
+    try {
+      const u = new URL(url);
+      if (u.origin !== siteOrigin()) return null;
+      const path = decodeURIComponent(u.pathname).replace(/^\/+/, '');
+      return state.entries.some((e) => e.type === 'file' && e.path === path) ? path : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function openImageEdit(m) {
+    if (typeof m.selector !== 'string' || !isStr(m.src) || !isStr(m.alt) || typeof m.shown !== 'string') return;
+    if (m.picture) {
+      return toast('Gambar ini memakai <picture> dengan beberapa versi gambar, jadi tidak bisa diganti dari preview. Ubah lewat kode atau minta AI.', 'error');
+    }
+    const current = projectImage(m.shown);
+    let chosen = null; // alamat baru untuk src (null = tidak diganti)
+    const root = $('#modal');
+    const stage = h('img', { src: m.shown, alt: '' });
+    const info = h('p', {}, current ? `/${current}` : m.src || '(tanpa src)');
+    const grid = h('div', { class: 'imgpick-grid' });
+    const urlInput = h('input', { placeholder: 'https://… atau /gambar.jpg', spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Alamat gambar' });
+    const altInput = h('input', { value: m.alt ?? '', placeholder: 'mis. Tim kami di kantor', 'aria-label': 'Teks alternatif' });
+
+    const choose = (src, label) => {
+      chosen = src;
+      stage.src = src.startsWith('/') ? `${previewBase()}${src}` : src;
+      info.textContent = label;
+      grid.querySelectorAll('.imgpick-item').forEach((b) => b.classList.toggle('active', `/${b.dataset.path}` === src));
+    };
+    const renderGrid = () => {
+      const images = state.entries.filter((e) => e.type === 'file' && isImage(e.path) && extOf(e.path) !== 'ico');
+      grid.replaceChildren(...(images.length ? images.map((e) => h('button', {
+        type: 'button',
+        class: `imgpick-item${(chosen ? chosen === `/${e.path}` : e.path === current) ? ' active' : ''}`,
+        title: `/${e.path}`,
+        dataset: { path: e.path },
+        onclick: () => { urlInput.value = ''; choose(`/${e.path}`, `/${e.path}`); },
+      }, h('img', { src: imageUrl(e.path), alt: '', loading: 'lazy' }), h('span', {}, baseName(e.path))))
+        : [h('p', { class: 'imgpick-empty' }, 'Belum ada gambar di project. Upload gambar baru di bawah.')]));
+    };
+    renderGrid();
+
+    const upload = () => {
+      const input = h('input', { type: 'file', accept: IMAGE_EXT.map((e) => `.${e}`).join(',') });
+      input.onchange = async () => {
+        // Simpan di folder gambar lama bila gambar itu ada di project, atau di folder images/ bila ada.
+        const dir = current ? parentOf(current) : state.entries.some((e) => e.type === 'dir' && e.path === 'images') ? 'images' : '';
+        const [path] = await uploadImages([...input.files], dir, null, { reload: false });
+        if (!path) return;
+        renderGrid();
+        urlInput.value = '';
+        choose(`/${path}`, `/${path}`);
+      };
+      input.click();
+    };
+    urlInput.oninput = () => {
+      const v = urlInput.value.trim();
+      if (/^(https?:\/\/|\/)\S+$/i.test(v)) choose(v, v);
+    };
+
+    const close = () => {
+      root.hidden = true;
+      root.replaceChildren();
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    const submit = async (e) => {
+      e.preventDefault();
+      const typed = urlInput.value.trim();
+      if (typed && !/^(https?:\/\/|\/)\S+$/i.test(typed)) {
+        urlInput.focus();
+        return toast('Alamat gambar harus diawali https:// atau / (file di project)', 'error');
+      }
+      const alt = altInput.value.replace(/\s+/g, ' ').trim();
+      const changes = {};
+      if (chosen && chosen !== m.src && !(current && chosen === `/${current}`)) changes.src = chosen;
+      if (alt !== (m.alt ?? '')) changes.alt = alt;
+      close();
+      if (!Object.keys(changes).length) return;
+      const page = await pageModel(m.page);
+      if (!page) return;
+      const res = window.rakitTextEdit.applyImage(page.model.getValue(), m.selector, { src: m.src, alt: m.alt }, changes, decodeHtml);
+      if (res.error) {
+        return textEditFailed(`Gambar ini tidak ditemukan di ${page.path}: mungkin dibuat JavaScript atau dimuat dari file lain. Ubah lewat kode atau minta AI.`);
+      }
+      if (!res.edits.length) return;
+      commitEdits(page.path, page.model, res.edits, 'Gambar');
+      toPicker({ type: 'setImage', page: m.page, selector: m.selector, ...changes });
+    };
+
+    root.replaceChildren(h('form', { class: 'modal image-modal imgpick-modal', role: 'dialog', 'aria-label': 'Ganti gambar', onsubmit: submit },
+      h('div', { class: 'topup-head' },
+        h('div', {}, h('h3', {}, 'Ganti gambar'), info),
+        h('button', { class: 'icon-btn', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close))),
+      h('div', { class: 'image-stage imgpick-stage' }, stage),
+      h('div', { class: 'imgpick-label' }, h('span', {}, 'Gambar di project'),
+        h('button', { type: 'button', class: 'imgpick-upload', onclick: upload }, 'Upload gambar baru…')),
+      grid,
+      h('div', { class: 'imgpick-label' }, h('span', {}, 'Atau pakai alamat gambar')),
+      urlInput,
+      h('div', { class: 'imgpick-label' }, h('span', {}, 'Teks alternatif (alt)'), h('small', {}, 'Deskripsi gambar untuk pembaca layar & mesin pencari')),
+      altInput,
+      h('div', { class: 'modal-buttons' },
+        h('button', { type: 'button', onclick: close }, 'Batal'),
+        h('button', { type: 'submit', class: 'primary' }, 'Simpan'))));
+    root.hidden = false;
+    root.onmousedown = (e) => { if (e.target === root) close(); };
+    document.addEventListener('keydown', onKey, true);
+    grid.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
   }
 
   // Bar alamat preview: host tetap (website project ini), path/query/hash bisa diubah.

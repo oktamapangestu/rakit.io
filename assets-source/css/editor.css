@@ -442,6 +442,24 @@ a.chip-btn svg { width: 14px; height: 14px; }
 }
 .image-stage img { display: block; max-width: 100%; max-height: calc(52vh - 24px); object-fit: contain; }
 .image-snippets { display: grid; gap: 6px; margin-bottom: 16px; }
+.imgpick-modal { max-height: 90vh; overflow: auto; }
+.imgpick-modal .topup-head p { overflow-wrap: anywhere; }
+.imgpick-stage { min-height: 120px; max-height: 26vh; }
+.imgpick-stage img { max-height: calc(26vh - 24px); }
+.imgpick-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 12px 0 6px; font-size: 12px; font-weight: 600; color: var(--text); }
+.imgpick-label small { font-weight: 400; color: var(--muted); }
+.imgpick-label > span { white-space: nowrap; }
+.imgpick-upload { margin-left: auto; height: 26px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel); color: var(--text); font: 600 12px var(--ui); cursor: pointer; }
+.imgpick-upload:hover { border-color: var(--accent); }
+.imgpick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; max-height: 196px; overflow: auto; padding: 2px; }
+.imgpick-item { display: grid; gap: 4px; padding: 4px; border: 1px solid var(--line-2); border-radius: 9px; background: var(--bg); color: var(--muted); font: 11px var(--ui); cursor: pointer; text-align: left; min-width: 0; }
+.imgpick-item img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; background: var(--panel); }
+.imgpick-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imgpick-item:hover { border-color: var(--accent); }
+.imgpick-item.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); color: var(--text); }
+.imgpick-empty { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 12.5px; }
+.modal.imgpick-modal input { margin: 0; }
+.imgpick-modal .modal-buttons { margin-top: 16px; }
 .snippet { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 10px; border-radius: 9px; background: var(--bg); min-width: 0; }
 .snippet-label { width: 38px; flex-shrink: 0; color: var(--muted); font-size: 11px; font-weight: 600; }
 .snippet code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: 12px var(--mono); user-select: text; }
@@ -2467,7 +2485,7 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 .pick-btn:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .pick-btn.active { border-color: transparent; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .pick-btn.active svg { color: var(--on-accent); }
-@container (max-width: 420px) {
+@container (max-width: 520px) {
   .pick-btn span { display: none; }
   .pick-btn { width: 32px; padding: 0; justify-content: center; }
 }
@@ -2488,6 +2506,8 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 .pick-hint { flex: 1; min-width: 0; }
 .pick-bar button { height: 28px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel); color: var(--text); font: 600 12px var(--ui); cursor: pointer; white-space: nowrap; }
 .pick-bar .pick-go { border-color: transparent; background: var(--accent); color: var(--on-accent); }
+.text-bar { border-color: color-mix(in srgb, #3b82f6 45%, transparent); background: color-mix(in srgb, #3b82f6 12%, transparent); }
+.text-bar kbd { padding: 0 4px; border: 1px solid var(--line-2); border-radius: 4px; font: 600 11px var(--mono); }
 /* "Tulis perintah" hanya perlu di HP, saat chat dan preview tidak tampil berdampingan. */
 @media (min-width: 761px) { .pick-bar .pick-go { display: none; } }
 
