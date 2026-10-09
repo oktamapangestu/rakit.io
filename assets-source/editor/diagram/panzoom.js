@@ -1,6 +1,6 @@
 // Zoom & geser kanvas diagram (action Svelte: use:panZoom). Mouse: scroll = zoom di posisi kursor, seret = geser.
 // Touchpad: cubit = zoom, dua jari = geser. Layar sentuh: cubit & seret. Keyboard (kanvas difokus): + − 0 1 dan panah.
-// Logikanya sama persis dengan versi vanilla sebelumnya (bindCanvasGestures di editor.js).
+// Logikanya sama persis dengan versi sebelum Svelte (bindCanvasGestures di editor.js dulu).
 import { diagram, zoomAt, zoomAtCenter, panBy, fitDiagram, actualSize } from './state.svelte.js';
 
 // Scroll dari touchpad (dua jari) datang sebagai banyak event kecil, sering dengan deltaX; roda mouse sebagai

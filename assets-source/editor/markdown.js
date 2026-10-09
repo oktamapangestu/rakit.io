@@ -1,5 +1,5 @@
 // Markdown sederhana untuk jawaban AI & Baca Alur Kode.
-// h(): elemen DOM kecil (sama dengan h() di editor.js).
+// h(): pembuat elemen DOM kecil untuk hasil markdown.
 function h(tag, props = {}, ...children) {
   const el = document.createElement(tag);
   for (const [key, value] of Object.entries(props)) {

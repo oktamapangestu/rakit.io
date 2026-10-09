@@ -9,7 +9,9 @@ import ImageViewer from '../editor/files/ImageViewer.svelte';
 import NewProjectDialog from '../editor/files/NewProjectDialog.svelte';
 import PreviewPanel from '../editor/preview/PreviewPanel.svelte';
 import App from '../editor/shell/App.svelte';
-import { ui } from '../editor/shell/state.svelte.js';
+import { ui, toast, showMenu, hideMenu } from '../editor/shell/state.svelte.js';
+import ConfirmDialog from '../editor/shell/ConfirmDialog.svelte';
+import DiffDialog from '../editor/shell/DiffDialog.svelte';
 import ImageEditDialog from '../editor/preview/ImageEditDialog.svelte';
 import { preview, MAX_BLOCKS, pageName } from '../editor/preview/state.svelte.js';
 import Topup from '../editor/Topup.svelte';
@@ -19,7 +21,7 @@ import Assistant from '../editor/assistant/Assistant.svelte';
 import SettingsDialog from '../editor/settings/SettingsDialog.svelte';
 import PublishDialog from '../editor/publish/PublishDialog.svelte';
 import PublishModeDialog from '../editor/publish/PublishModeDialog.svelte';
-import { SPARK } from '../editor/icons.js';
+import { SPARK, CLOSE } from '../editor/icons.js';
 import TableList from '../editor/database/TableList.svelte';
 import DbUsage from '../editor/database/Usage.svelte';
 import DbMain from '../editor/database/DbMain.svelte';
@@ -51,40 +53,14 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   // ---------- Util ----------
   const $ = (s, el = document) => el.querySelector(s);
 
-  function h(tag, props = {}, ...children) {
-    const el = document.createElement(tag);
-    for (const [key, value] of Object.entries(props)) {
-      if (value == null || value === false) continue;
-      if (key === 'class') el.className = value;
-      else if (key === 'dataset') Object.assign(el.dataset, value);
-      else if (key.startsWith('on')) el.addEventListener(key.slice(2), value);
-      else el.setAttribute(key, value === true ? '' : value);
-    }
-    for (const child of children.flat(Infinity)) if (child != null && child !== false) el.append(child);
-    return el;
-  }
-
-  function svg(pathD, viewBox = '0 0 16 16') {
-    const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    el.setAttribute('viewBox', viewBox);
-    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    p.setAttribute('d', pathD);
-    el.append(p);
-    return el;
-  }
-
   const ICON = {
     block: 'M1 1h4v1H2v3H1zm10 0h4v4h-1V2h-3zM1 11h1v3h3v1H1zm14 0v4h-4v-1h3v-3zM5 5h6v6H5z',
-    chevron: 'M5.7 13.7 5 13l5-5-5-5 .7-.7L11.4 8z',
-    close: 'm8 8.7 3.6 3.6.7-.7L8.7 8l3.6-3.6-.7-.7L8 7.3 4.4 3.7l-.7.7L7.3 8l-3.6 3.6.7.7z',
-    folder: 'M14.5 3H7.7l-1-1.4-.4-.1H1.5l-.5.5v11l.5.5h13l.5-.5v-9.5zM14 13H2V6h12zm0-8H7.3l-.4.1-.6.9H2V2.5h4.1l1 1.4.4.1H14z',
+    close: CLOSE,
     table: 'M1.5 2h13l.5.5v11l-.5.5h-13l-.5-.5v-11zM2 3v3h5V3zm6 0v3h6V3zM2 7v3h5V7zm6 0v3h6V7zm-6 4v2h5v-2zm6 0v2h6v-2z',
     lock: 'M8 1a3 3 0 0 0-3 3v2H4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1V4a3 3 0 0 0-3-3m2 5H6V4a2 2 0 1 1 4 0z',
     trash: 'M6 1h4l.5.5V3H14v1h-1v10.5l-.5.5h-9l-.5-.5V4H2V3h3.5V1.5zM6.5 3h3V2h-3zM4 4v10h8V4zm2 2h1v6H6zm3 0h1v6H9z',
     refresh: 'M13.45 5.17A6 6 0 1 0 14 8h-1a5 5 0 1 1-.8-2.73l-1.7.23.14 1 3.4-.5-.5-3.4-1 .14z',
     gear: 'M9.1 1l.4 1.9 1 .4 1.6-1.1 1.6 1.6-1.1 1.6.4 1 1.9.4v2.3l-1.9.4-.4 1 1.1 1.6-1.6 1.6-1.6-1.1-1 .4-.4 1.9H6.9l-.4-1.9-1-.4-1.6 1.1-1.6-1.6 1.1-1.6-.4-1L1 9.1V6.9l1.9-.4.4-1-1.1-1.6 1.6-1.6 1.6 1.1 1-.4L6.9 1zM8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5',
-    image: 'M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 2zM2 3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v7.3l-3-3-2.5 2.5-3-3L2 11.8zM10.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3',
-    folderOpen: 'M1.5 14h11l.5-.4 2.6-6.9-.5-.7H14V4.5l-.5-.5H7.7l-.9-.9-.3-.1H1.5l-.5.5v10zM2 3h4.3l.8.8.4.2H13v2H4l-.5.3L2 10.4zm10.1 10H2.2l2.2-6h9.9z',
     flow: 'M2 1.5h5l.5.5v3l-.5.5H5v2h3.5V7l.5-.5h5l.5.5v3l-.5.5H9l-.5-.5v-.5H5v2.5h2l.5.5v2l-.5.5H2l-.5-.5v-2l.5-.5h2v-6H2l-.5-.5V2zm.5 1v2h4v-2zm7 5v2h4v-2zm-7 5v1h4v-1z',
   };
 
@@ -142,58 +118,21 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   // ---------- Toast & status ----------
-  function toast(message, type = 'info') {
-    const el = h('div', { class: `toast ${type}`, role: 'status' }, message);
-    $('#toasts').append(el);
-    setTimeout(() => el.remove(), type === 'error' ? 6000 : 3000);
-  }
-
+  // toast(): assets-source/editor/shell/state.svelte.js (ditampilkan App.svelte).
   function setSaveStatus(text, kind = '') {
     ui.save = { text, kind };
   }
 
   // ---------- Modal ----------
+  // Dialog tanya/konfirmasi (ConfirmDialog.svelte). Hasil: nilai tombol, isi input (bila ada), atau null (Esc / klik
+  // di luar dialog). Sesudahnya fokus kembali ke editor kode.
   function modal({ title, message, input, buttons }) {
     return new Promise((resolve) => {
-      const root = $('#modal');
-      const inputEl = input ? h('input', { value: input.value ?? '', placeholder: input.placeholder, spellcheck: 'false', autocomplete: 'off' }) : null;
-      const primary = buttons.find((b) => b.primary) ?? buttons[0];
-
-      const close = (value) => {
-        root.hidden = true;
-        root.replaceChildren();
-        document.removeEventListener('keydown', onKey, true);
-        resolve(value);
-        autoFocus(editor);
-      };
-      const onKey = (e) => {
-        if (e.key === 'Escape') { e.preventDefault(); close(null); }
-      };
-
-      const form = h('form', { class: 'modal', onsubmit: (e) => { e.preventDefault(); close(inputEl ? inputEl.value.trim() : primary.value); } },
-        h('h3', {}, title),
-        message ? h('p', {}, message) : null,
-        inputEl,
-        h('div', { class: 'modal-buttons' },
-          buttons.map((b) => h('button', {
-            type: b === primary ? 'submit' : 'button',
-            class: b.danger ? 'danger' : b.primary ? 'primary' : '',
-            onclick: b === primary ? null : () => close(b.value),
-          }, b.label))));
-
-      root.replaceChildren(form);
-      root.hidden = false;
-      root.onmousedown = (e) => { if (e.target === root) close(null); };
-      document.addEventListener('keydown', onKey, true);
-
-      if (inputEl) {
-        inputEl.focus();
-        // Pilih nama tanpa ekstensi, seperti VS Code.
-        const dot = inputEl.value.lastIndexOf('.');
-        inputEl.setSelectionRange(0, dot > 0 ? dot : inputEl.value.length);
-      } else {
-        form.querySelector('button[type=submit]').focus();
-      }
+      let result = null;
+      const close = openDialog(ConfirmDialog, {
+        title, message, input, buttons,
+        answer: (value) => { result = value; close(); },
+      }, { onClose: () => { resolve(result); autoFocus(editor); } });
     });
   }
 
@@ -483,7 +422,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
   // replacePath: ganti gambar tertentu (dari menu "Ganti gambar…").
   function pickImages(dir = targetDir(), replacePath = null) {
-    const input = h('input', { type: 'file', accept: IMAGE_EXT.map((e) => `.${e}`).join(','), multiple: !replacePath });
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: IMAGE_EXT.map((e) => `.${e}`).join(','), multiple: !replacePath });
     input.onchange = () => uploadImages([...input.files], dir, replacePath);
     input.click();
   }
@@ -583,30 +522,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   // ---------- Context menu ----------
-  // align 'right': x adalah tepi kanan menu (mis. tepi kanan tombol "⋯"). label: elemen judul di atas menu.
-  // Ukuran diukur setelah semua isi terpasang, lalu menu dijaga di dalam layar.
-  function showMenu(x, y, items, { align = 'left', label = null } = {}) {
-    const menu = $('#ctxmenu');
-    menu.classList.remove('history-menu');
-    menu.replaceChildren(...[label, ...items.filter(Boolean).map((item) => (item === '-'
-      ? h('div', { class: 'sep' })
-      : h('button', { class: item.danger ? 'danger' : '', onclick: () => { hideMenu(); item.run(); } },
-        h('span', {}, item.label), item.hint ? h('span', { class: 'hint' }, item.hint) : null)))].filter(Boolean));
-    menu.hidden = false;
-    // Ukur di pojok kiri atas (ruang penuh, isi tidak terlipat karena posisi lama di dekat tepi layar).
-    // offsetWidth/Height: ukuran asli, tidak terpengaruh animasi muncul (scale) seperti getBoundingClientRect.
-    menu.style.left = '0px';
-    menu.style.top = '0px';
-    const width = menu.offsetWidth;
-    const height = menu.offsetHeight;
-    const left = align === 'right' ? x - width : x;
-    menu.style.left = `${Math.max(4, Math.min(left, innerWidth - width - 4))}px`;
-    menu.style.top = `${Math.max(4, Math.min(y, innerHeight - height - 4))}px`;
-  }
-
-  function hideMenu() {
-    $('#ctxmenu').hidden = true;
-  }
+  // showMenu()/hideMenu(): assets-source/editor/shell/state.svelte.js (digambar ContextMenu.svelte).
 
   function treeMenu(entry) {
     const dir = entry ? targetDir(entry.path) : '';
@@ -1058,7 +974,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
       '-',
       { label: 'Keluar', danger: true, run: logout },
-    ], { align: 'right', label: h('div', { class: 'menu-label' }, h('strong', {}, state.me.username), state.me.email) });
+    ], { align: 'right', label: { title: state.me.username, sub: state.me.email } });
   }
 
   // ---------- Pengaturan (per browser) ----------
@@ -1223,8 +1139,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
         : { label: `Maksimal ${state.maxProjects} project`, run: () => toast(`Maksimal ${state.maxProjects} project per akun. Hapus project lama untuk membuat yang baru.`, 'error') },
       { label: 'Ganti nama project…', run: renameProject },
       state.projects.length > 1 ? { label: 'Hapus project ini…', danger: true, run: deleteProject } : null,
-    ]);
-    $('#ctxmenu').classList.add('history-menu');
+    ], { wide: true });
   }
 
   function openNewProject() {
@@ -1293,15 +1208,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     reloadPreview();
   }
 
-  function openSheet(className, label, build) {
-    const root = $('#modal');
-    const close = () => { root.hidden = true; root.replaceChildren(); };
-    root.replaceChildren(h('div', { class: `modal ${className}`, role: 'dialog', 'aria-label': label }, ...build(close)));
-    root.hidden = false;
-    root.onmousedown = (e) => { if (e.target === root) close(); };
-    return close;
-  }
-
   // ---------- Komponen Svelte (assets-source/editor) ----------
   // Sambungan komponen ke editor, dipasang sebagai context 'editor' (getContext('editor') di komponen).
   let svelteContext;
@@ -1332,7 +1238,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       reloadPreview,
       consoleActive,
       renderMarkdown,
-      linkifyLines,
       loadMermaid,
       autoFocus,
       isDark,
@@ -1360,8 +1265,12 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   // Dialog dari komponen Svelte di #modal: Esc atau klik di luar dialog menutupnya. Komponen menerima prop close.
+  // Hanya satu dialog sekaligus: membuka dialog baru menutup yang lama.
   // keepEscapeIn: elemen (nama tag) tempat Esc tidak menutup dialog, mis. ['TEXTAREA'] untuk isian panjang.
-  function openDialog(Component, props = {}, { keepEscapeIn = [] } = {}) {
+  // onClose: dipanggil setelah dialog ditutup (dengan cara apa pun).
+  let closeDialog = null;
+  function openDialog(Component, props = {}, { keepEscapeIn = [], onClose = null } = {}) {
+    closeDialog?.();
     const root = $('#modal');
     let app;
     const onKey = (e) => {
@@ -1371,15 +1280,18 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       if (!app) return;
       unmount(app);
       app = null;
+      if (closeDialog === close) closeDialog = null;
       root.hidden = true;
       root.replaceChildren();
       document.removeEventListener('keydown', onKey, true);
+      onClose?.();
     }
     root.replaceChildren();
     root.hidden = false;
     root.onmousedown = (e) => { if (e.target === root) close(); };
     document.addEventListener('keydown', onKey, true);
     app = mount(Component, { target: root, props: { ...props, close }, context: editorContext() });
+    closeDialog = close;
     return close;
   }
 
@@ -1435,7 +1347,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
         // Lapisan transparan di atas semua elemen (termasuk iframe preview & Monaco) selama drag:
         // kursor tetap col-resize dan semua gerakan mouse tertangkap di dokumen ini.
-        const overlay = h('div', { class: 'resize-overlay' });
+        const overlay = Object.assign(document.createElement('div'), { className: 'resize-overlay' });
         document.body.append(overlay);
         splitter.classList.add('dragging');
 
@@ -1596,15 +1508,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     autoFocus($('#aiInput'));
   }
 
-  // Jembatan dari fitur lain (fungsi, database, diagram, Baca Alur Kode, editor) ke panel AI: tombol yang
-  // mengisi kotak AI dengan permintaan beserta konteksnya (lihat juga assets-source/editor/handoff.js).
-  function aiButton(label, text, { cls = 'fn-btn', mode = 'build' } = {}) {
-    return h('button', {
-      type: 'button', class: `${cls} ai-handoff`,
-      title: `Isi kotak AI (${mode === 'plan' ? 'Plan' : 'Builder'}) dengan permintaan ini — bisa diubah dulu sebelum dikirim`,
-      onclick: (e) => { e.stopPropagation(); askAi(typeof text === 'function' ? text() : text, mode); },
-    }, h('span', { class: 'ai-spark', 'aria-hidden': 'true' }, '✦'), label);
-  }
   function showFeatureInfo(key) {
     if (FEATURE_INFO[key]) openDialog(FeatureInfo, { key });
   }
@@ -1688,8 +1591,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       })),
       data.threads.length ? '-' : null,
       data.threads.length ? { label: 'Hapus semua riwayat', danger: true, run: clearHistory } : null,
-    ]);
-    $('#ctxmenu').classList.add('history-menu');
+    ], { wide: true });
   }
 
   // Muat ulang file yang diubah server (oleh AI atau Batalkan) ke editor, pohon file, dan preview.
@@ -1728,42 +1630,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     } catch {
       return toast('Editor kode gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.', 'error');
     }
-    const root = $('#modal');
-    const body = h('div', { class: 'diff-body' });
-    let diffEditor;
-    const close = () => {
-      diffEditor?.getModel()?.original.dispose();
-      diffEditor?.getModel()?.modified.dispose();
-      diffEditor?.dispose();
-      root.hidden = true;
-      root.replaceChildren();
-      document.removeEventListener('keydown', onKey, true);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
-
-    root.replaceChildren(h('div', { class: 'modal diff-modal' },
-      h('div', { class: 'diff-head' },
-        h('div', {}, h('h3', {}, change.path), caption ? h('p', { class: 'diff-caption' }, caption) : null),
-        h('button', { class: 'icon-btn', title: 'Tutup', onclick: close }, svg(ICON.close))),
-      body));
-    root.hidden = false;
-    root.onmousedown = (e) => { if (e.target === root) close(); };
-    document.addEventListener('keydown', onKey, true);
-
-    const language = { html: 'html', css: 'css', js: 'javascript' }[extOf(change.path)];
-    diffEditor = monaco.editor.createDiffEditor(body, {
-      theme: monacoTheme(),
-      readOnly: true,
-      automaticLayout: true,
-      renderSideBySide: body.clientWidth > 700,
-      minimap: { enabled: false },
-      fontSize: 13,
-      scrollBeyondLastLine: false,
-    });
-    diffEditor.setModel({
-      original: monaco.editor.createModel(before, language),
-      modified: monaco.editor.createModel(change.content, language),
-    });
+    openDialog(DiffDialog, { path: change.path, caption, before, after: change.content, monaco, theme: monacoTheme() });
   }
 
   function bindAiEvents() {
@@ -1800,23 +1667,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       mount(DbMain, { target: $('#dbMain'), context });
     }
     return loadDb();
-  }
-
-  // Modal kosong (dialog vanilla: pengaturan, info fitur, diagram). Mengembalikan elemen isi dan fungsi tutup.
-  function openPanel(className) {
-    const root = $('#modal');
-    const body = h('div', { class: `modal ${className}` });
-    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
-    function close() {
-      root.hidden = true;
-      root.replaceChildren();
-      document.removeEventListener('keydown', onKey, true);
-    }
-    root.replaceChildren(body);
-    root.hidden = false;
-    root.onmousedown = (e) => { if (e.target === root) close(); };
-    document.addEventListener('keydown', onKey, true);
-    return { body, close };
   }
 
   // ---------- Diagram (UML, ERD, peta halaman, alur data) ----------
@@ -2097,23 +1947,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     applyFlowHighlight({ reveal: Boolean(flow.path && flow.loading !== flow.path && flowSteps().length) });
   }
 
-  // "baris 12" / "baris 12–20" (versi Inggris: "line 12" / "lines 12–20") di jawaban AI → bisa diklik untuk menyorot baris itu.
-  function linkifyLines(root) {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const nodes = [];
-    while (walker.nextNode()) nodes.push(walker.currentNode);
-    for (const node of nodes) {
-      const parts = node.textContent.split(/((?:baris|lines?)\s+\d+(?:\s*[-–]\s*\d+)?)/gi);
-      if (parts.length < 2) continue;
-      node.replaceWith(...parts.map((part) => {
-        const m = part.match(/^(?:baris|lines?)\s+(\d+)(?:\s*[-–]\s*(\d+))?$/i);
-        if (!m) return part;
-        return h('button', { type: 'button', class: 'flow-line-link', onclick: () => flashFlowLines(Number(m[1]), Number(m[2] || m[1])) }, part);
-      }));
-    }
-    return root;
-  }
-
   async function flashFlowLines(a, b) {
     if (state.active !== flow.path) await openFile(flow.path);
     const total = editor.getModel()?.getLineCount() ?? 0;
@@ -2215,39 +2048,20 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   // intro: sambutan saat editor pertama kali dibuka. after: dipanggil setelah isi saldo asisten berhasil.
   function openTopup(tab, { intro = false, after = null } = {}) {
     const root = $('#modal');
-    let app;
-    const close = () => {
-      if (!app) return;
-      unmount(app);
-      app = null;
-      root.classList.remove('promo-backdrop');
-      root.hidden = true;
-      root.replaceChildren();
-      document.removeEventListener('keydown', onKey, true);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
-
-    root.replaceChildren();
-    root.hidden = false;
-    root.onmousedown = (e) => { if (e.target === root) close(); };
-    document.addEventListener('keydown', onKey, true);
-    app = mount(Topup, {
-      target: root,
-      props: {
-        tab,
-        intro,
-        api,
-        showAssistant: SHOW_ASSISTANT,
-        icons: { close: ICON.close, spark: SPARK },
-        onCredits: (credits) => { ai.credits = credits; },
-        onPlanPaid: () => loadTree().catch(() => {}), // perbarui kuota storage di sidebar
-        onUseAI: () => { close(); setMode('ai'); },
-        onAfter: () => { close(); after?.(); },
-        // Promosi memakai modal lebar di tengah layar.
-        onPromo: (on) => root.classList.toggle('promo-backdrop', on),
-        onClose: close,
-      },
-    });
+    const close = openDialog(Topup, {
+      tab,
+      intro,
+      api,
+      showAssistant: SHOW_ASSISTANT,
+      icons: { close: ICON.close, spark: SPARK },
+      onCredits: (credits) => { ai.credits = credits; },
+      onPlanPaid: () => loadTree().catch(() => {}), // perbarui kuota storage di sidebar
+      onUseAI: () => { close(); setMode('ai'); },
+      onAfter: () => { close(); after?.(); },
+      // Promosi memakai modal lebar di tengah layar.
+      onPromo: (on) => root.classList.toggle('promo-backdrop', on),
+      onClose: () => close(),
+    }, { onClose: () => root.classList.remove('promo-backdrop') });
   }
 
   // Tema warna editor, disamakan dengan palet UI.

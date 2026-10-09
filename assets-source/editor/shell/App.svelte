@@ -1,10 +1,11 @@
 <!--
-  Kerangka editor (.app): header, panel file, area editor (tab mode & isinya), preview, dan navigasi HP. Pengikat
-  event ada di editor.js (lewat id elemen); bagian berisi (pohon file, tab, panel AI, preview, …) dipasang editor.js
-  ke wadahnya. Atribut yang berubah (mode aktif, panel tampil, kredit, paket, status simpan, …) mengikuti state.
+  Kerangka editor (.app): header, panel file, area editor (tab mode & isinya), preview, navigasi HP, menu konteks,
+  dan toast. Pengikat event ada di editor.js (lewat id elemen); bagian berisi (pohon file, tab, panel AI, preview, …)
+  dipasang editor.js ke wadahnya. Atribut yang berubah (mode aktif, panel tampil, kredit, paket, status simpan, …) mengikuti state.
 -->
 <script>
-  import { ui } from './state.svelte.js';
+  import { ui, toasts } from './state.svelte.js';
+  import ContextMenu from './ContextMenu.svelte';
   import { core } from '../files/state.svelte.js';
   import { ai, canAfford, unlimitedLeft } from '../ai/state.svelte.js';
   import { con } from '../console/state.svelte.js';
@@ -318,3 +319,6 @@
     Preview
   </button>
 </nav>
+
+<ContextMenu />
+<div class="toasts" id="toasts">{#each toasts as t (t.id)}<div class="toast {t.type}" role="status">{t.message}</div>{/each}</div>

@@ -10,11 +10,12 @@
   import FlowChart from './FlowChart.svelte';
   import { flow, flowSteps, flowStale } from './state.svelte.js';
   import { FLOW_KINDS, FLOW_NOTE, lineLabel } from './text.js';
+  import { linkifyLines } from './linkify.js';
 
   // actions: explain(force), select(i), stopPlay(), togglePlay(), close(), goBack(), openRef(ref), flashLines(a, b),
   // ask(textarea), toggleWide(), saveShowChart(open).
   let { actions } = $props();
-  const { renderMarkdown, linkifyLines, icons } = getContext('editor');
+  const { renderMarkdown, icons } = getContext('editor');
 
   const baseName = (p) => p.slice(p.lastIndexOf('/') + 1);
   const ex = $derived(flow.saved?.explanation);
@@ -25,7 +26,7 @@
   // div.md hasil renderMarkdown (tanpa pembungkus tambahan, sama seperti tampilan lama).
   function md(node, text) {
     const draw = (t) => {
-      const out = linkifyLines(renderMarkdown(t || ''));
+      const out = linkifyLines(renderMarkdown(t || ''), actions.flashLines);
       node.className = out.className;
       node.replaceChildren(...out.childNodes);
     };

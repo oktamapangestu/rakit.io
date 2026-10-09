@@ -26,12 +26,11 @@
     // Tampilan editor (Simple/Coding) dipasang sebelum halaman tergambar, supaya tidak berkedip.
     try { if (JSON.parse(localStorage.getItem('rakit.layout')) === 'simple') document.body.dataset.layout = 'simple'; } catch { /* abaikan */ }
   </script>
-  <!-- Kerangka editor digambar App.svelte (assets-source/editor/shell). -->
+  <!-- Kerangka editor (termasuk menu konteks & toast) digambar App.svelte (assets-source/editor/shell). -->
   <div class="app"></div>
 
-  <div class="ctxmenu" id="ctxmenu" hidden></div>
+  <!-- Dialog dipasang ke sini oleh openDialog() di editor.js. -->
   <div class="modal-backdrop" id="modal" hidden></div>
-  <div class="toasts" id="toasts"></div>
 
   <script>
     // Monaco dimuat dari CDN; worker harus diproksikan lewat data: URL agar lolos same-origin.
