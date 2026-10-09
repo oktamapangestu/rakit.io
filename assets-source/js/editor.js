@@ -7,6 +7,9 @@ import Tabs from '../editor/files/Tabs.svelte';
 import Breadcrumbs from '../editor/files/Breadcrumbs.svelte';
 import ImageViewer from '../editor/files/ImageViewer.svelte';
 import NewProjectDialog from '../editor/files/NewProjectDialog.svelte';
+import PreviewPanel from '../editor/preview/PreviewPanel.svelte';
+import ImageEditDialog from '../editor/preview/ImageEditDialog.svelte';
+import { preview, MAX_BLOCKS, pageName } from '../editor/preview/state.svelte.js';
 import Topup from '../editor/Topup.svelte';
 import Functions from '../editor/functions/Functions.svelte';
 import History from '../editor/history/History.svelte';
@@ -657,10 +660,10 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   function reloadPreview() {
     const route = state.previewRoute ?? routeFor(state.previewPath);
     const url = `${previewBase()}${route}`;
-    $('#previewHost').textContent = previewBase();
+    preview.host = previewBase();
     schedulePublishCheck();
-    if (document.activeElement !== $('#previewUrl')) $('#previewUrl').value = route;
-    $('#openPreview').href = url;
+    preview.route = route; // bar alamat (tidak menimpa yang sedang diketik)
+    preview.url = url;
     // Server mengirim Cache-Control: no-cache, jadi cukup set ulang src untuk memuat versi terbaru.
     $('#previewFrame').src = url;
   }
@@ -671,24 +674,19 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   // disisipkan server ke halaman di dalam iframe (go/internal/sites/picker.js), lewat postMessage.
   // Blok bisa dari beberapa halaman: tiap blok membawa halamannya (pathname di preview). Pindah halaman
   // tidak melepas pilihan; saat kembali, sorotannya dipulihkan. Batas 5 blok dihitung dari semua halaman.
-  const MAX_BLOCKS = 5;
-  const pick = { on: false, page: null, blocks: [] };
+  // Keadaan (pick, textEdit) di assets-source/editor/preview/state.svelte.js; bar & chip blok digambar komponen.
+  const pick = preview.pick;
   const siteOrigin = () => new URL(previewBase()).origin;
   const toPicker = (message) => $('#previewFrame').contentWindow?.postMessage({ rakit: true, lang: LANG, ...message }, siteOrigin());
   const blocksOn = (page) => pick.blocks.filter((b) => b.page === page);
   // Jatah di halaman yang sedang tampil = 5 dikurangi blok di halaman lain.
   const pageLimit = () => MAX_BLOCKS - pick.blocks.filter((b) => b.page !== pick.page).length;
-  // "/" -> "index", "/produk/sepatu.html" -> "sepatu"
-  const pageName = (page) => decodeURIComponent(page.replace(/\/+$/, '').split('/').pop() || 'index').replace(/\.html$/i, '') || 'index';
 
   function setPick(on) {
     pick.on = on;
     if (!on) pick.blocks = [];
     if (on && textEdit.on) setTextEdit(false, { quiet: true });
-    $('#pickBlocks').classList.toggle('active', on);
-    $('#pickBlocks').setAttribute('aria-pressed', String(on));
     toPicker({ type: 'pick', on, limit: pageLimit(), restore: on ? blocksOn(pick.page).map((b) => b.selector) : undefined });
-    renderBlocks();
   }
 
   function removeBlock(b) {
@@ -696,37 +694,9 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     // Blok di halaman lain: halaman itu tidak sedang dimuat, cukup dilepas di sini.
     pick.blocks = pick.blocks.filter((x) => x !== b);
     toPicker({ type: 'limit', limit: pageLimit() });
-    renderBlocks();
-  }
-
-  function renderBlocks() {
-    const n = pick.blocks.length;
-    const manyPages = new Set(pick.blocks.map((b) => b.page)).size > 1;
-    $('#pickBar').hidden = !pick.on;
-    const move = mobileQuery.matches ? 'Pindah halaman lewat bar alamat.' : 'Alt+klik link untuk pindah halaman.';
-    $('#pickHint').textContent = n
-      ? `${n} blok dipilih. Klik lagi untuk melepas. ${move}`
-      : `Klik bagian halaman yang mau diubah (maks. ${MAX_BLOCKS}). ${move}`;
-    $('#pickGo').hidden = !n;
-    const box = $('#aiBlocks');
-    box.hidden = !n;
-    box.replaceChildren(...pick.blocks.map((b) => {
-      const here = b.page === pick.page;
-      return h('span', { class: `ai-block${here ? '' : ' other-page'}`, title: `${b.page} · ${b.selector}` },
-        svg(ICON.block), h('span', { class: 'ai-block-label' }, b.label),
-        manyPages ? h('span', { class: 'ai-block-page' }, pageName(b.page)) : null,
-        here ? h('button', { type: 'button', title: 'Perbesar ke bagian induknya', 'aria-label': `Perbesar ${b.label}`, onclick: () => toPicker({ type: 'parent', selector: b.selector }) }, '⬆') : null,
-        h('button', { type: 'button', title: 'Lepas blok ini', 'aria-label': `Lepas ${b.label}`, onclick: () => removeBlock(b) }, '×'));
-    }));
-    ai.blockCount = n; // placeholder kotak prompt (Composer.svelte)
   }
 
   function bindBlockPicker() {
-    $('#pickBlocks').onclick = () => setPick(!pick.on);
-    $('#pickDone').onclick = () => setPick(false);
-    $('#pickGo').onclick = () => { setMobileView('editor'); setMode('ai'); };
-    $('#editText').onclick = () => setTextEdit(!textEdit.on);
-    $('#textDone').onclick = () => setTextEdit(false);
     window.addEventListener('message', (e) => {
       const m = e.data;
       if (e.source !== $('#previewFrame').contentWindow || e.origin !== siteOrigin() || m?.rakit !== true) return;
@@ -738,7 +708,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
         if (textEdit.on) toPicker({ type: 'textMode', on: true });
         if (!pick.on) return;
         toPicker({ type: 'pick', on: true, limit: pageLimit(), restore: blocksOn(m.page).map((b) => b.selector) });
-        renderBlocks();
       } else if (m.type === 'blocks' && pick.on) {
         const first = !pick.blocks.length && m.blocks.length;
         pick.page = m.page;
@@ -747,7 +716,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
         const kept = pick.blocks.filter((b) => b.page !== m.page || fresh.has(b.selector)).map((b) => (b.page === m.page ? fresh.get(b.selector) : b));
         const added = [...fresh.values()].filter((b) => !kept.includes(b));
         pick.blocks = [...kept, ...added].slice(0, MAX_BLOCKS);
-        renderBlocks();
         // Blok pertama dipilih: tampilkan kotak prompt (di Coding bisa saja sedang di tab lain).
         if (first && $('#editorArea').dataset.mode !== 'ai') setMode('ai');
       } else if (m.type === 'textCheck' && textEdit.on) {
@@ -770,7 +738,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   // Mode Edit: klik teks di preview lalu ketik langsung (klik gambar: lihat "Ganti gambar" di bawah). Skrip preview (picker.js) mengirim isi text node elemen sebelum
   // & sesudah diubah; di sini perubahan itu dicari di HTML sumber (textedit.js) dan diterapkan ke model
   // Monaco, jadi bisa di-undo dan tersimpan seperti ketikan biasa.
-  const textEdit = { on: false };
+  const textEdit = preview.textEdit;
   // Disimpan tanpa memuat ulang preview: teks barunya sudah tampil di sana.
   const quietSaves = new Set();
   const htmlDecoder = document.createElement('textarea');
@@ -779,9 +747,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   function setTextEdit(on, { quiet = false } = {}) {
     textEdit.on = on;
     if (on && pick.on) setPick(false);
-    $('#editText').classList.toggle('active', on);
-    $('#editText').setAttribute('aria-pressed', String(on));
-    $('#textBar').hidden = !on;
     if (!quiet) toPicker({ type: 'textMode', on });
   }
 
@@ -997,153 +962,63 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       return toast('Gambar ini memakai <picture> dengan beberapa versi gambar, jadi tidak bisa diganti dari preview. Ubah lewat kode atau minta AI.', 'error');
     }
     const current = projectImage(m.shown);
-    let chosen = null; // alamat baru untuk src (null = tidak diganti)
-    const root = $('#modal');
-    const stage = h('img', { src: m.shown, alt: '' });
-    const info = h('p', {}, current ? `/${current}` : m.src || '(tanpa src)');
-    const grid = h('div', { class: 'imgpick-grid' });
-    const urlInput = h('input', { placeholder: 'https://… atau /gambar.jpg', spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Alamat gambar' });
-    const altInput = h('input', { value: m.alt ?? '', placeholder: 'mis. Tim kami di kantor', 'aria-label': 'Teks alternatif' });
+    openDialog(ImageEditDialog, { m, current, onSubmit: (changes) => applyImageEdit(m, current, changes) });
+  }
 
-    const choose = (src, label) => {
-      chosen = src;
-      stage.src = src.startsWith('/') ? `${previewBase()}${src}` : src;
-      info.textContent = label;
-      grid.querySelectorAll('.imgpick-item').forEach((b) => b.classList.toggle('active', `/${b.dataset.path}` === src));
-    };
-    const renderGrid = () => {
-      const images = state.entries.filter((e) => e.type === 'file' && isImage(e.path) && extOf(e.path) !== 'ico');
-      grid.replaceChildren(...(images.length ? images.map((e) => h('button', {
-        type: 'button',
-        class: `imgpick-item${(chosen ? chosen === `/${e.path}` : e.path === current) ? ' active' : ''}`,
-        title: `/${e.path}`,
-        dataset: { path: e.path },
-        onclick: () => { urlInput.value = ''; choose(`/${e.path}`, `/${e.path}`); },
-      }, h('img', { src: imageUrl(e.path), alt: '', loading: 'lazy' }), h('span', {}, baseName(e.path))))
-        : [h('p', { class: 'imgpick-empty' }, 'Belum ada gambar di project. Upload gambar baru di bawah.')]));
-    };
-    renderGrid();
-
-    const upload = () => {
-      const input = h('input', { type: 'file', accept: IMAGE_EXT.map((e) => `.${e}`).join(',') });
-      input.onchange = async () => {
-        // Simpan di folder gambar lama bila gambar itu ada di project, atau di folder images/ bila ada.
-        const dir = current ? parentOf(current) : state.entries.some((e) => e.type === 'dir' && e.path === 'images') ? 'images' : '';
-        const [path] = await uploadImages([...input.files], dir, null, { reload: false });
-        if (!path) return;
-        renderGrid();
-        urlInput.value = '';
-        choose(`/${path}`, `/${path}`);
-      };
-      input.click();
-    };
-    urlInput.oninput = () => {
-      const v = urlInput.value.trim();
-      if (/^(https?:\/\/|\/)\S+$/i.test(v)) choose(v, v);
-    };
-
-    const close = () => {
-      root.hidden = true;
-      root.replaceChildren();
-      document.removeEventListener('keydown', onKey, true);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
-    const submit = async (e) => {
-      e.preventDefault();
-      const typed = urlInput.value.trim();
-      if (typed && !/^(https?:\/\/|\/)\S+$/i.test(typed)) {
-        urlInput.focus();
-        return toast('Alamat gambar harus diawali https:// atau / (file di project)', 'error');
-      }
-      const alt = altInput.value.replace(/\s+/g, ' ').trim();
-      const changes = {};
-      if (chosen && chosen !== m.src && !(current && chosen === `/${current}`)) changes.src = chosen;
-      if (alt !== (m.alt ?? '')) changes.alt = alt;
-      close();
-      if (!Object.keys(changes).length) return;
-      const page = await pageModel(m.page);
-      if (page.error) return textEditFailed(page.error);
-      const res = window.rakitTextEdit.applyImage(page.model.getValue(), m.selector, { src: m.src, alt: m.alt }, changes, decodeHtml);
-      if (!res.error) {
-        if (!res.edits.length) return;
-        // Gambar di <template> (x-for / x-if) tampil di banyak salinan: muat ulang preview.
-        const reload = m.selector.includes('template:');
-        commitEdits(page.path, page.model, res.edits, 'Gambar', { reload });
-        if (!reload) toPicker({ type: 'setImage', page: m.page, selector: m.selector, ...changes });
+  // Simpan perubahan gambar dari dialog: ke HTML sumber, ke baris database asalnya, atau lewat AI.
+  async function applyImageEdit(m, current, changes) {
+    const page = await pageModel(m.page);
+    if (page.error) return textEditFailed(page.error);
+    const res = window.rakitTextEdit.applyImage(page.model.getValue(), m.selector, { src: m.src, alt: m.alt }, changes, decodeHtml);
+    if (!res.error) {
+      if (!res.edits.length) return;
+      // Gambar di <template> (x-for / x-if) tampil di banyak salinan: muat ulang preview.
+      const reload = m.selector.includes('template:');
+      commitEdits(page.path, page.model, res.edits, 'Gambar', { reload });
+      if (!reload) toPicker({ type: 'setImage', page: m.page, selector: m.selector, ...changes });
+      return;
+    }
+    // Gambar dari database (mis. kolom foto produk): ubah barisnya.
+    const srcTarget = await dbTarget(m.db, ['image', 'text']);
+    const altTarget = await dbTarget(m.altDb, ['text']);
+    const same = (a, b) => a && b && a.table === b.table && String(a.id) === String(b.id);
+    if ((!changes.src || srcTarget) && (changes.alt === undefined || altTarget || same(srcTarget, altTarget))) {
+      const target = srcTarget || altTarget;
+      if (target) {
+        const values = {};
+        if (changes.src) values[srcTarget.column] = changes.src;
+        if (changes.alt !== undefined && altTarget) {
+          if (same(altTarget, target)) values[altTarget.column] = changes.alt;
+          else await saveDbValue(altTarget, { [altTarget.column]: changes.alt }, 'Teks alt');
+        }
+        if (Object.keys(values).length) await saveDbValue(target, values, 'Gambar');
+        toPicker({ type: 'setImage', page: m.page, selector: m.selector, ...changes });
         return;
       }
-      // Gambar dari database (mis. kolom foto produk): ubah barisnya.
-      const srcTarget = await dbTarget(m.db, ['image', 'text']);
-      const altTarget = await dbTarget(m.altDb, ['text']);
-      const same = (a, b) => a && b && a.table === b.table && String(a.id) === String(b.id);
-      if ((!changes.src || srcTarget) && (changes.alt === undefined || altTarget || same(srcTarget, altTarget))) {
-        const target = srcTarget || altTarget;
-        if (target) {
-          const values = {};
-          if (changes.src) values[srcTarget.column] = changes.src;
-          if (changes.alt !== undefined && altTarget) {
-            if (same(altTarget, target)) values[altTarget.column] = changes.alt;
-            else await saveDbValue(altTarget, { [altTarget.column]: changes.alt }, 'Teks alt');
-          }
-          if (Object.keys(values).length) await saveDbValue(target, values, 'Gambar');
-          toPicker({ type: 'setImage', page: m.page, selector: m.selector, ...changes });
-          return;
-        }
-      }
-      const newAlt = changes.alt !== undefined ? `"${changes.alt}"` : '';
-      editViaAi(m.page, changes.src
-        ? `ganti gambar "${m.src ?? ''}" menjadi "${changes.src}"${newAlt ? `, dan ubah teks alt-nya menjadi ${newAlt}` : ''}.`
-        : `ubah teks alt gambar "${m.src ?? ''}" menjadi ${newAlt}.`);
-    };
-
-    root.replaceChildren(h('form', { class: 'modal image-modal imgpick-modal', role: 'dialog', 'aria-label': 'Ganti gambar', onsubmit: submit },
-      h('div', { class: 'topup-head' },
-        h('div', {}, h('h3', {}, 'Ganti gambar'), info),
-        h('button', { class: 'icon-btn', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close))),
-      h('div', { class: 'image-stage imgpick-stage' }, stage),
-      h('div', { class: 'imgpick-label' }, h('span', {}, 'Gambar di project'),
-        h('button', { type: 'button', class: 'imgpick-upload', onclick: upload }, 'Upload gambar baru…')),
-      grid,
-      h('div', { class: 'imgpick-label' }, h('span', {}, 'Atau pakai alamat gambar')),
-      urlInput,
-      h('div', { class: 'imgpick-label' }, h('span', {}, 'Teks alternatif (alt)'), h('small', {}, 'Deskripsi gambar untuk pembaca layar & mesin pencari')),
-      altInput,
-      h('div', { class: 'modal-buttons' },
-        h('button', { type: 'button', onclick: close }, 'Batal'),
-        h('button', { type: 'submit', class: 'primary' }, 'Simpan'))));
-    root.hidden = false;
-    root.onmousedown = (e) => { if (e.target === root) close(); };
-    document.addEventListener('keydown', onKey, true);
-    grid.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+    }
+    const newAlt = changes.alt !== undefined ? `"${changes.alt}"` : '';
+    editViaAi(m.page, changes.src
+      ? `ganti gambar "${m.src ?? ''}" menjadi "${changes.src}"${newAlt ? `, dan ubah teks alt-nya menjadi ${newAlt}` : ''}.`
+      : `ubah teks alt gambar "${m.src ?? ''}" menjadi ${newAlt}.`);
   }
 
   // Bar alamat preview: host tetap (website project ini), path/query/hash bisa diubah.
-  function bindPreviewUrl() {
-    const input = $('#previewUrl');
-    const current = () => state.previewRoute ?? routeFor(state.previewPath);
-    const go = () => {
-      let value = input.value.trim();
-      const host = previewBase();
-      // Tempel alamat lengkap website ini tetap boleh; host lain ditolak.
-      if (value.toLowerCase().startsWith(host.toLowerCase())) value = value.slice(host.length);
-      else if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(value)) {
-        toast(`Preview hanya bisa membuka halaman di ${host.replace(/^https?:\/\//, '')}`, 'error');
-        input.value = current();
-        input.select(); // siap diketik ulang
-        return;
-      }
-      if (!value.startsWith('/')) value = `/${value}`;
-      state.previewRoute = value.replace(/\s/g, '%20');
-      input.blur();
-      reloadPreview();
-    };
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); go(); }
-      if (e.key === 'Escape') { e.preventDefault(); input.value = current(); input.blur(); }
-    });
-    input.addEventListener('focus', () => input.select());
-    input.addEventListener('blur', () => { input.value = current(); }); // batal kalau tidak ditekan Enter
-    $('#previewHost').addEventListener('click', () => input.focus());
+  const currentRoute = () => state.previewRoute ?? routeFor(state.previewPath);
+  function previewGo(typed, input) {
+    let value = typed.trim();
+    const host = previewBase();
+    // Tempel alamat lengkap website ini tetap boleh; host lain ditolak.
+    if (value.toLowerCase().startsWith(host.toLowerCase())) value = value.slice(host.length);
+    else if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(value)) {
+      toast(`Preview hanya bisa membuka halaman di ${host.replace(/^https?:\/\//, '')}`, 'error');
+      input.value = currentRoute();
+      input.select(); // siap diketik ulang
+      return;
+    }
+    if (!value.startsWith('/')) value = `/${value}`;
+    state.previewRoute = value.replace(/\s/g, '%20');
+    input.blur();
+    reloadPreview();
   }
 
   let previewTimer;
@@ -1170,10 +1045,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   function setDevice(device) {
-    $('#stage').dataset.device = device;
-    document.querySelectorAll('.device-switch button').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.device === device);
-    });
+    preview.device = device;
     storage.set('rakit.device', device);
   }
 
@@ -1430,7 +1302,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     const manual = isManual();
     document.body.dataset.publish = manual ? 'manual' : 'live';
     $('#publishBtn').hidden = !manual;
-    $('#envBadge').hidden = !manual;
+    preview.dev = manual;
     const pending = manual && Boolean(pub.status?.pending);
     $('#publishBtn').classList.toggle('pending', pending);
     $('#publishBtn').title = pending ? 'Ada perubahan yang belum dipublikasikan' : 'Website publik sudah sama dengan versi dev';
@@ -1517,6 +1389,9 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       activePath: () => state.active,
       projectUrl,
       pageName,
+      pickParent: (b) => toPicker({ type: 'parent', selector: b.selector }),
+      pickRemove: removeBlock,
+      uploadImages,
       icons: { refresh: ICON.refresh, trash: ICON.trash, table: ICON.table, gear: ICON.gear, lock: ICON.lock, close: ICON.close, flow: ICON.flow, block: ICON.block },
     }]]);
     return svelteContext;
@@ -1684,8 +1559,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     bindImageDrop(tree);
     $('#refreshBtn').onclick = () => loadTree().catch((err) => toast(err.message, 'error'));
     $('#collapseBtn').onclick = () => state.expanded.clear();
-    $('#reloadPreview').onclick = reloadPreview;
-    bindPreviewUrl();
     bindBlockPicker();
     $('#togglePreview').onclick = togglePreview;
     $('#publishBtn').onclick = openPublish;
@@ -1711,9 +1584,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     $('#avatarBtn').onclick = (e) => { e.stopPropagation(); showAccountMenu(); };
     $('#copySite').onclick = () => copyText(state.project.siteUrl);
     $('#projectSwitch').onclick = (e) => { e.stopPropagation(); showProjectMenu($('#projectSwitch')); };
-    document.querySelectorAll('.device-switch button').forEach((btn) => {
-      btn.onclick = () => setDevice(btn.dataset.device);
-    });
     $('#welcome').addEventListener('click', (e) => {
       const action = e.target.closest('[data-action]')?.dataset.action;
       if (action === 'new-file') createEntry('file', '');
@@ -1821,7 +1691,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   function bindFeatureInfo() {
     $('#modeInfo').onclick = () => showFeatureInfo($('#editorArea').dataset.mode);
     $('#filesInfo').onclick = () => showFeatureInfo('files');
-    $('#previewInfo').onclick = () => showFeatureInfo('preview');
   }
 
   // Area editor punya dua mode: 'code' (Monaco) dan 'ai' (chat asisten).
@@ -2695,6 +2564,25 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   async function init() {
+    // Panel preview dipasang paling awal: info project & status publikasi langsung menulis ke keadaannya.
+    mount(PreviewPanel, {
+      target: $('#preview'),
+      props: {
+        actions: {
+          go: previewGo,
+          currentRoute,
+          reload: reloadPreview,
+          info: () => showFeatureInfo('preview'),
+          togglePick: () => setPick(!pick.on),
+          toggleEdit: () => setTextEdit(!textEdit.on),
+          pickGo: () => { setMobileView('editor'); setMode('ai'); },
+          pickDone: () => setPick(false),
+          textDone: () => setTextEdit(false),
+          setDevice,
+          isMobile: () => mobileQuery.matches,
+        },
+      },
+    });
     editorReady = setupEditor();
     editorReady.catch((err) => {
       console.error(err);

@@ -1083,5 +1083,21 @@
   "AI langsung menulis dan mengubah file": "The AI writes and changes files directly",
   "Diskusi & susun rencana, tanpa mengubah file": "Discuss & plan, without changing files",
   "Lampirkan gambar: desain, sketsa, atau screenshot error (bisa juga tempel/seret)": "Attach images: a design, a sketch, or a screenshot of an error (you can also paste/drag)",
-  "Mode AI": "AI mode"
+  "Mode AI": "AI mode",
+  "Alamat halaman preview (bisa diubah, tekan Enter)": "Preview page address (editable, press Enter)",
+  "Buka di tab baru": "Open in a new tab",
+  "HP (390px)": "Phone (390px)",
+  "Klik teks di preview untuk mengubahnya, atau klik gambar untuk menggantinya": "Click text in the preview to change it, or click an image to replace it",
+  "Klik teks lalu ketik (": "Click text and type (",
+  "Penjelasan preview": "About the preview",
+  "Pilih bagian halaman yang mau diubah AI": "Select the parts of the page for the AI to change",
+  "Pilih blok": "Select blocks",
+  "Preview website": "Website preview",
+  "Tulis perintah": "Write instruction",
+  "Ubah alamat halaman lalu tekan Enter (Esc untuk batal)": "Change the page address, then press Enter (Esc to cancel)",
+  "Ukuran layar": "Screen size",
+  "Versi dev: hanya berubah di sini sampai dipublikasikan": "Dev version: changes only here until published",
+  "batal), atau klik gambar untuk menggantinya.": "to cancel), or click an image to replace it.",
+  "simpan,": "to save,",
+  "Apa itu preview & website online?": "What are the preview &amp; live website?"
 }

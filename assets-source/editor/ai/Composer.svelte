@@ -4,14 +4,18 @@
 -->
 <script>
   import { getContext } from 'svelte';
+  import Icon from '../Icon.svelte';
   import { ai, AI_MODES, canAfford, promptCost, setMode, send, addImages, removeImage } from './state.svelte.js';
+  import { preview, pageName } from '../preview/state.svelte.js';
 
-  const { openTopup, autoFocus } = getContext('editor');
+  const { openTopup, autoFocus, icons, pickParent, pickRemove } = getContext('editor');
+  const blocks = $derived(preview.pick.blocks);
+  const manyPages = $derived(new Set(blocks.map((b) => b.page)).size > 1);
 
   const c = $derived(ai.credits);
   const empty = $derived(Boolean(c?.enabled) && !canAfford(c, c.costPerPrompt));
   const canSend = $derived(Boolean(c?.enabled) && canAfford(c, promptCost()) && !ai.busy && !ai.applying);
-  const placeholder = $derived(ai.blockCount
+  const placeholder = $derived(blocks.length
     ? 'Mau blok ini diubah jadi seperti apa? Mis. buat lebih modern dengan warna gelap'
     : AI_MODES[ai.mode].placeholder);
 
@@ -50,8 +54,15 @@
   ondragover={(e) => { if (!hasFiles(e) || !c?.images) return; e.preventDefault(); drop = true; }}
   ondragleave={() => { drop = false; }}
   ondrop={(e) => { if (!e.dataTransfer?.files?.length || !c?.images) return; e.preventDefault(); drop = false; addImages(e.dataTransfer.files); }}>
-  <!-- Diisi renderBlocks() di editor.js (blok yang dipilih di preview). -->
-  <div class="ai-blocks" id="aiBlocks" hidden></div>
+  <!-- Blok yang dipilih di preview: ⬆ = perbesar ke bagian induknya (hanya di halaman yang sedang tampil). -->
+  <div class="ai-blocks" id="aiBlocks" hidden={!blocks.length}>
+    {#each blocks as b (`${b.page} ${b.selector}`)}
+      {@const here = b.page === preview.pick.page}
+      <span class="ai-block" class:other-page={!here} title={`${b.page} · ${b.selector}`}><Icon d={icons.block} /><span class="ai-block-label">{b.label}</span>{#if manyPages}<span
+        class="ai-block-page">{pageName(b.page)}</span>{/if}{#if here}<button type="button" title="Perbesar ke bagian induknya" aria-label={`Perbesar ${b.label}`} onclick={() => pickParent(b)}>⬆</button>{/if}<button
+        type="button" title="Lepas blok ini" aria-label={`Lepas ${b.label}`} onclick={() => pickRemove(b)}>×</button></span>
+    {/each}
+  </div>
   <div class="ai-attachments" id="aiAttachments" hidden={!ai.images.length}>
     {#each ai.images as img, i (img.thumb)}
       <span class="ai-thumb"><img src={img.thumb} alt={`Gambar ${i + 1}`}><button type="button" title="Hapus gambar" aria-label="Hapus gambar" onclick={() => removeImage(i)}>×</button></span>

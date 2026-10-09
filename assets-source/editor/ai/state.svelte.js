@@ -30,7 +30,7 @@ export const AI_MODES = {
 
 // credits: undefined = belum dimuat, null = gagal dimuat. messages: isi percakapan yang tampil, berurutan —
 // { kind: 'user' | 'reply' | 'error' | 'job' | 'activity' | 'notice', key, ... }. pendingId: jawaban yang perubahannya
-// menunggu Simpan/Batalkan. blockCount: jumlah blok yang dipilih di preview (placeholder kotak prompt).
+// menunggu Simpan/Batalkan.
 export const ai = $state({
   credits: undefined,
   busy: false, // ada job AI yang sedang diikuti editor ini
@@ -40,7 +40,6 @@ export const ai = $state({
   images: [], // lampiran prompt berikutnya: [{ full, thumb }] (data URL JPEG)
   applying: false, // sedang Simpan/Batalkan
   input: '',
-  blockCount: 0,
   messages: [],
   pendingId: null,
   scrollTick: 0,

@@ -264,57 +264,7 @@
       </main>
       <div class="splitter" data-target="preview"><i></i></div>
 
-      <section class="panel preview" id="preview">
-        <div class="preview-bar">
-          <div class="url-pill">
-            <svg class="lock" viewBox="0 0 16 16"><path d="M8 1a3 3 0 0 0-3 3v2H4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1V4a3 3 0 0 0-3-3m2 5H6V4a2 2 0 1 1 4 0z"/></svg>
-            <span class="env-badge" id="envBadge" title="Versi dev: hanya berubah di sini sampai dipublikasikan" hidden>DEV</span>
-            <span class="preview-host" id="previewHost"></span>
-            <input class="preview-url" id="previewUrl" spellcheck="false" autocomplete="off" autocapitalize="off"
-                   aria-label="Alamat halaman preview (bisa diubah, tekan Enter)" title="Ubah alamat halaman lalu tekan Enter (Esc untuk batal)">
-          </div>
-          <button class="pick-btn" id="pickBlocks" title="Pilih bagian halaman yang mau diubah AI">
-            <svg viewBox="0 0 16 16"><path d="M1 1h4v1H2v3H1zm10 0h4v4h-1V2h-3zM1 11h1v3h3v1H1zm6-4 7.5 3-3.1 1.2 2.3 2.4-1.1 1.1-2.3-2.4L9 15z"/></svg>
-            <span>Pilih blok</span>
-          </button>
-          <button class="pick-btn" id="editText" title="Klik teks di preview untuk mengubahnya, atau klik gambar untuk menggantinya" aria-pressed="false">
-            <svg viewBox="0 0 16 16"><path d="M11.1 1.6a1.6 1.6 0 0 1 2.3 0l1 1a1.6 1.6 0 0 1 0 2.3L5.3 14H2v-3.3zm1.6.7a.6.6 0 0 0-.9 0l-1 1 1.9 1.9 1-1a.6.6 0 0 0 0-.9zM11.9 5.9 10 4 3 11v2h2z"/></svg>
-            <span>Edit</span>
-          </button>
-          <button class="icon-btn feature-info-btn" id="previewInfo" title="Apa itu preview &amp; website online?" aria-label="Penjelasan preview">
-            <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1m0 1a6 6 0 1 0 0 12A6 6 0 0 0 8 2m.5 5v5h-1V7zM8 4.25a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5"/></svg>
-          </button>
-          <button class="icon-btn" id="reloadPreview" title="Muat ulang preview">
-            <svg viewBox="0 0 16 16"><path d="M13.45 5.17A6 6 0 1 0 14 8h-1a5 5 0 1 1-.8-2.73l-1.7.23.14 1 3.4-.5-.5-3.4-1 .14z"/></svg>
-          </button>
-          <a class="icon-btn" id="openPreview" target="_blank" rel="noopener" title="Buka di tab baru">
-            <svg viewBox="0 0 16 16"><path d="M9 2v1h3.3L6.6 8.6l.8.8L13 3.7V7h1V2zM12 13H3V4h4V3H2v11h11V9h-1z"/></svg>
-          </a>
-        </div>
-        <div class="device-switch" role="group" aria-label="Ukuran layar">
-          <button data-device="desktop" title="Desktop">
-            <svg viewBox="0 0 16 16"><path d="M1.5 2h13A1.5 1.5 0 0 1 16 3.5v8a1.5 1.5 0 0 1-1.5 1.5H10v1h2v1H4v-1h2v-1H1.5A1.5 1.5 0 0 1 0 11.5v-8A1.5 1.5 0 0 1 1.5 2m0 1a.5.5 0 0 0-.5.5v8a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5z"/></svg>
-          </button>
-          <button data-device="tablet" title="Tablet (768px)">
-            <svg viewBox="0 0 16 16"><path d="M4 1h8a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 12 15H4a1.5 1.5 0 0 1-1.5-1.5v-11A1.5 1.5 0 0 1 4 1m0 1a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-11A.5.5 0 0 0 12 2zm3 10h2v1H7z"/></svg>
-          </button>
-          <button data-device="mobile" title="HP (390px)">
-            <svg viewBox="0 0 16 16"><path d="M5.5 1h5A1.5 1.5 0 0 1 12 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 4 13.5v-11A1.5 1.5 0 0 1 5.5 1m0 1a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5zM7 12h2v1H7z"/></svg>
-          </button>
-        </div>
-        <div class="pick-bar" id="pickBar" hidden>
-          <span class="pick-hint" id="pickHint"></span>
-          <button type="button" class="pick-go" id="pickGo">Tulis perintah</button>
-          <button type="button" class="pick-done" id="pickDone">Selesai</button>
-        </div>
-        <div class="pick-bar text-bar" id="textBar" hidden>
-          <span class="pick-hint">Klik teks lalu ketik (<kbd>Enter</kbd> simpan, <kbd>Esc</kbd> batal), atau klik gambar untuk menggantinya.</span>
-          <button type="button" class="pick-done" id="textDone">Selesai</button>
-        </div>
-        <div class="stage" id="stage" data-device="desktop">
-          <iframe id="previewFrame" title="Preview website"></iframe>
-        </div>
-      </section>
+      <section class="panel preview" id="preview"></section>
 
     </div>
 
