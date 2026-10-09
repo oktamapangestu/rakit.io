@@ -10,7 +10,6 @@ export const preview = $state({
   host: '',
   route: '',
   url: '',
-  dev: false, // publikasi manual: preview menampilkan versi dev (lencana DEV)
 });
 
 // "/" -> "index", "/produk/sepatu.html" -> "sepatu"

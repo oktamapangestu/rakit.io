@@ -14,7 +14,9 @@
 //     Terjemahannya wajib memuat ${ekspresi} yang sama persis (urutannya boleh berbeda).
 //   - HTML: potongan teks di antara tag (tanpa spasi tepi) dan nilai atribut title/placeholder/aria-label/alt.
 //   - Svelte: teks & atribut di markup seperti HTML (teks persis lebih dulu, lalu tanpa spasi tepi), kode di
-//     <script> dan di dalam {...} seperti JS. Kalimat yang memuat nilai ditulis sebagai satu template literal,
+//     <script> dan di dalam {...} seperti JS. Teks yang sama tapi beda terjemahan menurut tempatnya: beri elemennya
+//     data-i18n="konteks", lalu tulis kuncinya "teks|konteks" (mis. "Tabel|daftar": "Tables"); tanpa kunci itu,
+//     kunci biasa yang dipakai. Kalimat yang memuat nilai ditulis sebagai satu template literal,
 //     mis. {`Sisa ${n} kredit`}, supaya satu kalimat = satu kunci kamus.
 // Teks yang tidak ada di kamus (atau terjemahannya kosong) dibiarkan berbahasa Indonesia. Teks yang sengaja
 // tidak diubah ditulis dengan terjemahan yang sama, mis. "folder": "folder".
@@ -221,12 +223,13 @@ export function translateSvelte(src, dict, report, file = 'komponen.svelte') {
   const edits = [];
   // Kunci: teks persis, lalu dengan spasi dirapatkan (seperti hasil Svelte, mis. " dan " di antara dua <code>
   // yang dipisah baris baru), lalu tanpa spasi tepi.
-  const text = (node, attr) => {
+  const text = (node, attr, ctx) => {
     const collapsed = node.data.replace(/\s+/g, ' ');
     const trimmed = collapsed.trim();
     if (!trimmed) return;
-    const whole = [node.data, collapsed].find((k) => dict[k]);
-    const key = whole ?? trimmed;
+    const inCtx = ctx && dict[`${trimmed}|${ctx}`] ? `${trimmed}|${ctx}` : null;
+    const whole = inCtx ? null : [node.data, collapsed].find((k) => dict[k]);
+    const key = inCtx ?? whole ?? trimmed;
     const en = dict[key];
     if (en) {
       report.used.add(key);
@@ -241,21 +244,26 @@ export function translateSvelte(src, dict, report, file = 'komponen.svelte') {
     const out = translateJS(src.slice(node.start, node.end), dict, report);
     if (out !== src.slice(node.start, node.end)) edits.push({ start: node.start, end: node.end, text: out });
   };
-  const walk = (node, attr) => {
-    if (Array.isArray(node)) return node.forEach((n) => walk(n, attr));
+  // ctx: nilai data-i18n elemen terdekat (konteks terjemahan).
+  const walk = (node, attr, ctx) => {
+    if (Array.isArray(node)) return node.forEach((n) => walk(n, attr, ctx));
     if (!node || typeof node !== 'object') return;
     if (node.type === 'Text') {
-      if (attr !== false) text(node, attr === true || attr === 'component');
+      if (attr !== false) text(node, attr === true || attr === 'component', ctx);
       return;
     }
     if (node.type === 'Comment') return;
     if (node.type && !SVELTE_NODE.test(node.type)) return code(node);
-    if (node.type === 'Attribute') return walk(node.value, attr === 'component' || HTML_ATTRS.includes(node.name));
+    if (node.type === 'Attribute') return walk(node.value, attr === 'component' || HTML_ATTRS.includes(node.name), ctx);
+    if (node.type === 'RegularElement') {
+      const own = node.attributes.find((a) => a.type === 'Attribute' && a.name === 'data-i18n');
+      if (own && Array.isArray(own.value) && own.value[0]?.type === 'Text') ctx = own.value[0].data;
+    }
     // Prop teks komponen (mis. <AiButton label="Perbaiki dengan AI" />) diterjemahkan seperti title/placeholder.
     const component = node.type === 'Component' || node.type === 'SvelteComponent' || node.type === 'SvelteSelf';
     for (const [key, child] of Object.entries(node)) {
       if (key === 'metadata' || key === 'css' || key === 'loc') continue;
-      walk(child, component && key === 'attributes' ? 'component' : node.type === 'Script' ? undefined : attr);
+      walk(child, component && key === 'attributes' ? 'component' : node.type === 'Script' ? undefined : attr, ctx);
     }
   };
   walk(ast.instance);

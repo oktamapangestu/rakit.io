@@ -54,8 +54,11 @@ test('editor versi Inggris: yang sudah login diarahkan ke /en/editor', { skip },
   assert.equal(editor.status, 200);
   assert.match(editor.body, /<html lang="en">/);
   assert.match(editor.body, /src="\/js\/en\/editor\.js\?v=/);
-  assert.match(editor.body, /href="\/en\/panduan"/);
-  assert.match(editor.body, />\s*AI Assistant\s*</);
+  // Kerangka editor digambar App.svelte: teksnya ada di bundel JS versi Inggris.
+  const js = await page(user, editor.body.match(/src="(\/js\/en\/editor\.js\?v=[^"]+)"/)[1]);
+  assert.equal(js.status, 200);
+  assert.match(js.body, /\/en\/panduan/);
+  assert.match(js.body, />\s*AI Assistant\s*</);
 });
 
 test('pesan error server mengikuti bahasa pengguna', { skip }, async () => {

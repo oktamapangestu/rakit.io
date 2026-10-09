@@ -11,7 +11,7 @@ export const CONSOLE_TITLE = { fe: 'Frontend: halaman di preview', be: 'Backend:
 // jump: naik setiap daftar perlu digulir ke bawah (dibuka, saringan berubah, riwayat BE disisipkan).
 export const con = $state({ entries: [], source: 'all', errorsOnly: false, query: '', unread: 0, jump: 0 });
 
-let host; // context 'editor': api, consoleActive(), renderConsoleBadge(unread)
+let host; // context 'editor': api, consoleActive() — lencana di tombol tab Console membaca con.unread (App.svelte)
 let beLastId = 0;
 let beLoaded = false;
 let poll = null;
@@ -26,10 +26,6 @@ export function matches(e) {
 }
 
 export const count = (src) => con.entries.filter((e) => src === 'all' || e.source === src).length;
-
-function badge() {
-  host?.renderConsoleBadge(con.unread);
-}
 
 export function add(raw) {
   const source = CONSOLE_LABEL[raw.source] ? raw.source : 'sys';
@@ -46,7 +42,6 @@ export function add(raw) {
   }
   if (!host?.consoleActive() && level === 'error') {
     con.unread += 1;
-    badge();
   }
   // Website memanggil fungsi serverless: ambil log eksekusinya (BE) sebentar lagi.
   if (source === 'net' && /^\/api\/fn\//.test(raw.url ?? '')) {
@@ -89,7 +84,6 @@ async function loadBE() {
 // Tab Console dibuka.
 export function open() {
   con.unread = 0;
-  badge();
   con.jump += 1;
   loadBE();
   // Selama tab Console terbuka, eksekusi baru (mis. dari jadwal) diambil berkala.
@@ -103,5 +97,4 @@ export function open() {
 export function clear() {
   con.entries = [];
   con.unread = 0;
-  badge();
 }

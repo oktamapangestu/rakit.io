@@ -8,6 +8,8 @@ import Breadcrumbs from '../editor/files/Breadcrumbs.svelte';
 import ImageViewer from '../editor/files/ImageViewer.svelte';
 import NewProjectDialog from '../editor/files/NewProjectDialog.svelte';
 import PreviewPanel from '../editor/preview/PreviewPanel.svelte';
+import App from '../editor/shell/App.svelte';
+import { ui } from '../editor/shell/state.svelte.js';
 import ImageEditDialog from '../editor/preview/ImageEditDialog.svelte';
 import { preview, MAX_BLOCKS, pageName } from '../editor/preview/state.svelte.js';
 import Topup from '../editor/Topup.svelte';
@@ -147,9 +149,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   function setSaveStatus(text, kind = '') {
-    const el = $('#statusSave');
-    el.textContent = text;
-    el.className = `save-pill ${kind}`;
+    ui.save = { text, kind };
   }
 
   // ---------- Modal ----------
@@ -267,7 +267,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       editor.setModel(state.models.get(path));
       const vs = state.viewStates.get(path);
       if (vs) editor.restoreViewState(vs);
-      if ($('#editorArea').dataset.mode === 'code') autoFocus(editor); // jangan rebut fokus dari kotak AI dsb.
+      if (ui.mode === 'code') autoFocus(editor); // jangan rebut fokus dari kotak AI dsb.
       expandTo(path);
       if (extOf(path) === 'html' && state.previewPath !== path) {
         state.previewPath = path;
@@ -277,7 +277,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     } else {
       editor.setModel(null);
     }
-    $('#welcome').hidden = Boolean(path);
     updateStatus();
     flowFollow();
   }
@@ -717,7 +716,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
         const added = [...fresh.values()].filter((b) => !kept.includes(b));
         pick.blocks = [...kept, ...added].slice(0, MAX_BLOCKS);
         // Blok pertama dipilih: tampilkan kotak prompt (di Coding bisa saja sedang di tab lain).
-        if (first && $('#editorArea').dataset.mode !== 'ai') setMode('ai');
+        if (first && ui.mode !== 'ai') setMode('ai');
       } else if (m.type === 'textCheck' && textEdit.on) {
         checkTextEdit(m);
       } else if (m.type === 'textEdit' && textEdit.on) {
@@ -923,7 +922,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     try {
       await api('PATCH', `${tableUrl(target.table)}/rows/${encodeURIComponent(target.id)}`, values);
       toast(`${what} diubah di database: tabel ${target.table}, baris #${target.id}`);
-      if ($('#editorArea').dataset.mode === 'data' && db.active === target.table) loadDbRows();
+      if (ui.mode === 'data' && db.active === target.table) loadDbRows();
     } catch (err) {
       textEditFailed(err.message);
     }
@@ -1029,19 +1028,13 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
   function togglePreview() {
     if (isSimple()) return;
-    const preview = $('#preview');
-    preview.hidden = !preview.hidden;
-    preview.previousElementSibling.hidden = preview.hidden;
-    $('#togglePreview').classList.toggle('active', !preview.hidden);
-    storage.set('rakit.previewHidden', preview.hidden);
+    ui.previewHidden = !ui.previewHidden;
+    storage.set('rakit.previewHidden', ui.previewHidden);
   }
 
   function toggleSidebar() {
     if (isSimple()) return;
-    const sidebar = $('#sidebar');
-    sidebar.hidden = !sidebar.hidden;
-    sidebar.nextElementSibling.hidden = sidebar.hidden;
-    $('#toggleSidebar').classList.toggle('active', !sidebar.hidden);
+    ui.sidebarHidden = !ui.sidebarHidden;
   }
 
   function setDevice(device) {
@@ -1078,7 +1071,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     else delete document.documentElement.dataset.theme;
     storage.set('rakit.theme', theme);
     if (monaco) monaco.editor.setTheme(monacoTheme());
-    if (diagram.saved && $('#editorArea').dataset.mode === 'diagram') rerenderDiagram(); // warna Mermaid ikut tema
+    if (diagram.saved && ui.mode === 'diagram') rerenderDiagram(); // warna Mermaid ikut tema
   }
 
   // Ganti bahasa: server memasang cookie lang dari ?lang= lalu membuka halaman editor bahasa itu.
@@ -1180,29 +1173,19 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
   function setLayout(layout) {
     document.body.dataset.layout = layout;
+    ui.layout = layout;
     storage.set('rakit.layout', layout);
-    document.querySelectorAll('.layout-switch [data-layout]').forEach((btn) => {
-      btn.setAttribute('aria-checked', String(btn.dataset.layout === layout));
-    });
     // Di Simple preview selalu tampil; kembali ke Coding = ikuti pilihan tampil/sembunyi sebelumnya.
-    const preview = $('#preview');
-    const showPreview = layout === 'simple' || !storage.get('rakit.previewHidden', false);
-    if (preview.hidden === showPreview) {
-      preview.hidden = !showPreview;
-      preview.previousElementSibling.hidden = !showPreview;
-      $('#togglePreview').classList.toggle('active', showPreview);
-    }
+    ui.previewHidden = !(layout === 'simple' || !storage.get('rakit.previewHidden', false));
     if (layout === 'simple') {
       if (document.body.dataset.mobileView === 'files') setMobileView('editor');
-      if ($('#editorArea').dataset.mode !== 'ai') setMode('ai');
+      if (ui.mode !== 'ai') setMode('ai');
     }
   }
 
   function setMobileView(view) {
     document.body.dataset.mobileView = view;
-    document.querySelectorAll('.mobile-nav [data-view]').forEach((btn) => {
-      btn.setAttribute('aria-current', String(btn.dataset.view === view));
-    });
+    ui.mobileView = view;
   }
 
   // Editor kode di layar kecil: tanpa minimap, font sedikit lebih kecil, baris panjang dibungkus.
@@ -1260,8 +1243,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       const { project } = await api('PATCH', `/api/projects/${state.project.slug}`, { name });
       state.project = project;
       state.projects = state.projects.map((p) => (p.slug === project.slug ? project : p));
-      renderProjectInfo();
-      toast('Nama project diganti');
+        toast('Nama project diganti');
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -1282,38 +1264,20 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     location.href = projectUrl(next.slug);
   }
 
-  function renderProjectInfo() {
-    const p = state.project;
-    $('#projectName').textContent = p.siteHost;
-    $('#siteLink').textContent = p.siteHost;
-    $('#siteLink').href = p.siteUrl;
-    $('#visitSite').href = p.siteUrl;
-    $('#projectSwitch').title = `Project: ${p.name} — ganti atau buat project`;
-    renderPublish();
-  }
+  // Info project di header & panel file: App.svelte (dari state.project).
 
   // ---------- Publikasi manual (dev/prod) ----------
   // Mode "manual": editor & AI mengubah versi dev (<slug>--dev); website publik baru berubah saat
   // dipublikasikan. Database dev terpisah; struktur tabelnya ikut dipublikasikan, datanya tidak.
   const isManual = () => state.project?.mode === 'manual';
-  const pub = { status: null, timer: 0 };
-
-  function renderPublish() {
-    const manual = isManual();
-    document.body.dataset.publish = manual ? 'manual' : 'live';
-    $('#publishBtn').hidden = !manual;
-    preview.dev = manual;
-    const pending = manual && Boolean(pub.status?.pending);
-    $('#publishBtn').classList.toggle('pending', pending);
-    $('#publishBtn').title = pending ? 'Ada perubahan yang belum dipublikasikan' : 'Website publik sudah sama dengan versi dev';
-  }
+  // Status publikasi (tombol Publikasikan di header) ada di ui.pubStatus.
+  const pub = { timer: 0 };
 
   async function refreshPublish() {
-    pub.status = null;
+    ui.pubStatus = null;
     if (isManual()) {
-      try { pub.status = (await api('GET', '/api/publish')).publish; } catch { /* coba lagi nanti */ }
+      try { ui.pubStatus = (await api('GET', '/api/publish')).publish; } catch { /* coba lagi nanti */ }
     }
-    renderPublish();
   }
   // Dipanggil setelah file/tabel berubah; dikumpulkan supaya tidak memeriksa tiap ketikan.
   function schedulePublishCheck() {
@@ -1326,7 +1290,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     state.project = { ...state.project, ...project, mode: project.mode, previewUrl: project.previewUrl };
     state.projects = state.projects.map((p) => (p.slug === project.slug ? state.project : p));
     if (pick.on) setPick(false);
-    renderProjectInfo();
     reloadPreview();
   }
 
@@ -1368,7 +1331,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       schedulePreviewReload,
       reloadPreview,
       consoleActive,
-      renderConsoleBadge,
       renderMarkdown,
       linkifyLines,
       loadMermaid,
@@ -1376,7 +1338,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       isDark,
       readEvents,
       loadCredits,
-      setCredits: (credits) => { ai.credits = credits; renderCredits(); },
+      setCredits: (credits) => { ai.credits = credits; },
       costPerPrompt: () => ai.credits?.costPerPrompt ?? 1,
       storageGet: (key, fallback) => storage.get(key, fallback),
       storageSet: (key, value) => storage.set(key, value),
@@ -1430,11 +1392,10 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     } catch (err) {
       return toast(err.message, 'error');
     }
-    pub.status = st;
-    renderPublish();
+    ui.pubStatus = st;
     openDialog(PublishDialog, {
       status: st,
-      onPublished: (status) => { pub.status = status; renderPublish(); },
+      onPublished: (status) => { ui.pubStatus = status; },
       onModeDialog: openPublishMode,
     });
   }
@@ -1444,7 +1405,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       current: isManual() ? 'manual' : 'live',
       siteUrl: state.project.siteUrl,
       slug: state.project.slug,
-      onApplied: (res) => { applyProject(res.project); pub.status = res.publish; renderPublish(); },
+      onApplied: (res) => { applyProject(res.project); ui.pubStatus = res.publish; },
     });
   }
 
@@ -1452,13 +1413,12 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   function updateStatus() {
     const model = state.active && state.models.get(state.active);
     if (!model) {
-      $('#statusCursor').textContent = '';
-      $('#statusLang').textContent = '';
+      ui.cursor = ui.lang = '';
       return;
     }
     const pos = editor.getPosition();
-    $('#statusCursor').textContent = pos ? `Ln ${pos.lineNumber}, Col ${pos.column}` : '';
-    $('#statusLang').textContent = { html: 'HTML', css: 'CSS', javascript: 'JavaScript' }[model.getLanguageId()] ?? model.getLanguageId();
+    ui.cursor = pos ? `Ln ${pos.lineNumber}, Col ${pos.column}` : '';
+    ui.lang = { html: 'HTML', css: 'CSS', javascript: 'JavaScript' }[model.getLanguageId()] ?? model.getLanguageId();
   }
 
   // ---------- Splitter ----------
@@ -1564,11 +1524,11 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     $('#publishBtn').onclick = openPublish;
     $('#toggleSidebar').onclick = toggleSidebar;
     // Tombol Simple/Coding disorot (bercahaya) sampai pengguna pertama kali memakainya.
-    if (!storage.get('rakit.layoutSeen', false)) $('.layout-switch').classList.add('attention');
+    ui.layoutAttention = !storage.get('rakit.layoutSeen', false);
     document.querySelectorAll('.layout-switch [data-layout]').forEach((btn) => {
       btn.onclick = () => {
         setLayout(btn.dataset.layout);
-        $('.layout-switch').classList.remove('attention');
+        ui.layoutAttention = false;
         storage.set('rakit.layoutSeen', true);
       };
     });
@@ -1624,46 +1584,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   // lencana kredit & paket di header, tombol "Tanya AI" dari fitur lain, dan menu riwayat percakapan.
   const setAiMode = (mode) => setAiModeState(mode);
 
-  function renderCredits() {
-    const badge = $('#aiCredits');
-    const c = ai.credits;
-    renderPlanBadge(c?.plan ?? null);
-    if (!c || !c.enabled) return badge.replaceChildren();
-    const empty = !canAfford(c, c.costPerPrompt);
-    const plan = c.plan;
-    const unlimited = unlimitedLeft(c);
-    badge.textContent = unlimited ? 'Unlimited' : `${c.remaining} kredit`;
-    badge.classList.toggle('empty', empty);
-    badge.classList.toggle('plan', Boolean(plan));
-    badge.disabled = !c.topupEnabled;
-    badge.title = [
-      plan && `${plan.name} aktif sampai ${shortDate(plan.expiresAt)}`,
-      plan && (plan.id === 'unlimited'
-        ? `Hari ini: ${plan.quotaUsed}/${plan.quota} prompt`
-        : `Kredit ${plan.name}: ${plan.quotaRemaining}/${plan.quota} (terisi ulang ${shortDate(plan.quotaResetsAt)})`),
-      c.bonusRemaining > 0 ? `Bonus awal: ${c.bonusRemaining}/${c.bonusLimit} (sekali, tidak berkurang tiap hari sampai habis)` : null,
-      c.limit ? `Gratis hari ini: ${c.freeRemaining}/${c.limit} (terisi lagi besok 00.00 WIB, tidak menumpuk)` : null,
-      c.purchased ? `Dibeli: ${c.purchased}` : null,
-      c.topupEnabled ? 'Klik untuk langganan / isi ulang' : null,
-    ].filter(Boolean).join(' · ');
-
-  }
-
-  // Badge langganan di header (+ cincin di avatar). Memberi peringatan saat masa aktif hampir habis.
-  function renderPlanBadge(plan) {
-    const badge = $('#planBadge');
-    badge.hidden = !plan;
-    $('#avatarBtn').classList.toggle('subscribed', Boolean(plan));
-    $('#avatarBtn').dataset.plan = plan?.id ?? '';
-    if (!plan) return;
-    const daysLeft = Math.max(0, Math.ceil((Date.parse(plan.expiresAt) - Date.now()) / 86_400_000));
-    const expiring = daysLeft <= 3;
-    badge.dataset.plan = plan.id;
-    badge.classList.toggle('expiring', expiring);
-    $('.plan-badge-name', badge).textContent = plan.name;
-    $('.plan-badge-days', badge).textContent = expiring ? (daysLeft ? `${daysLeft} hari lagi` : 'berakhir hari ini') : '';
-    badge.title = `${plan.name} aktif sampai ${shortDate(plan.expiresAt)}${expiring ? ' · klik untuk perpanjang' : ''}`;
-  }
+  // Lencana kredit & langganan di header: App.svelte (dari ai.credits).
 
   // ---------- Penjelasan fitur (tombol ⓘ) ----------
   // Data penjelasan: assets-source/editor/features.js; dialognya FeatureInfo.svelte.
@@ -1689,7 +1610,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   function bindFeatureInfo() {
-    $('#modeInfo').onclick = () => showFeatureInfo($('#editorArea').dataset.mode);
+    $('#modeInfo').onclick = () => showFeatureInfo(ui.mode);
     $('#filesInfo').onclick = () => showFeatureInfo('files');
   }
 
@@ -1700,18 +1621,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       setLayout('coding');
       toast('Pindah ke mode Coding');
     }
-    $('#editorArea').dataset.mode = mode;
-    $('#modeInfo').title = `Apa itu ${FEATURE_INFO[mode]?.title ?? 'fitur ini'}?`;
-    $('#codeView').hidden = mode !== 'code';
-    $('#aiPanel').hidden = mode !== 'ai';
-    $('#dataView').hidden = mode !== 'data';
-    $('#diagramView').hidden = mode !== 'diagram';
-    $('#historyView').hidden = mode !== 'history';
-    $('#fnView').hidden = mode !== 'fn';
-    $('#consoleView').hidden = mode !== 'console';
-    document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
-      btn.setAttribute('aria-selected', String(btn.dataset.mode === mode));
-    });
+    ui.mode = mode; // panel yang tampil & tab yang terpilih mengikuti (App.svelte)
     if (mode === 'data') {
       dbLoad();
     } else if (mode === 'diagram') {
@@ -1730,7 +1640,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     }
   }
 
-  const toggleAi = () => { if (!isSimple()) setMode($('#editorArea').dataset.mode === 'ai' ? 'code' : 'ai'); };
+  const toggleAi = () => { if (!isSimple()) setMode(ui.mode === 'ai' ? 'code' : 'ai'); };
 
   async function loadCredits() {
     try {
@@ -1738,7 +1648,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     } catch {
       ai.credits = null;
     }
-    renderCredits();
   }
 
   // Baca respons NDJSON baris demi baris.
@@ -1807,7 +1716,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       expandTo(first);
       await openFile(first);
     }
-    if (!$('#dataView').hidden) dbLoad();
+    if (ui.mode === 'data') dbLoad();
     reloadPreview();
   }
 
@@ -1942,17 +1851,8 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
 
-  function updateFlowButton() {
-    const btn = $('#flowBtn');
-    btn.hidden = !canFlow(state.active);
-    btn.classList.toggle('active', flow.open);
-    btn.setAttribute('aria-pressed', String(flow.open));
-  }
-
   function toggleFlow(force = !flow.open) {
     flow.open = force;
-    $('#flowPanel').hidden = !flow.open;
-    $('#codeView').classList.toggle('with-flow', flow.open);
     storage.set('rakit.flowOpen', flow.open);
     stopFlowPlay();
     if (flow.open) {
@@ -1961,12 +1861,10 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     } else {
       applyFlowHighlight();
     }
-    updateFlowButton();
   }
 
   // Panel mengikuti file aktif: muat penjelasan tersimpan (tanpa AI) bila ganti file.
   async function flowFollow(force = false) {
-    updateFlowButton();
     if (!flow.open) return;
     const path = state.active;
     if (!canFlow(path)) {
@@ -2272,7 +2170,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   // preview diterima sejak awal, jadi sambungannya disiapkan saat log pertama tiba.
   let consoleConnected = false;
   let consoleApp;
-  const consoleActive = () => $('#editorArea').dataset.mode === 'console';
+  const consoleActive = () => ui.mode === 'console';
   function connectConsoleOnce() {
     if (consoleConnected) return;
     consoleConnected = true;
@@ -2287,14 +2185,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     consoleApp ??= mount(ConsoleTab, { target: $('#consoleView'), context: editorContext() });
     openConsole();
   }
-  // Lencana jumlah error baru di tombol tab Console.
-  function renderConsoleBadge(unread) {
-    const badge = $('#consoleBadge');
-    badge.hidden = !unread;
-    badge.textContent = unread > 99 ? '99+' : String(unread);
-    badge.title = `${unread} error baru`;
-  }
-
   // ---------- Fungsi serverless ----------
   // Tab Fungsi: komponen Svelte assets-source/editor/functions/Functions.svelte, dipasang sekali lalu dimuat
   // ulang setiap tab dibuka.
@@ -2349,7 +2239,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
         api,
         showAssistant: SHOW_ASSISTANT,
         icons: { close: ICON.close, spark: SPARK },
-        onCredits: (credits) => { ai.credits = credits; renderCredits(); },
+        onCredits: (credits) => { ai.credits = credits; },
         onPlanPaid: () => loadTree().catch(() => {}), // perbarui kuota storage di sidebar
         onUseAI: () => { close(); setMode('ai'); },
         onAfter: () => { close(); after?.(); },
@@ -2564,6 +2454,8 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   async function init() {
+    // Kerangka editor (App.svelte) dipasang paling awal: semua bagian lain memakai elemen di dalamnya.
+    mount(App, { target: $('.app') });
     // Panel preview dipasang paling awal: info project & status publikasi langsung menulis ke keadaannya.
     mount(PreviewPanel, {
       target: $('#preview'),
@@ -2604,13 +2496,8 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     state.projectSlug = me.project.slug;
     storage.set('rakit.project', state.projectSlug);
     history.replaceState(null, '', projectUrl(state.projectSlug));
-    renderProjectInfo();
     refreshPublish();
-    $('#avatarBtn').textContent = state.me.username[0];
-    $('#statusUser').textContent = 'HTML · CSS · JS';
 
-    $('#toggleSidebar').classList.add('active');
-    $('#togglePreview').classList.add('active');
     if (storage.get('rakit.previewHidden', false) && !isSimple()) togglePreview();
     setLayout(isSimple() ? 'simple' : 'coding');
     setDevice(storage.get('rakit.device', 'desktop'));
@@ -2624,7 +2511,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     await loadTree();
     reloadPreview();
     // Editor dibuka di mode AI, kecuali user sudah pindah tab selama editor masih dimuat (mis. ke Diagram).
-    if ($('#editorArea').dataset.mode === 'ai') setMode('ai');
+    if (ui.mode === 'ai') setMode('ai');
     openStartFiles().catch(() => { /* pesannya sudah ditampilkan openFile */ });
     // Tampilkan lagi percakapan terakhir (dan sambung ke job yang masih berjalan, bila ada).
     await credits;

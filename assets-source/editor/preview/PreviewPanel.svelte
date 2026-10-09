@@ -5,6 +5,7 @@
 <script>
   import Icon from '../Icon.svelte';
   import { preview, MAX_BLOCKS } from './state.svelte.js';
+  import { core } from '../files/state.svelte.js';
 
   // actions: go(value, input) · currentRoute() · reload() · info() · togglePick() · toggleEdit() · pickGo() ·
   // pickDone() · textDone() · setDevice(device) · isMobile()
@@ -43,7 +44,7 @@
 <div class="preview-bar">
   <div class="url-pill">
     <svg class="lock" viewBox="0 0 16 16"><path d={ICONS.lock} /></svg>
-    <span class="env-badge" id="envBadge" title="Versi dev: hanya berubah di sini sampai dipublikasikan" hidden={!preview.dev}>DEV</span>
+    <span class="env-badge" id="envBadge" title="Versi dev: hanya berubah di sini sampai dipublikasikan" hidden={core.project?.mode !== 'manual'}>DEV</span>
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <span class="preview-host" id="previewHost" onclick={() => input.focus()}>{preview.host}</span>
     <input class="preview-url" id="previewUrl" spellcheck="false" autocomplete="off" autocapitalize="off" bind:this={input}

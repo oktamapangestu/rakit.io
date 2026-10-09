@@ -72,7 +72,10 @@ Monaco tetap di `editor.js`), tab Diagram (`diagram/`; gestur zoom/geser di `dia
 Diagram), dialog penjelasan fitur (`FeatureInfo.svelte`), pohon file/tab/breadcrumb/penampil gambar/project baru (`files/`;
 keadaan inti `core` di `files/state.svelte.js`, model Monaco & antrean simpan tetap di `editor.js`), panel preview
 (`preview/`: bar alamat, pilih blok & chip-nya di kotak prompt, mode Edit, ukuran layar, dialog ganti gambar; pesan
-dari/ke iframe dan logika edit teks/gambar tetap di `editor.js`).
+dari/ke iframe dan logika edit teks/gambar tetap di `editor.js`), kerangka editor (`shell/App.svelte`: header,
+panel, tab mode, lencana kredit & langganan, status simpan, status bar, navigasi HP; keadaan tampilan `ui` di
+`shell/state.svelte.js`, pengikat tombol & shortcut tetap di `editor.js`). `editor.html` kini hanya berisi wadah
+`.app` kosong.
 - Keadaan yang juga dipakai kode vanilla disimpan di modul rune `<nama>.svelte.js` (mis.
   `database/state.svelte.js`), bukan di dalam komponen.
 - Komponen memakai sambungan ke editor (api, toast, dialog konfirmasi, kotak AI, buka file, …) lewat
