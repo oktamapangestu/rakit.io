@@ -64,7 +64,8 @@ beserta modul & komponen yang diimpornya.
 **Editor sedang dipindah bertahap ke [Svelte 5](https://svelte.dev)** (runes). Bagian yang sudah dipindah ada
 di `assets-source/editor/` dan dipasang dari `editor.js` dengan `mount()`. Bagian lain masih vanilla JS
 (`h()` + DOM). Sudah dipindah: Langganan & isi ulang kredit (`Topup.svelte`), tab Fungsi (`functions/`),
-tab Data / editor database (`database/`), tab Riwayat versi (`history/`).
+tab Data / editor database (`database/`), tab Riwayat versi (`history/`), pengaturan Asisten AI website
+(`assistant/`, masih disembunyikan lewat `SHOW_ASSISTANT`).
 - Keadaan yang juga dipakai kode vanilla disimpan di modul rune `<nama>.svelte.js` (mis.
   `database/state.svelte.js`), bukan di dalam komponen.
 - Komponen memakai sambungan ke editor (api, toast, dialog konfirmasi, kotak AI, buka file, …) lewat
