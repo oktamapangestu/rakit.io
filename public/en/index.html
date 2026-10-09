@@ -84,6 +84,30 @@
         </label>
         <p class="error" role="alert"></p>
         <button class="primary" type="submit">Log in</button>
+        <p class="form-link" id="forgotLink" hidden><a href="#auth" data-go="forgot">Forgot password?</a></p>
+      </form>
+
+      <form id="forgotForm" class="form" hidden novalidate>
+        <p class="form-intro">Enter your account's email or username. We'll send you a link to choose a new password.</p>
+        <label>Email or username
+          <input name="login" autocomplete="email" required autocapitalize="off" spellcheck="false">
+        </label>
+        <p class="error" role="alert"></p>
+        <p class="notice" role="status"></p>
+        <button class="primary" type="submit">Send link</button>
+        <p class="form-link"><a href="#auth" data-go="login">Back to log in</a></p>
+      </form>
+
+      <form id="resetForm" class="form" hidden novalidate>
+        <p class="form-intro">Choose a new password for your account.</p>
+        <input type="hidden" name="token">
+        <label>New password
+          <input name="password" type="password" autocomplete="new-password" required minlength="8"
+                 placeholder="At least 8 characters">
+        </label>
+        <p class="error" role="alert"></p>
+        <button class="primary" type="submit">Save &amp; log in</button>
+        <p class="form-link"><a href="#auth" data-go="forgot">Request a new link</a></p>
       </form>
     </section>
   </main>

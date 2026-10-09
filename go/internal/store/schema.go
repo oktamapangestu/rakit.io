@@ -18,6 +18,15 @@ const schema = `
 	);
 	CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires_at);
 
+	-- Link lupa password: hash token yang dikirim lewat email, berlaku sebentar, sekali pakai.
+	CREATE TABLE IF NOT EXISTS password_resets (
+	  token_hash TEXT PRIMARY KEY,
+	  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	  expires_at INTEGER NOT NULL,
+	  created_at INTEGER NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets(user_id, created_at);
+
 	-- Project = workspace dengan subdomain sendiri: <slug>.rakit.io. File di sites/<slug>, database di db/<slug>.db.
 	CREATE TABLE IF NOT EXISTS projects (
 	  id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -319,8 +328,12 @@ func (s *Store) Migrate() error {
 	return tx.Commit()
 }
 
-// DeleteExpiredSessions membersihkan sesi yang sudah kedaluwarsa (dijalankan tiap jam).
+// DeleteExpiredSessions membersihkan sesi dan link lupa password yang sudah kedaluwarsa (dijalankan tiap jam).
 func (s *Store) DeleteExpiredSessions() error {
-	_, err := s.db.Exec("DELETE FROM sessions WHERE expires_at <= ?", now())
+	t := now()
+	if _, err := s.db.Exec("DELETE FROM sessions WHERE expires_at <= ?", t); err != nil {
+		return err
+	}
+	_, err := s.db.Exec("DELETE FROM password_resets WHERE expires_at <= ?", t)
 	return err
 }

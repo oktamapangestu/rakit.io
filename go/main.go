@@ -31,6 +31,7 @@ import (
 	"rakit.io/server/internal/google"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/i18n"
+	"rakit.io/server/internal/mail"
 	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/publish"
 	"rakit.io/server/internal/siteapi"
@@ -114,6 +115,7 @@ func main() {
 		Admin:   admin.New(cfg, db, limits, models, queue),
 		Publish: publish.New(cfg, db, projectDB),
 		Fn:      functions,
+		Mail:    mail.New(cfg, db),
 	})
 	if err != nil {
 		log.Fatal(err)

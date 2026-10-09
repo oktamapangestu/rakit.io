@@ -221,6 +221,12 @@ h1 {
 .hint strong { color: var(--ink); font: 13px var(--mono); word-break: break-all; }
 .error { margin: 0; color: var(--error); font-size: 14px; }
 .error:empty { display: none; }
+.notice { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); font-size: 14px; line-height: 1.45; }
+.notice:empty { display: none; }
+.form-intro { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.form-link { margin: -4px 0 0; text-align: center; font-size: 14px; }
+.form-link a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.form-link a:hover { color: var(--ink); }
 
 .primary {
   padding: 12px;

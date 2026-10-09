@@ -84,6 +84,30 @@
         </label>
         <p class="error" role="alert"></p>
         <button class="primary" type="submit">Masuk</button>
+        <p class="form-link" id="forgotLink" hidden><a href="#auth" data-go="forgot">Lupa password?</a></p>
+      </form>
+
+      <form id="forgotForm" class="form" hidden novalidate>
+        <p class="form-intro">Masukkan email atau username akunmu. Kami akan mengirim link untuk membuat password baru.</p>
+        <label>Email atau username
+          <input name="login" autocomplete="email" required autocapitalize="off" spellcheck="false">
+        </label>
+        <p class="error" role="alert"></p>
+        <p class="notice" role="status"></p>
+        <button class="primary" type="submit">Kirim link</button>
+        <p class="form-link"><a href="#auth" data-go="login">Kembali ke Masuk</a></p>
+      </form>
+
+      <form id="resetForm" class="form" hidden novalidate>
+        <p class="form-intro">Buat password baru untuk akunmu.</p>
+        <input type="hidden" name="token">
+        <label>Password baru
+          <input name="password" type="password" autocomplete="new-password" required minlength="8"
+                 placeholder="Minimal 8 karakter">
+        </label>
+        <p class="error" role="alert"></p>
+        <button class="primary" type="submit">Simpan &amp; masuk</button>
+        <p class="form-link"><a href="#auth" data-go="forgot">Minta link baru</a></p>
       </form>
     </section>
   </main>

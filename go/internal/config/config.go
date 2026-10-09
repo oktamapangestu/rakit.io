@@ -33,6 +33,9 @@ type Config struct {
 	GoogleClientSecret string
 	GoogleTokenURL     string
 
+	// Endpoint API pengirim email (lupa password). Pengirim & API key diatur owner di dashboard.
+	MailAPIURL string
+
 	AI        AI
 	Billing   Billing
 	Assistant struct {
@@ -251,6 +254,7 @@ func Load() (*Config, error) {
 	c.GoogleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
 	c.GoogleEnabled = c.GoogleClientID != "" && c.GoogleClientSecret != ""
 	c.GoogleTokenURL = envOr("GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token")
+	c.MailAPIURL = envOr("MAIL_API_URL", "https://mail-api.flaz.id/v1/messages")
 	c.loadServices()
 	c.SecureCookies = c.Protocol == "https"
 	for _, e := range strings.Split(os.Getenv("ADMIN_EMAILS"), ",") {

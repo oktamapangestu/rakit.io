@@ -21,6 +21,7 @@ go/bin/rakit --env-file .env              # dari folder repo (PUBLIC_DIR & TEMPL
 | `PUBLIC_DIR` | `public` | Folder halaman & aset aplikasi, relatif ke folder kerja. |
 | `TEMPLATE_DIR` | `templates/default` | File awal project baru, relatif ke folder kerja. |
 | `MAX_PROJECTS`, `GOOGLE_*`, `AI_*`, `KASERA_*`, `CREDIT_PACKAGES`, `ASSISTANT_PACKAGES`, `PLAN_*` | sama dengan Node | |
+| `MAIL_API_URL` | `https://mail-api.flaz.id/v1/messages` | API pengirim email (lupa password). Hanya di server Go. |
 
 ## Test
 
@@ -74,6 +75,12 @@ Catatan:
 - **Library AI fungsi** (`internal/fnai` + `internal/fn/ai.go`): `ai.chat` / `ai.json` / `ai.embed` di kode fungsi memakai
   provider (OpenAI, Anthropic, Gemini, kompatibel OpenAI) dengan API key pemilik project (`fn_ai_providers`). Waktu menunggu
   provider dijeda dari batas 10 detik (`clock.go`); tiap panggilan maks. 60 detik, maks. 5 per eksekusi. Lihat README utama.
+
+- **Lupa password** (`internal/mail` + `internal/api/password.go`), hanya di server Go. Email pengirim & API key diatur
+  owner di dashboard (Pengaturan → Email, tersimpan di `settings` kunci `mail`); sebelum diisi, link "Lupa password?"
+  tidak tampil dan `/api/forgot-password` menjawab 503. Link berlaku 1 jam, sekali pakai, maks. 3 per akun per jam
+  (`password_resets`); dipakai = semua sesi lama keluar. Email dikirim di latar (jawaban API sama, ada akunnya atau
+  tidak), jadi kegagalan kirim hanya tercatat di log — pakai tombol "Kirim tes" di dashboard untuk memeriksa pengaturan.
 
 ## Deploy tahap ini
 

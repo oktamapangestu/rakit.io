@@ -65,6 +65,20 @@ func sha256Hex(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// NewToken: token acak untuk dikirim ke pengguna (cookie sesi, link lupa password) beserta hash yang
+// disimpan di database.
+func NewToken() (token, hash string, err error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", err
+	}
+	token = base64.RawURLEncoding.EncodeToString(raw)
+	return token, sha256Hex(token), nil
+}
+
+// HashToken: hash token seperti yang disimpan di database.
+func HashToken(token string) string { return sha256Hex(token) }
+
 // User mengembalikan akun yang sedang login, atau nil.
 func (a *Auth) User(r *http.Request) *store.User {
 	token := ReadCookie(r, a.cookieName)
@@ -111,13 +125,12 @@ func (a *Auth) cookie(value string) *http.Cookie {
 
 // Login membuat sesi baru untuk akun dan memasang cookie-nya.
 func (a *Auth) Login(w http.ResponseWriter, userID int64) error {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
+	token, hash, err := NewToken()
+	if err != nil {
 		return err
 	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
 	expires := time.Now().Add(sessionTTL)
-	if err := a.sessions.InsertSession(sha256Hex(token), userID, expires.UnixMilli()); err != nil {
+	if err := a.sessions.InsertSession(hash, userID, expires.UnixMilli()); err != nil {
 		return err
 	}
 	a.touch(userID, true)

@@ -156,6 +156,53 @@ func (s *Store) InsertUser(username, email, passwordHash string) (int64, error) 
 	return res.LastInsertId()
 }
 
+// ---------- Lupa password ----------
+
+// RecentResets: jumlah link lupa password yang dibuat untuk akun sejak sinceMs.
+func (s *Store) RecentResets(userID, sinceMs int64) (int, error) {
+	var n int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM password_resets WHERE user_id = ? AND created_at >= ?", userID, sinceMs).Scan(&n)
+	return n, err
+}
+
+func (s *Store) InsertReset(tokenHash string, userID, expiresAt int64) error {
+	_, err := s.db.Exec("INSERT INTO password_resets (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)", tokenHash, userID, expiresAt, now())
+	return err
+}
+
+// ResetUser: pemilik link lupa password yang masih berlaku, atau nil.
+func (s *Store) ResetUser(tokenHash string, nowMs int64) (*User, error) {
+	return s.userWhere("id = (SELECT user_id FROM password_resets WHERE token_hash = ? AND expires_at > ?)", tokenHash, nowMs)
+}
+
+// ResetPassword memasang password baru lewat link lupa password: semua sesi lama keluar, dan link itu
+// (beserta link lain milik akun) tidak bisa dipakai lagi. ok = false bila link sudah terpakai/kedaluwarsa
+// (mis. dua request bersamaan).
+func (s *Store) ResetPassword(tokenHash string, userID int64, passwordHash string, nowMs int64) (ok bool, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec("DELETE FROM password_resets WHERE token_hash = ? AND user_id = ? AND expires_at > ?", tokenHash, userID, nowMs)
+	if err != nil {
+		return false, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return false, err
+	}
+	if _, err := tx.Exec("UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, userID); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec("DELETE FROM password_resets WHERE user_id = ?", userID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
 func (s *Store) LinkGoogle(googleID string, userID int64) error {
 	_, err := s.db.Exec("UPDATE users SET google_id = ? WHERE id = ?", googleID, userID)
 	return err

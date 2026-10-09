@@ -26,6 +26,7 @@ func (h *Handler) config(q *request) error {
 		"baseDomain":     h.cfg.BaseDomain,
 		"siteUrlPattern": h.cfg.SiteURL("{username}"),
 		"googleEnabled":  h.cfg.GoogleEnabled,
+		"passwordReset":  h.svc.Mail.Enabled(),
 	})
 }
 

@@ -1,5 +1,6 @@
 {
   "Gagal (${res.status})": "Failed (${res.status})",
   "namamu": "yourname",
-  "/editor": "/en/editor"
+  "/editor": "/en/editor",
+  "Kalau akunnya terdaftar, link untuk membuat password baru sudah dikirim ke emailnya. Cek juga folder spam.": "If that account exists, we've sent a link to choose a new password to its email. Check your spam folder too."
 }

@@ -14,8 +14,9 @@ const signup = (client, body) => client.post('/api/register', { password: 'rahas
 const sessionCookie = (res) => res.headers.getSetCookie().find((c) => c.startsWith('rakit_sid='));
 
 test('konfigurasi publik', async () => {
-  const { status, body } = await stack.client().get('/api/config');
+  const { status, body: { passwordReset, ...body } } = await stack.client().get('/api/config');
   assert.equal(status, 200);
+  assert.ok(passwordReset === undefined || passwordReset === false, 'lupa password mati sampai email diatur (server Go)');
   assert.deepEqual(body, { baseDomain: 'localhost', siteUrlPattern: `http://{username}.${stack.origin.slice(7)}`, googleEnabled: true });
 });
 

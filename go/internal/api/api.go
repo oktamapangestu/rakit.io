@@ -27,6 +27,7 @@ import (
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/mail"
 	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/publish"
 	"rakit.io/server/internal/store"
@@ -49,6 +50,7 @@ type Services struct {
 	Admin     *admin.Service
 	Publish   *publish.Service
 	Fn        *fn.Service
+	Mail      *mail.Service
 }
 
 type Handler struct {
@@ -170,6 +172,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = h.login(req)
 	case "logout":
 		err = h.logout(req)
+	case "forgot-password":
+		err = h.forgotPassword(req)
+	case "reset-password":
+		err = h.resetPassword(req)
 	case "me":
 		err = h.me(req)
 	case "projects":

@@ -237,6 +237,18 @@ func (h *Handler) admin(q *request) error {
 			}
 		}
 
+	// Email platform (lupa password): alamat pengirim & API key. Tes = kirim email ke alamat owner.
+	case q.is("GET", "mail"):
+		out = h.svc.Mail.View()
+	case q.is("PUT", "mail"):
+		if err = q.load(); err == nil {
+			out, err = h.svc.Mail.Save(q.body)
+		}
+	case q.is("POST", "mail", "test"):
+		if err = q.load(); err == nil {
+			out = h.testMail(q)
+		}
+
 	// Asisten AI website: model (aktif/nonaktif, harga), saldo percobaan, website pemakai & blokir.
 	case q.is("GET", "assistant"):
 		out, err = helper.AdminView()

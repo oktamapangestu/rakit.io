@@ -1079,6 +1079,95 @@
     $('#assistantAdmin').replaceChildren(form);
   }
 
+  // ---------- Email platform (lupa password) ----------
+  async function mailApi(method, path = '', body) {
+    const res = await fetch(`/api/admin/mail${path}`, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Gagal (${res.status})`);
+    return data;
+  }
+
+  async function loadMail() {
+    try {
+      renderMail(await mailApi('GET'));
+    } catch (err) {
+      $('#mailSettings').replaceChildren(h('p', { class: 'error' }, `Gagal memuat pengaturan email: ${err.message}`));
+    }
+  }
+
+  function renderMail(data) {
+    const status = h('span', { class: 'save-status', role: 'status' });
+    const setStatus = (text, kind = '') => { status.textContent = text; status.className = `save-status ${kind}`; };
+    const fields = {
+      sender: h('input', { type: 'email', value: data.sender, placeholder: 'hello@domain-terverifikasi.com', class: 'mono', spellcheck: 'false', autocomplete: 'off' }),
+      senderName: h('input', { value: data.senderName, placeholder: 'mis. rakit.io', maxlength: '60' }),
+      apiKey: h('input', { type: 'password', placeholder: data.hasKey ? `kosong = tetap ${data.keyHint}` : 'API key', class: 'mono', autocomplete: 'new-password', spellcheck: 'false' }),
+    };
+    const testTo = h('input', { type: 'email', placeholder: 'kosong = email akunmu', class: 'mono', spellcheck: 'false', autocomplete: 'off' });
+    const testResult = h('div', { class: 'provider-test' });
+    const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', {}, hint) : null);
+
+    async function save(body, done) {
+      setStatus('Menyimpan…');
+      try {
+        renderMail(await mailApi('PUT', '', body));
+        const ok = $('#mailSettings .save-status');
+        ok.textContent = done;
+        ok.className = 'save-status ok';
+      } catch (err) {
+        setStatus(err.message, 'error-text');
+      }
+    }
+
+    async function sendTest() {
+      testResult.className = 'provider-test';
+      testResult.textContent = 'Mengirim email tes…';
+      try {
+        const res = await mailApi('POST', '/test', { to: testTo.value.trim() });
+        testResult.className = `provider-test ${res.ok ? 'ok' : 'error-text'}`;
+        testResult.textContent = res.ok ? `✓ Terkirim ke ${res.to}` : res.error;
+      } catch (err) {
+        testResult.className = 'provider-test error-text';
+        testResult.textContent = err.message;
+      }
+    }
+
+    const form = h('form', { novalidate: true, onsubmit: (e) => {
+      e.preventDefault();
+      save({ sender: fields.sender.value, senderName: fields.senderName.value, apiKey: fields.apiKey.value }, 'Pengaturan email disimpan ✓');
+    } },
+      h('div', { class: 'provider-fields' },
+        field('Email pengirim', fields.sender, 'Harus memakai domain yang sudah diverifikasi di layanan email.'),
+        field('Nama pengirim', fields.senderName, 'Tampil sebagai nama pengirim. Boleh kosong.'),
+        field('API key', fields.apiKey, data.hasKey ? 'Biarkan kosong untuk tetap memakai key lama.' : 'Disimpan di server; tidak pernah ditampilkan lagi.')),
+      h('div', { class: 'model-actions' },
+        data.hasKey ? h('button', { type: 'button', class: 'ghost-btn small danger', onclick: () => {
+          if (confirm('Hapus API key email? Fitur lupa password akan mati.')) save({ sender: data.sender, senderName: data.senderName, clearKey: true }, 'API key dihapus ✓');
+        } }, 'Hapus API key') : null,
+        h('span', { class: 'spacer' }),
+        h('button', { type: 'submit', class: 'save-btn' }, 'Simpan')));
+
+    $('#mailSettings').replaceChildren(h('div', { class: 'card plans-card' },
+      h('div', { class: 'plans-title' },
+        h('div', {},
+          h('h2', {}, 'Email'),
+          h('p', { class: 'sub' }, 'Pengirim email platform, dipakai untuk link lupa password. Fitur lupa password muncul di halaman masuk setelah email pengirim dan API key diisi.',
+            h('br'), h('span', { class: 'mono small muted' }, data.apiUrl))),
+        h('div', { class: 'plans-actions' }, status,
+          h('span', { class: `pill ${data.enabled ? 'succeeded' : 'pending'}` }, data.enabled ? 'Aktif' : 'Belum aktif'))),
+      h('div', { class: 'provider-form' }, form),
+      h('h3', { class: 'sub-title' }, 'Kirim email tes'),
+      h('div', { class: 'model-actions mail-test' },
+        h('label', { class: 'field' }, h('span', {}, 'Kirim ke'), testTo),
+        h('button', { type: 'button', class: 'ghost-btn', disabled: !data.enabled, title: data.enabled ? null : 'Simpan email pengirim & API key dulu', onclick: sendTest }, 'Kirim tes')),
+      testResult));
+  }
+
   // ---------- Event ----------
   function setDays(value) {
     days = value;
@@ -1107,6 +1196,7 @@
   setDays([7, 30, 90].includes(days) ? days : 30);
   load();
   loadPlans();
+  loadMail();
   // Model memakai daftar provider (dropdown), jadi provider dimuat dulu.
   loadProviders().finally(() => {
     loadAiModels();
