@@ -3,6 +3,9 @@ import Topup from '../editor/Topup.svelte';
 import Functions from '../editor/functions/Functions.svelte';
 import History from '../editor/history/History.svelte';
 import Assistant from '../editor/assistant/Assistant.svelte';
+import SettingsDialog from '../editor/settings/SettingsDialog.svelte';
+import PublishDialog from '../editor/publish/PublishDialog.svelte';
+import PublishModeDialog from '../editor/publish/PublishModeDialog.svelte';
 import { SPARK } from '../editor/icons.js';
 import TableList from '../editor/database/TableList.svelte';
 import DbUsage from '../editor/database/Usage.svelte';
@@ -1336,35 +1339,16 @@ import { consoleLines } from '../editor/functions/console.js';
     location.href = `${lang === 'en' ? '/en/editor' : '/editor'}?${params}`;
   }
 
+  // Dialog Pengaturan: komponen Svelte assets-source/editor/settings/SettingsDialog.svelte.
   function openSettings() {
-    const { body, close } = openPanel('db-modal settings-modal');
-    const complete = h('input', { type: 'checkbox', checked: settings.complete,
-      onchange: () => { setAutocomplete(complete.checked); toast(complete.checked ? 'Prediksi kode aktif' : 'Prediksi kode dimatikan'); } });
-    const langBtn = (value, label) => h('button', {
-      type: 'button', role: 'radio', 'aria-checked': String(value === LANG), onclick: () => setLanguage(value),
-    }, label);
-    const themeBtn = (value, label) => h('button', {
-      type: 'button', role: 'radio', 'aria-checked': String((value === 'dark') === isDark()),
-      onclick: (e) => {
-        setTheme(value);
-        e.currentTarget.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b === e.currentTarget)));
-      },
-    }, h('span', { class: `theme-swatch ${value}` }), label);
-    body.append(
-      h('h3', {}, 'Pengaturan'),
-      h('div', { class: 'settings-group' },
-        h('h4', {}, 'Tampilan'),
-        h('div', { class: 'theme-choice', role: 'radiogroup', 'aria-label': 'Tema' }, themeBtn('light', 'Terang'), themeBtn('dark', 'Gelap'))),
-      h('div', { class: 'settings-group' },
-        h('h4', {}, 'Bahasa · Language'),
-        h('div', { class: 'theme-choice', role: 'radiogroup', 'aria-label': 'Bahasa · Language' }, langBtn('id', 'Bahasa Indonesia'), langBtn('en', 'English'))),
-      h('div', { class: 'settings-group' },
-        h('h4', {}, 'Editor kode'),
-        h('label', { class: 'switch asst-switch settings-row' }, complete, h('span', { class: 'track' }, h('span', { class: 'thumb' })),
-          h('span', {}, h('strong', {}, 'Prediksi kode otomatis (AI)'),
-            h('small', {}, 'Saat berhenti mengetik, AI menebak lanjutan kode dalam teks abu-abu. Tekan Tab untuk menerima, Esc atau lanjut mengetik untuk mengabaikan. Gratis, tidak memakai kredit.')))),
-      h('p', { class: 'settings-note' }, 'Pengaturan disimpan di browser ini.'),
-      h('div', { class: 'modal-buttons' }, h('button', { type: 'button', class: 'primary', onclick: close }, 'Selesai')));
+    openDialog(SettingsDialog, {
+      lang: LANG,
+      dark: isDark(),
+      complete: settings.complete,
+      onTheme: setTheme,
+      onLanguage: setLanguage,
+      onComplete: (on) => { setAutocomplete(on); toast(on ? 'Prediksi kode aktif' : 'Prediksi kode dimatikan'); },
+    });
   }
 
   function setAutocomplete(on) {
@@ -1593,7 +1577,6 @@ import { consoleLines } from '../editor/functions/console.js';
   // dipublikasikan. Database dev terpisah; struktur tabelnya ikut dipublikasikan, datanya tidak.
   const isManual = () => state.project?.mode === 'manual';
   const pub = { status: null, timer: 0 };
-  const hostOf = (url) => url.replace(/^https?:\/\//, '');
 
   function renderPublish() {
     const manual = isManual();
@@ -1692,6 +1675,7 @@ import { consoleLines } from '../editor/functions/console.js';
     return close;
   }
 
+  // Dialog Publikasikan & Mode publikasi: komponen Svelte di assets-source/editor/publish.
   async function openPublish() {
     let st;
     try {
@@ -1702,86 +1686,20 @@ import { consoleLines } from '../editor/functions/console.js';
     }
     pub.status = st;
     renderPublish();
-    const agree = h('input', { type: 'checkbox' });
-    const go = h('button', { type: 'button', class: 'primary' }, 'Publikasikan');
-    go.disabled = !st.pending || st.destructive;
-    agree.onchange = () => { go.disabled = !agree.checked; };
-    const MARK = { added: ['+', 'baru'], changed: ['~', 'diubah'], removed: ['−', 'dihapus'] };
-    const close = openSheet('publish-modal', 'Publikasikan website', (done) => [
-      h('h3', {}, 'Publikasikan ke website publik'),
-      h('p', { class: 'pub-lead' }, st.pending
-        ? ['Perubahan di versi dev akan tayang di ', h('strong', {}, hostOf(st.siteUrl)), '.']
-        : ['Website publik ', h('strong', {}, hostOf(st.siteUrl)), ' sudah sama dengan versi dev.']),
-      st.files.length ? h('h4', {}, `File (${st.files.length})`) : null,
-      st.files.length ? h('ul', { class: 'pub-list' }, st.files.map((f) => h('li', { class: `pub-file ${f.change}` },
-        h('span', { class: 'pub-mark' }, MARK[f.change][0]), h('code', {}, f.path), h('span', { class: 'pub-what' }, MARK[f.change][1])))) : null,
-      st.schema.length ? h('h4', {}, 'Struktur database') : null,
-      st.schema.length ? h('ul', { class: 'pub-list' }, st.schema.map((c) => h('li', { class: `pub-schema${c.destructive ? ' destructive' : ''}` }, c.destructive ? '⚠️ ' : '', c.text))) : null,
-      st.pending ? h('p', { class: 'pub-note' }, 'Data hasil uji coba di versi dev tidak ikut; data dan gambar kiriman pengunjung di website publik tetap aman.') : null,
-      st.destructive ? h('label', { class: 'pub-confirm' }, agree, 'Saya mengerti: data di tabel/kolom yang dihapus akan hilang dari website publik.') : null,
-      h('div', { class: 'modal-buttons' },
-        h('button', { type: 'button', class: 'link-btn pub-mode', onclick: () => { done(); openPublishMode(); } }, 'Ubah mode publikasi'),
-        go,
-        h('button', { type: 'button', onclick: done }, 'Tutup')),
-    ]);
-    go.onclick = async () => {
-      go.disabled = true;
-      go.textContent = 'Mempublikasikan…';
-      try {
-        pub.status = (await api('POST', '/api/publish', { confirm: agree.checked })).publish;
-        renderPublish();
-        close();
-        toast(`Dipublikasikan ke ${hostOf(st.siteUrl)}`);
-      } catch (err) {
-        toast(err.message, 'error');
-        go.disabled = false;
-        go.textContent = 'Publikasikan';
-      }
-    };
+    openDialog(PublishDialog, {
+      status: st,
+      onPublished: (status) => { pub.status = status; renderPublish(); },
+      onModeDialog: openPublishMode,
+    });
   }
 
   function openPublishMode() {
-    const current = isManual() ? 'manual' : 'live';
-    let chosen = current;
-    const slug = state.project.slug;
-    const devHost = hostOf(state.project.siteUrl).replace(`${slug}.`, `${slug}--dev.`);
-    const agree = h('input', { type: 'checkbox' });
-    const warn = h('div', { class: 'pub-warn', hidden: true },
-      h('p', {}, 'Perubahan yang belum dipublikasikan akan langsung tayang, dan data uji coba di versi dev diganti data asli dari website publik.'),
-      h('label', { class: 'pub-confirm' }, agree, 'Saya mengerti'));
-    const apply = h('button', { type: 'button', class: 'primary' }, 'Terapkan');
-    const sync = () => {
-      document.querySelectorAll('.mode-option').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === chosen)));
-      warn.hidden = !(current === 'manual' && chosen === 'live');
-      apply.disabled = chosen === current || (!warn.hidden && !agree.checked);
-    };
-    agree.onchange = sync;
-    const option = (mode, title, text) => h('button', { type: 'button', role: 'radio', class: 'mode-option', dataset: { mode }, onclick: () => { chosen = mode; sync(); } },
-      h('strong', {}, title), h('span', {}, text));
-    const close = openSheet('publish-modal', 'Mode publikasi', (done) => [
-      h('h3', {}, 'Mode publikasi'),
-      h('div', { class: 'mode-options', role: 'radiogroup' },
-        option('live', 'Langsung tayang', `Setiap perubahan langsung terlihat di ${hostOf(state.project.siteUrl)}. Cocok untuk belajar dan mencoba-coba.`),
-        option('manual', 'Publikasi manual (dev/prod)', `Kamu mengedit versi dev di ${devHost} (bisa dibagikan untuk minta pendapat). Website publik baru berubah saat kamu menekan Publikasikan. Database dev terpisah untuk uji coba.`)),
-      warn,
-      h('div', { class: 'modal-buttons' }, apply, h('button', { type: 'button', onclick: done }, 'Batal')),
-    ]);
-    sync();
-    apply.onclick = async () => {
-      apply.disabled = true;
-      try {
-        await saveAll();
-        const res = await api('PUT', '/api/publish/mode', { mode: chosen, confirm: agree.checked });
-        close();
-        applyProject(res.project);
-        pub.status = res.publish;
-        renderPublish();
-        toast(chosen === 'manual' ? 'Publikasi manual aktif: edit di versi dev, lalu tekan Publikasikan' : 'Website kembali langsung tayang');
-      } catch (err) {
-        toast(err.message, 'error');
-        sync();
-      }
-    };
+    openDialog(PublishModeDialog, {
+      current: isManual() ? 'manual' : 'live',
+      siteUrl: state.project.siteUrl,
+      slug: state.project.slug,
+      onApplied: (res) => { applyProject(res.project); pub.status = res.publish; renderPublish(); },
+    });
   }
 
   // ---------- Status bar ----------

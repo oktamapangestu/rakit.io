@@ -162,7 +162,7 @@
   "Saya mengerti": "I understand",
   "Terapkan": "Apply",
   "Langsung tayang": "Live instantly",
-  "Setiap perubahan langsung terlihat di ${hostOf(state.project.siteUrl)}. Cocok untuk belajar dan mencoba-coba.": "Every change appears on ${hostOf(state.project.siteUrl)} right away. Great for learning and experimenting.",
+  "Setiap perubahan langsung terlihat di ${hostOf(siteUrl)}. Cocok untuk belajar dan mencoba-coba.": "Every change appears on ${hostOf(siteUrl)} right away. Great for learning and experimenting.",
   "Publikasi manual (dev/prod)": "Manual publishing (dev/prod)",
   "Kamu mengedit versi dev di ${devHost} (bisa dibagikan untuk minta pendapat). Website publik baru berubah saat kamu menekan Publikasikan. Database dev terpisah untuk uji coba.": "You edit the dev version at ${devHost} (you can share it to get feedback). The public website only changes when you press Publish. The dev database is separate, for testing.",
   "Publikasi manual aktif: edit di versi dev, lalu tekan Publikasikan": "Manual publishing on: edit the dev version, then press Publish",
