@@ -18,6 +18,14 @@ import { clipText, fnFixPrompt } from '../editor/handoff.js';
 import ConsoleTab from '../editor/console/Console.svelte';
 import FlowPanel from '../editor/flow/FlowPanel.svelte';
 import DiagramView from '../editor/diagram/DiagramView.svelte';
+import AiPanel from '../editor/ai/AiPanel.svelte';
+import FeatureInfo from '../editor/FeatureInfo.svelte';
+import {
+  ai, connect as connectAi, setMode as setAiModeState, setInput as setAiInput, initHistory as initAiHistory,
+  newConversation, openThread, clearHistory, guardBusy, unlimitedLeft, canAfford,
+} from '../editor/ai/state.svelte.js';
+import { FEATURE_INFO } from '../editor/features.js';
+import { renderMarkdown } from '../editor/markdown.js';
 import { diagram, connect as connectDiagram, load as loadDiagram, rerender as rerenderDiagram } from '../editor/diagram/state.svelte.js';
 import { DIAGRAM_NAMES } from '../editor/diagram/info.js';
 import { loadMermaid as loadMermaidFor } from '../editor/mermaid.js';
@@ -334,7 +342,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     renderTree();
     renderBreadcrumbs();
     updateStatus();
-    updateAiComposer();
     flowFollow();
   }
 
@@ -797,7 +804,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   // tidak melepas pilihan; saat kembali, sorotannya dipulihkan. Batas 5 blok dihitung dari semua halaman.
   const MAX_BLOCKS = 5;
   const pick = { on: false, page: null, blocks: [] };
-  const AI_PLACEHOLDER = 'Minta AI membuat atau mengubah kode… (Enter kirim, Shift+Enter baris baru)';
   const siteOrigin = () => new URL(previewBase()).origin;
   const toPicker = (message) => $('#previewFrame').contentWindow?.postMessage({ rakit: true, lang: LANG, ...message }, siteOrigin());
   const blocksOn = (page) => pick.blocks.filter((b) => b.page === page);
@@ -843,9 +849,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
         here ? h('button', { type: 'button', title: 'Perbesar ke bagian induknya', 'aria-label': `Perbesar ${b.label}`, onclick: () => toPicker({ type: 'parent', selector: b.selector }) }, '⬆') : null,
         h('button', { type: 'button', title: 'Lepas blok ini', 'aria-label': `Lepas ${b.label}`, onclick: () => removeBlock(b) }, '×'));
     }));
-    $('#aiInput').placeholder = n
-      ? 'Mau blok ini diubah jadi seperti apa? Mis. buat lebih modern dengan warna gelap'
-      : AI_PLACEHOLDER;
+    ai.blockCount = n; // placeholder kotak prompt (Composer.svelte)
   }
 
   function bindBlockPicker() {
@@ -1661,7 +1665,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       loadMermaid,
       autoFocus,
       isDark,
-      activityView,
       readEvents,
       loadCredits,
       setCredits: (credits) => { ai.credits = credits; renderCredits(); },
@@ -1670,7 +1673,14 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       storageSet: (key, value) => storage.set(key, value),
       projectSlug: () => state.project.slug,
       sessionExpired: () => { location.href = HOME; },
-      icons: { refresh: ICON.refresh, trash: ICON.trash, table: ICON.table, gear: ICON.gear, lock: ICON.lock, close: ICON.close, flow: ICON.flow },
+      openTable: (name) => { db.active = name; setMode('data'); },
+      focusInput: () => autoFocus($('#aiInput')),
+      pickedBlocks: () => pick.blocks.map((b) => ({ page: b.page, selector: b.selector, label: b.label, html: b.html, css: b.css })),
+      endPick: () => { if (pick.on) setPick(false); },
+      activePath: () => state.active,
+      projectUrl,
+      pageName,
+      icons: { refresh: ICON.refresh, trash: ICON.trash, table: ICON.table, gear: ICON.gear, lock: ICON.lock, close: ICON.close, flow: ICON.flow, block: ICON.block },
     }]]);
     return svelteContext;
   }
@@ -1905,62 +1915,9 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   // ---------- Asisten AI ----------
-  const ai = {
-    credits: null,
-    busy: false, // ada job AI yang sedang diikuti editor ini
-    jobId: null, // id pesan AI yang sedang berjalan
-    stream: null, // AbortController koneksi event (menutupnya TIDAK membatalkan job)
-    threadId: null, // percakapan yang sedang dibuka
-    mode: storage.get('rakit.aiMode', 'build'), // 'build' (Builder) | 'plan' (Plan)
-    images: [], // lampiran prompt berikutnya: [{ full, thumb }] (data URL JPEG)
-    pendingCard: null, // kartu perubahan yang menunggu Simpan/Batalkan
-    applying: false, // sedang Simpan/Batalkan
-  };
-
-  const AI_MODES = {
-    build: {
-      title: 'Mau bikin apa hari ini?',
-      intro: 'AI membaca semua file proyekmu lalu menulis atau mengubah kodenya. Kamu bisa cek dulu sebelum menerapkan.',
-      placeholder: 'Minta AI membuat atau mengubah kode… (Enter kirim, Shift+Enter baris baru)',
-      suggestions: [
-        'Buat landing page portofolio yang modern',
-        'Tambahkan navbar responsif dengan menu hamburger',
-        'Tambahkan tombol dark mode',
-        'Jelaskan kode di file yang sedang dibuka',
-      ],
-    },
-    plan: {
-      title: 'Rencanakan dulu, bangun kemudian',
-      intro: 'Diskusikan idemu dengan AI tanpa mengubah file apa pun. Kalau rencananya sudah pas, jalankan dengan satu klik.',
-      placeholder: 'Ceritakan website yang ingin kamu buat… AI tidak akan mengubah file.',
-      suggestions: [
-        'Rencanakan website toko online sederhana',
-        'Halaman apa saja yang dibutuhkan untuk portofolio?',
-        'Beri saran tampilan yang lebih menarik untuk websiteku',
-        'Rencanakan website undangan pernikahan',
-      ],
-    },
-  };
-
-  function setAiMode(mode) {
-    ai.mode = mode === 'plan' ? 'plan' : 'build';
-    storage.set('rakit.aiMode', ai.mode);
-    document.querySelectorAll('[data-ai-mode]').forEach((btn) => {
-      btn.setAttribute('aria-checked', String(btn.dataset.aiMode === ai.mode));
-    });
-    $('#aiInput').placeholder = AI_MODES[ai.mode].placeholder;
-    // Perbarui halaman sambutan kalau belum ada percakapan.
-    const box = $('#aiMessages');
-    if (box.querySelector('.ai-empty')) {
-      box.replaceChildren();
-      renderAiEmpty();
-    }
-  }
-
-  // Unlimited menghitung prompt, bukan kredit: selama jatah hari ini masih ada, prompt apa pun (dengan gambar
-  // pun) cukup memakai 1 dari jatah itu. Setelah habis, kredit biasa yang dipakai.
-  const unlimitedLeft = (c) => c?.plan?.id === 'unlimited' && c.plan.quotaRemaining > 0;
-  const canAfford = (c, cost) => unlimitedLeft(c) || c.remaining >= cost;
+  // Panel AI: komponen Svelte di assets-source/editor/ai (keadaan & aksi di state.svelte.js: ai). Di sini tinggal
+  // lencana kredit & paket di header, tombol "Tanya AI" dari fitur lain, dan menu riwayat percakapan.
+  const setAiMode = (mode) => setAiModeState(mode);
 
   function renderCredits() {
     const badge = $('#aiCredits');
@@ -1985,15 +1942,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       c.topupEnabled ? 'Klik untuk langganan / isi ulang' : null,
     ].filter(Boolean).join(' · ');
 
-    $('#aiTopupBanner').hidden = !empty;
-    const usingBonus = c.bonusRemaining > 0;
-    $('#aiTopupText').textContent = c.topupEnabled
-      ? 'Kredit AI kamu habis.'
-      : usingBonus
-        ? `Masih ada bonus awal ${c.bonusRemaining} kredit.`
-        : `Kredit AI hari ini habis (gratis ${c.limit}/hari). Terisi lagi besok 00.00 WIB.`;
-    $('#aiTopupBtn').hidden = !c.topupEnabled;
-    updateAiComposer();
   }
 
   // Badge langganan di header (+ cincin di avatar). Memberi peringatan saat masa aktif hampir habis.
@@ -2012,139 +1960,13 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     badge.title = `${plan.name} aktif sampai ${shortDate(plan.expiresAt)}${expiring ? ' · klik untuk perpanjang' : ''}`;
   }
 
-  // Biaya prompt yang sedang disusun: prompt dengan gambar memakai lebih banyak kredit.
-  const promptCost = () => (ai.images.length && ai.credits?.images ? ai.credits.images.cost : ai.credits?.costPerPrompt ?? 1);
-
-  function updateAiComposer() {
-    const c = ai.credits;
-    $('#aiAttach').hidden = !c?.enabled || !c.images;
-    const canSend = c?.enabled && canAfford(c, promptCost()) && !ai.busy && !ai.applying;
-    $('#aiSend').disabled = !canSend || !$('#aiInput').value.trim();
-    $('#aiInput').disabled = !c?.enabled;
-  }
-
-  function renderAiEmpty() {
-    const box = $('#aiMessages');
-    if (box.children.length) return;
-    if (ai.credits && !ai.credits.enabled) {
-      box.append(h('div', { class: 'ai-notice' }, 'Fitur AI belum diaktifkan di server ini.'));
-      return;
-    }
-    const copy = AI_MODES[ai.mode];
-    box.append(h('div', { class: 'ai-empty' },
-      h('div', { class: 'spark' }, svg(SPARK)),
-      h('h3', {}, copy.title),
-      h('p', {}, copy.intro),
-      h('div', { class: 'ai-suggestions' }, copy.suggestions.map((text) => h('button', {
-        type: 'button',
-        onclick: () => { $('#aiInput').value = text; sendPrompt(); },
-      }, text)))));
-  }
-
-  function aiScroll() {
-    const box = $('#aiMessages');
-    box.scrollTop = box.scrollHeight;
-  }
-
   // ---------- Penjelasan fitur (tombol ⓘ) ----------
-  // Untuk belajar: tiap fitur dijelaskan dengan bahasa sederhana + analogi, cara pakainya di rakit.io,
-  // istilah yang perlu diketahui, dan contoh permintaan ke AI untuk langsung dicoba.
-  const FEATURE_INFO = {
-    code: {
-      icon: '</>', title: 'Editor Kode',
-      what: 'Tempat kamu menulis isi website. Website dibangun dari tiga bahasa: HTML untuk struktur dan isi, CSS untuk tampilan, dan JavaScript untuk perilaku (apa yang terjadi saat tombol diklik, dan sebagainya).',
-      analogy: 'Bayangkan membangun rumah: HTML adalah tembok dan ruangannya, CSS adalah cat dan dekorasinya, JavaScript adalah listrik dan saklarnya.',
-      why: 'Semua website yang kamu buka setiap hari — dari toko online sampai media sosial — dibangun dari tiga bahasa ini. Memahaminya membuatmu bisa mengubah apa pun di websitemu sendiri.',
-      how: ['Klik file di panel kiri untuk membukanya.', 'Ketik perubahan; tersimpan otomatis (Auto-save) dan preview di kanan langsung berubah.', 'Saat berhenti mengetik, AI menebak lanjutan kode dalam teks abu-abu — tekan Tab untuk menerima.', 'Ctrl/⌘ + S untuk menyimpan manual.'],
-      terms: [['Tag', 'penanda HTML, mis. <h1>Judul</h1>'], ['Atribut', 'keterangan tambahan pada tag, mis. href pada <a>'], ['Selector', 'cara CSS memilih elemen, mis. .tombol atau h1'], ['Fungsi', 'kumpulan perintah JavaScript yang bisa dipanggil berulang']],
-      tip: 'Ubah satu hal kecil, lalu lihat hasilnya di preview. Cara ini paling cepat untuk memahami arti setiap baris kode.',
-      tryText: 'Jelaskan isi file index.html baris per baris dengan bahasa yang mudah dipahami pemula.', tryMode: 'plan',
-    },
-    ai: {
-      icon: '✦', title: 'Asisten AI',
-      what: 'Teman belajar yang bisa membuatkan dan mengubah kode untukmu (mode Builder), atau diajak berdiskusi dan merencanakan tanpa mengubah apa pun (mode Plan).',
-      analogy: 'Seperti punya mentor programmer di sebelahmu: kamu ceritakan maumu, dia mengerjakan, lalu kamu bisa bertanya "kenapa begitu?".',
-      why: 'Programmer zaman sekarang juga bekerja bersama AI. Kuncinya adalah tahu cara meminta dengan jelas dan memeriksa hasilnya — keterampilan yang kamu latih di sini.',
-      how: ['Builder: tulis permintaan, AI mengubah file, lalu kamu pilih Simpan atau Batalkan.', 'Plan: diskusi dan susun rencana; tekan "Jalankan rencana ini" kalau sudah cocok.', 'Pilih blok di preview untuk mengubah bagian halaman tertentu saja.', 'Lampirkan gambar (mis. sketsa atau contoh desain) sebagai acuan.'],
-      terms: [['Prompt', 'perintah atau pertanyaan yang kamu kirim ke AI'], ['Builder / Plan', 'mode mengerjakan / mode berdiskusi'], ['Kredit', 'jatah pemakaian AI; tiap prompt memakai kredit']],
-      tip: 'Setelah AI mengubah sesuatu, tanyakan "jelaskan perubahan barusan", lalu buka tab Code untuk melihat kodenya. Dari situ kamu belajar.',
-      tryText: 'Buatkan halaman profil sederhana tentang saya: foto, nama, sedikit cerita, dan daftar hobi.', tryMode: 'build',
-    },
-    data: {
-      icon: '▦', title: 'Database',
-      what: 'Tempat menyimpan data websitemu secara permanen di server, sehingga bisa dibaca dan ditambah dari halaman website — misalnya isi buku tamu, pesanan, atau daftar produk.',
-      analogy: 'Mirip spreadsheet: satu tabel seperti satu sheet, kolom adalah judul kolom (nama, pesan, tanggal), dan setiap baris adalah satu data.',
-      why: 'Tanpa database, data yang diisi pengunjung hilang begitu halaman ditutup, atau hanya tersimpan di browser satu orang. Hampir semua aplikasi — media sosial, toko online, aplikasi bank — bergantung pada database.',
-      how: ['Buat tabel dan kolomnya, pilih tipe data: teks, angka, ya/tidak, tanggal, relasi, atau gambar.', 'Atur akses: siapa yang boleh melihat, menambah, mengubah, dan menghapus data.', 'Dari kode website, baca dan simpan data dengan fetch(\'/api/db/nama_tabel\').', 'Atau minta AI membuatkan form beserta tabelnya sekaligus.'],
-      terms: [['Tabel / kolom / baris', 'wadah data / jenis isian / satu data'], ['API', 'alamat yang dipakai kode untuk meminta atau mengirim data'], ['Relasi', 'kolom yang menunjuk ke baris di tabel lain, mis. pesanan → produk'], ['Akses publik / privat', 'boleh dipakai semua pengunjung / hanya kamu']],
-      tip: 'Biarkan akses "ubah" dan "hapus" tetap privat (hanya kamu), supaya pengunjung tidak bisa merusak data orang lain.',
-      tryText: 'Buatkan buku tamu: form nama dan pesan yang tersimpan di database, lalu daftar ucapan yang sudah masuk tampil di bawahnya.', tryMode: 'build',
-    },
-    diagram: {
-      icon: '◫', title: 'Diagram',
-      what: 'Gambar struktur websitemu yang dibuat AI dari file dan database: siapa memakai fitur apa, bagaimana alurnya, dan bagaimana data saling terhubung.',
-      analogy: 'Seperti denah dan peta sebuah gedung: kamu tidak perlu membuka setiap ruangan untuk memahami bentuk keseluruhannya.',
-      why: 'Perancang sistem memakai diagram (UML, ERD) untuk merencanakan dan menjelaskan aplikasi — di dunia kerja maupun tugas kuliah. Diagram membantumu melihat gambaran besar sebelum menambah fitur.',
-      how: ['Pilih jenis diagram di deretan tab.', 'Tekan Update diagram supaya AI menggambar dari file & database terbaru (memakai kredit).', 'Tekan ⓘ di toolbar diagram untuk cara membaca jenis yang sedang dibuka.', 'Zoom, geser, salin kode Mermaid, atau unduh sebagai SVG.'],
-      terms: [['UML', 'kumpulan jenis diagram standar untuk merancang perangkat lunak'], ['ERD', 'diagram struktur database: tabel dan hubungannya'], ['Mermaid', 'bahasa teks untuk menggambar diagram']],
-      tip: 'Bandingkan diagram dengan websitemu: kalau ada yang terasa aneh di diagram, biasanya ada yang perlu dirapikan di kodenya.',
-    },
-    fn: {
-      icon: 'ϟ', title: 'Fungsi serverless',
-      what: 'Kode JavaScript yang berjalan di server, bukan di browser pengunjung. Halaman websitemu memanggilnya lewat alamat /api/fn/nama-fungsi lalu menerima hasilnya.',
-      analogy: 'Kode di halaman website itu seperti etalase toko — semua orang bisa melihat isinya. Fungsi adalah dapur di belakang: pengunjung hanya menerima hidangannya, tidak bisa melihat resep dan bahannya.',
-      why: 'Ada hal yang tidak boleh terlihat atau diubah pengunjung: kunci API rahasia, perhitungan harga, atau pengiriman notifikasi. Di dunia kerja, ini disebut kode backend.',
-      how: ['Tekan + Fungsi baru, tulis kodenya, lalu Coba langsung dari editor.', 'Simpan kunci rahasia di Rahasia (env) dan baca di kode lewat env.NAMA.', 'Panggil dari halaman: fetch(\'/api/fn/nama-fungsi\').', 'Atur Jadwal supaya fungsi berjalan otomatis (mis. laporan harian).'],
-      terms: [['Server / backend', 'komputer dan kode di sisi penyedia, bukan di perangkat pengunjung'], ['Endpoint', 'alamat yang bisa dipanggil, mis. /api/fn/kirim-pesan'], ['Env (rahasia)', 'nilai rahasia yang hanya bisa dibaca fungsi'], ['Cron', 'jadwal untuk menjalankan sesuatu secara otomatis']],
-      tip: 'Jangan pernah menulis kunci API di file .html atau .js halaman — siapa pun bisa membacanya. Simpan di Rahasia (env) dan pakai lewat fungsi.',
-      tryText: 'Buatkan fungsi serverless yang mengirim notifikasi ke Telegram setiap ada pesan baru dari form kontak.', tryMode: 'build',
-    },
-    history: {
-      icon: '↺', title: 'Riwayat versi',
-      what: '"Foto" seluruh file project-mu pada satu waktu. Kamu bisa melihat perbedaannya dan kembali ke versi mana pun.',
-      analogy: 'Seperti save point di game: kalau langkah berikutnya gagal, kamu tinggal kembali ke titik simpan terakhir.',
-      why: 'Dengan riwayat, kamu bebas bereksperimen tanpa takut merusak. Programmer profesional memakai alat bernama Git untuk hal yang sama.',
-      how: ['Versi tersimpan otomatis saat kamu mulai mengedit dan sebelum AI mengubah file.', 'Tekan Simpan versi sekarang sebelum mencoba perubahan besar.', 'Pilih sebuah versi untuk melihat file apa yang berubah, lalu Kembalikan bila perlu.'],
-      terms: [['Versi', 'salinan semua file pada satu waktu'], ['Diff', 'perbedaan antara dua versi'], ['Restore', 'mengembalikan file ke versi tertentu'], ['Git', 'alat riwayat versi yang dipakai programmer di seluruh dunia']],
-      tip: 'Biasakan menyimpan versi dengan nama yang jelas sebelum eksperimen, mis. "sebelum ganti desain".',
-    },
-    console: {
-      icon: '›_', title: 'Console',
-      what: 'Tempat semua pesan dari websitemu muncul: console.log dan error dari halaman (FE), log fungsi serverless (BE), request jaringan, dan catatan sistem seperti halaman yang dimuat.',
-      analogy: 'Seperti kotak hitam pesawat: mencatat apa yang terjadi di balik layar, sehingga saat ada yang tidak beres kamu tahu persis di mana masalahnya.',
-      why: 'Banyak kesalahan tidak terlihat di tampilan — tombol diam saja, data tidak tersimpan. Console memberi tahu alasannya. Programmer membuka console setiap hari untuk mencari bug.',
-      how: ['Buka preview dan pakai websitemu; log-nya muncul di sini secara langsung.', 'Tulis console.log(nilai) di kode untuk melihat isi sebuah variabel.', 'Saring berdasarkan sumber (FE, BE, Jaringan, Sistem) atau tampilkan error saja.', 'Pada baris error, tekan Perbaiki dengan AI supaya AI mencari penyebabnya.'],
-      terms: [['FE (frontend)', 'kode yang berjalan di browser pengunjung: .html, .css, .js halaman'], ['BE (backend)', 'kode yang berjalan di server: fungsi di folder functions/'], ['Request', 'permintaan halaman ke server, mis. fetch(\'/api/db/produk\')'], ['Status', 'kode hasil request: 2xx berhasil, 4xx salah permintaan, 5xx error server']],
-      tip: 'Kalau sesuatu tidak berjalan, buka Console dulu — biasanya pesan error berwarna merah sudah menunjuk baris yang salah.',
-    },
-    files: {
-      icon: '▤', title: 'File & folder',
-      what: 'Semua bagian websitemu tersimpan sebagai file. index.html adalah halaman utama yang dibuka pertama kali; halaman lain, file CSS, JavaScript, dan gambar bisa dirapikan ke dalam folder.',
-      analogy: 'Seperti map dan dokumen di lemari arsip: nama yang rapi membuat semuanya mudah ditemukan, oleh kamu maupun oleh browser.',
-      why: 'Browser menemukan halaman dan gambar dari nama file dan foldernya (disebut path). Salah satu huruf saja, gambar atau halaman tidak akan muncul.',
-      how: ['Buat file atau folder dengan tombol di atas daftar file.', 'Upload gambar, atau seret gambar langsung ke daftar file.', 'Klik ⋯ atau klik kanan pada file untuk ganti nama, hapus, atau salin kode <img>.', 'Halaman baru: buat mis. tentang.html, lalu tautkan dengan <a href="/tentang.html">.'],
-      terms: [['Path', 'alamat file, mis. /images/foto.jpg'], ['Ekstensi', 'akhiran nama file yang menunjukkan jenisnya: .html, .css, .js, .png'], ['index.html', 'halaman yang dibuka saat alamat website diakses']],
-      tip: 'Pakai huruf kecil dan tanda hubung tanpa spasi untuk nama file, mis. tentang-kami.html dan foto-profil.jpg.',
-    },
-    preview: {
-      icon: '◉', title: 'Preview & website online',
-      what: 'Tampilan langsung websitemu seperti yang dilihat pengunjung. Websitemu juga sudah online di alamatmu sendiri dan bisa dibuka siapa saja.',
-      analogy: 'Seperti cermin: setiap perubahan kode langsung terlihat di sini, jadi kamu tahu efek dari setiap baris yang kamu tulis.',
-      why: 'Pengunjung membuka website dari HP, tablet, dan laptop. Website yang baik tampil rapi di semua ukuran layar — ini disebut desain responsif.',
-      how: ['Ganti ukuran Desktop / Tablet / HP di bawah preview untuk mengecek tampilan.', 'Pilih blok: klik bagian halaman lalu minta AI mengubah bagian itu saja.', 'Lihat situs membuka websitemu yang sudah online di tab baru.', 'Mode publikasi (menu avatar): langsung tayang setiap simpan, atau manual lewat versi dev.'],
-      terms: [['Responsif', 'tampilan menyesuaikan ukuran layar'], ['Domain', 'alamat website, mis. namamu.rakit.io'], ['Dev / prod', 'versi untuk mencoba / versi yang dilihat pengunjung']],
-      tip: 'Selalu cek tampilan HP — sebagian besar pengunjung membuka website dari ponsel.',
-      tryText: 'Periksa apakah halaman ini sudah rapi di layar HP, lalu perbaiki bagian yang belum responsif.', tryMode: 'build',
-    },
-  };
+  // Data penjelasan: assets-source/editor/features.js; dialognya FeatureInfo.svelte.
 
-  // Isi kotak AI dengan contoh permintaan (tidak langsung dikirim, supaya bisa diubah dulu).
   function askAi(text, mode = 'build') {
     setMode('ai');
     setAiMode(mode);
-    $('#aiInput').value = text;
-    autoGrow();
-    updateAiComposer();
+    setAiInput(text);
     autoFocus($('#aiInput'));
   }
 
@@ -2158,25 +1980,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     }, h('span', { class: 'ai-spark', 'aria-hidden': 'true' }, '✦'), label);
   }
   function showFeatureInfo(key) {
-    const info = FEATURE_INFO[key];
-    if (!info) return;
-    const { body, close } = openPanel('db-modal wide feature-info');
-    body.append(
-      h('div', { class: 'fi-head' }, h('span', { class: 'fi-icon', 'aria-hidden': 'true' }, info.icon),
-        h('div', {}, h('span', { class: 'fi-kicker' }, 'Kenali fitur'), h('h3', {}, info.title))),
-      h('p', { class: 'fi-what' }, info.what),
-      h('div', { class: 'fi-analogy' }, h('strong', {}, 'Analogi '), info.analogy),
-      h('h4', {}, 'Kenapa penting?'), h('p', {}, info.why),
-      h('h4', {}, 'Cara pakai di rakit.io'), h('ol', { class: 'fi-steps' }, info.how.map((step) => h('li', {}, step))),
-      h('h4', {}, 'Istilah yang perlu kamu tahu'),
-      h('dl', { class: 'fi-terms' }, info.terms.map(([term, desc]) => [h('dt', {}, term), h('dd', {}, desc)])),
-      h('div', { class: 'fi-tip' }, h('strong', {}, 'Tips belajar: '), info.tip),
-      info.tryText ? h('div', { class: 'fi-try' }, h('span', {}, 'Coba minta ke AI:'), h('code', {}, info.tryText)) : null,
-      h('div', { class: 'modal-buttons' },
-        info.tryText ? h('button', { type: 'button', onclick: () => { close(); askAi(info.tryText, info.tryMode); } }, 'Coba sekarang') : null,
-        h('button', { type: 'button', class: 'primary', onclick: close }, 'Mengerti')));
-    body.querySelector('.modal-buttons .primary').focus({ preventScroll: true });
-    body.scrollTop = 0;
+    if (FEATURE_INFO[key]) openDialog(FeatureInfo, { key });
   }
 
   function bindFeatureInfo() {
@@ -2216,8 +2020,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     } else if (mode === 'console') {
       devConsoleOpen();
     } else if (mode === 'ai') {
-      renderAiEmpty();
-      updateAiComposer();
       autoFocus($('#aiInput'));
     } else if (state.active) {
       autoFocus(editor);
@@ -2254,81 +2056,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   // ---------- Riwayat percakapan ----------
-  const userBubble = (m) => h('div', { class: 'msg user' },
-    m.mode === 'plan' ? h('span', { class: 'msg-mode' }, 'Plan') : null,
-    m.images?.length ? h('div', { class: 'msg-images' }, m.images.map((src) => h('img', { src, alt: 'Gambar terlampir' }))) : null,
-    m.blocks?.length ? h('div', { class: 'msg-blocks' }, m.blocks.map((b) => h('span', { class: 'ai-block' }, svg(ICON.block), b.label,
-      new Set(m.blocks.map((x) => pageName(x.page))).size > 1 ? h('span', { class: 'ai-block-page' }, pageName(b.page)) : null))) : null,
-    m.content);
-  const errorBubble = (text, code) => h('div', { class: 'msg error' },
-    text,
-    code === 'no_credits' && ai.credits?.topupEnabled
-      ? h('button', { type: 'button', class: 'ai-topup-btn inline', onclick: () => openTopup() }, 'Isi ulang kredit')
-      : null);
-
-  function guardBusy() {
-    if (!ai.busy) return false;
-    toast('Tunggu AI selesai, atau tekan Stop dulu.', 'error');
-    return true;
-  }
-
-  function newConversation() {
-    if (guardBusy()) return;
-    ai.threadId = null;
-    ai.pendingCard = null;
-    storage.set(`rakit.aiThread.${state.projectSlug}`, 'new');
-    $('#aiMessages').replaceChildren();
-    renderAiEmpty();
-    autoFocus($('#aiInput'));
-  }
-
-  function renderMessage(m) {
-    const box = $('#aiMessages');
-    if (m.role === 'user') box.append(userBubble(m));
-    else if (m.status === 'queued' || m.status === 'running') attachJob(m);
-    else if (m.status === 'done') box.append(renderAiReply(m));
-    else box.append(errorBubble(m.error || 'Gagal.'));
-  }
-
-  async function openThread(id) {
-    let data;
-    try {
-      data = await api('GET', `/api/ai/threads/${id}`);
-    } catch (err) {
-      return toast(err.message, 'error');
-    }
-    ai.threadId = data.thread.id;
-    ai.pendingCard = null;
-    storage.set(`rakit.aiThread.${state.projectSlug}`, ai.threadId);
-    $('#aiMessages').replaceChildren();
-    data.messages.forEach(renderMessage);
-    renderAiEmpty();
-    aiScroll();
-  }
-
-  // Saat editor dibuka: lanjutkan job yang masih berjalan, atau buka percakapan terakhir.
-  async function initAiHistory() {
-    if (!ai.credits?.enabled) return;
-    let data;
-    try {
-      data = await api('GET', '/api/ai/threads');
-    } catch {
-      return;
-    }
-    const saved = storage.get(`rakit.aiThread.${state.projectSlug}`, null);
-    const job = data.activeJob;
-    if (job && job.projectSlug !== state.projectSlug) {
-      // Satu prompt berjalan per akun; beri tahu kalau sedang dipakai di project lain.
-      $('#aiMessages').replaceChildren(h('div', { class: 'ai-notice' },
-        `AI sedang mengerjakan prompt di project ${job.projectSlug}. `,
-        h('a', { href: projectUrl(job.projectSlug) }, 'Buka project itu'),
-        ' — atau tunggu selesai untuk mengirim prompt di sini.'));
-    }
-    const target = (job?.projectSlug === state.projectSlug ? job.threadId : null)
-      ?? (saved === 'new' ? null : data.threads.find((t) => t.id === saved)?.id ?? data.threads[0]?.id);
-    if (target) await openThread(target);
-  }
-
   async function showHistoryMenu() {
     let data;
     try {
@@ -2350,342 +2077,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       data.threads.length ? { label: 'Hapus semua riwayat', danger: true, run: clearHistory } : null,
     ]);
     $('#ctxmenu').classList.add('history-menu');
-  }
-
-  async function clearHistory() {
-    if (guardBusy()) return;
-    const ok = await modal({
-      title: 'Hapus semua riwayat percakapan?',
-      message: 'Semua percakapan dengan AI akan dihapus permanen. File dan database proyekmu tidak ikut terhapus.',
-      buttons: [{ label: 'Hapus riwayat', value: true, primary: true, danger: true }, { label: 'Batal', value: null }],
-    });
-    if (!ok) return;
-    try {
-      await api('DELETE', '/api/ai/threads');
-    } catch (err) {
-      return toast(err.message, 'error');
-    }
-    ai.threadId = null;
-    ai.pendingCard = null;
-    storage.set(`rakit.aiThread.${state.projectSlug}`, 'new');
-    $('#aiMessages').replaceChildren();
-    renderAiEmpty();
-    toast('Riwayat percakapan dihapus');
-  }
-
-  // ---------- Prompt & job ----------
-
-  // ---------- Lampiran gambar di prompt ----------
-  // Gambar diperkecil di browser (sisi terpanjang 1280 px, JPEG) supaya cepat dikirim; thumbnail untuk riwayat chat.
-  async function shrinkImage(file, maxSide, quality) {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff'; // latar putih untuk gambar transparan
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close?.();
-    return canvas.toDataURL('image/jpeg', quality);
-  }
-
-  async function addPromptImages(files) {
-    const limit = ai.credits?.images;
-    if (!limit) return;
-    const list = [...files].filter((f) => /^image\/(png|jpe?g|webp|gif|bmp)$/i.test(f.type));
-    if (!list.length) return toast('Lampirkan file gambar (PNG, JPG, atau WEBP)', 'error');
-    for (const file of list) {
-      if (ai.images.length >= limit.max) {
-        toast(`Maksimal ${limit.max} gambar per prompt`, 'error');
-        break;
-      }
-      try {
-        let full = await shrinkImage(file, 1280, 0.85);
-        if (full.length > 2.6e6) full = await shrinkImage(file, 1024, 0.7);
-        ai.images.push({ full, thumb: await shrinkImage(file, 200, 0.7) });
-      } catch {
-        toast(`"${file.name}" tidak bisa dibaca sebagai gambar`, 'error');
-      }
-    }
-    renderAttachments();
-    autoFocus($('#aiInput'));
-  }
-
-  function renderAttachments() {
-    const box = $('#aiAttachments');
-    box.hidden = !ai.images.length;
-    const cost = ai.credits?.images?.cost;
-    box.replaceChildren(
-      ...ai.images.map((img, i) => h('span', { class: 'ai-thumb' },
-        h('img', { src: img.thumb, alt: `Gambar ${i + 1}` }),
-        h('button', { type: 'button', title: 'Hapus gambar', 'aria-label': 'Hapus gambar', onclick: () => { ai.images.splice(i, 1); renderAttachments(); } }, '×'))),
-      ai.images.length ? h('span', { class: 'ai-attach-note' }, `Prompt dengan gambar memakai ${cost} kredit`) : '',
-    );
-    updateAiComposer();
-  }
-
-  function bindAiAttachments() {
-    $('#aiAttach').onclick = () => {
-      const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', multiple: true });
-      input.onchange = () => addPromptImages(input.files);
-      input.click();
-    };
-    // Tempel screenshot langsung ke kotak prompt.
-    $('#aiInput').addEventListener('paste', (e) => {
-      const files = [...(e.clipboardData?.files ?? [])];
-      if (files.length && ai.credits?.images) {
-        e.preventDefault();
-        addPromptImages(files);
-      }
-    });
-    const form = $('#aiForm');
-    form.addEventListener('dragover', (e) => {
-      if (![...(e.dataTransfer?.types ?? [])].includes('Files') || !ai.credits?.images) return;
-      e.preventDefault();
-      form.classList.add('drop');
-    });
-    form.addEventListener('dragleave', () => form.classList.remove('drop'));
-    form.addEventListener('drop', (e) => {
-      if (!e.dataTransfer?.files?.length || !ai.credits?.images) return;
-      e.preventDefault();
-      form.classList.remove('drop');
-      addPromptImages(e.dataTransfer.files);
-    });
-  }
-
-  async function sendPrompt() {
-    const input = $('#aiInput');
-    const prompt = input.value.trim();
-    if (!prompt || ai.busy || ai.applying) return;
-    // Prompt baru = perubahan sebelumnya yang belum dikonfirmasi dianggap disimpan (server juga begitu).
-    ai.pendingCard?.markKept();
-
-    const box = $('#aiMessages');
-    box.querySelector('.ai-empty')?.remove();
-    const mode = ai.mode;
-    const attached = ai.images;
-    const picked = pick.blocks.map((b) => ({ page: b.page, selector: b.selector, label: b.label, html: b.html, css: b.css }));
-    box.append(userBubble({ mode, content: prompt, images: attached.map((i) => i.thumb), blocks: picked }));
-    if (pick.on) setPick(false); // halaman akan berubah; pilih ulang untuk permintaan berikutnya
-    ai.images = [];
-    renderAttachments();
-    input.value = '';
-    autoGrow();
-    aiScroll();
-    ai.busy = true;
-    updateAiComposer();
-
-    let started;
-    try {
-      await saveAll(); // pastikan AI membaca versi terbaru
-      started = await api('POST', '/api/ai/prompt', {
-        prompt, mode, activePath: state.active, threadId: ai.threadId,
-        ...(attached.length ? { images: attached.map((i) => i.full), thumbs: attached.map((i) => i.thumb) } : {}),
-        ...(picked.length ? { blocks: picked } : {}),
-      });
-    } catch (err) {
-      ai.busy = false;
-      updateAiComposer();
-      box.append(errorBubble(err.message, err.code));
-      if (err.code === 'no_credits') loadCredits();
-      aiScroll();
-      return;
-    }
-    ai.threadId = started.threadId;
-    storage.set(`rakit.aiThread.${state.projectSlug}`, ai.threadId);
-    ai.credits = started.credits;
-    renderCredits();
-    attachJob(started.assistantMessage);
-  }
-
-  // ---------- Proses AI ----------
-  // Yang dikerjakan AI selama job berjalan (event dari server, lihat go/internal/ai/activity.go): proses
-  // berpikir, teks jawaban, dan langkah-langkahnya (menulis file — dengan isi yang sedang ditulis —, membuat
-  // tabel, menghapus file). Setelah selesai diringkas jadi "Lihat proses AI" di atas jawaban.
-  const STEP_LABEL = { write_file: 'Menulis', delete_file: 'Menghapus', create_table: 'Tabel', diagram: 'Menggambar diagram' };
-  // scroller: elemen (atau fungsi yang mengembalikannya) yang digulir mengikuti isi baru — daftar pesan AI,
-  // atau panel proses di kanvas diagram.
-  function activityView(scroller = () => $('#aiMessages')) {
-    const summary = h('summary', {}, 'Proses AI');
-    const el = h('details', { class: 'ai-activity', open: true }, summary);
-    let thinking = null;
-    let say = null;
-    let list = null;
-    let steps = new Map(); // id -> { li, code, label }
-    let count = 0;
-    const started = Date.now();
-
-    // Ikuti ke bawah hanya bila pengguna tidak sedang menggulir ke atas membaca.
-    const follow = (target, run) => {
-      const stick = target.scrollHeight - target.scrollTop - target.clientHeight < 40;
-      run();
-      if (stick) target.scrollTop = target.scrollHeight;
-    };
-    const append = (run) => {
-      const box = typeof scroller === 'function' ? scroller() : scroller;
-      return box ? follow(box, run) : run();
-    };
-    const ensureList = () => {
-      if (!list) {
-        list = h('ol', { class: 'ai-steps' });
-        el.append(list);
-      }
-      return list;
-    };
-
-    function reset() {
-      el.replaceChildren(summary);
-      el.open = true;
-      thinking = say = list = null;
-      steps = new Map();
-      count = 0;
-    }
-
-    function handle(ev) {
-      if (ev.type === 'reasoning') {
-        if (!thinking) {
-          thinking = h('div', { class: 'ai-thinking-text' });
-          el.append(h('details', { class: 'ai-thinking', open: true }, h('summary', {}, 'Proses berpikir'), thinking));
-        }
-        append(() => follow(thinking, () => thinking.append(ev.text)));
-      } else if (ev.type === 'say') {
-        if (!say) {
-          say = h('div', { class: 'ai-say' });
-          say.raw = '';
-          el.append(say);
-        }
-        // Mode Plan menjawab di dalam <message>…</message>; tag-nya tidak perlu terlihat.
-        say.raw += ev.text;
-        append(() => { say.textContent = say.raw.replace(/<\/?message>/g, '').trim(); });
-      } else if (ev.type === 'round') {
-        // Model dipanggil lagi: proses berpikir & teks berikutnya mulai di paragraf baru.
-        if (thinking) thinking.append('\n\n');
-        say = null;
-        for (const step of steps.values()) step.code?.closest('details')?.removeAttribute('open');
-      } else if (ev.type === 'step') {
-        let step = steps.get(ev.id);
-        if (!step) {
-          // Mulai menulis: proses berpikir dilipat, tempat untuk isi file yang sedang ditulis disiapkan.
-          el.querySelector('.ai-thinking')?.removeAttribute('open');
-          count += 1;
-          const target = ev.tool === 'diagram' ? DIAGRAM_NAMES[ev.target] || ev.target : ev.target;
-          const label = h('span', { class: 'ai-step-label' }, `${STEP_LABEL[ev.tool] || ev.tool} `, h('code', {}, target || '…'));
-          const li = h('li', { class: 'ai-step run' });
-          if (ev.tool === 'write_file' || ev.tool === 'diagram') {
-            const code = h('pre', { class: 'ai-draft' });
-            li.append(h('details', { open: true }, h('summary', {}, label), code));
-            step = { li, code };
-          } else {
-            li.append(label);
-            step = { li };
-          }
-          steps.set(ev.id, step);
-          append(() => ensureList().append(li));
-        }
-        if (ev.state && ev.state !== 'run') {
-          step.li.className = `ai-step ${ev.state}`;
-          step.li.querySelector('details')?.removeAttribute('open');
-          const note = ev.state === 'cancel' ? 'terputus, diulang' : ev.note;
-          if (note) step.li.append(h('small', {}, ev.state === 'warn' ? `${note} — AI memperbaikinya` : note));
-        }
-      } else if (ev.type === 'draft') {
-        const step = steps.get(ev.id);
-        if (step?.code) append(() => follow(step.code, () => step.code.append(ev.text)));
-      } else if (ev.type === 'note') {
-        append(() => ensureList().append(h('li', { class: 'ai-step note' }, ev.text)));
-      }
-    }
-
-    // Selesai: dilipat jadi ringkasan; dibuang bila tidak ada yang bisa dilihat (model tanpa proses berpikir).
-    function finish() {
-      if (el.children.length <= 1) return el.remove();
-      const secs = Math.max(1, Math.round((Date.now() - started) / 1000));
-      summary.textContent = `Lihat proses AI · ${count ? `${count} langkah · ` : ''}${secs} dtk`;
-      el.open = false;
-      el.querySelectorAll('details').forEach((d) => d.removeAttribute('open'));
-    }
-
-    return { el, reset, handle, finish };
-  }
-
-  // Ikuti progres job di server. Koneksi yang putus disambung lagi; job tetap jalan di server.
-  async function attachJob(message) {
-    const box = $('#aiMessages');
-    ai.busy = true;
-    ai.jobId = message.id;
-    updateAiComposer();
-
-    const status = h('span', {}, 'Menyiapkan…');
-    // Status diperbarui tiap detik sesuai fase: antre → berpikir → menulis (atau menunggu coba ulang).
-    const started = message.createdAt || Date.now();
-    let phase = { kind: 'prepare' };
-    const renderStatus = () => {
-      const secs = Math.max(0, Math.round((Date.now() - started) / 1000));
-      status.textContent = {
-        prepare: () => 'Menyiapkan…',
-        vision: () => `AI sedang melihat gambar… ${secs} dtk`,
-        queued: () => `Menunggu antrean AI… posisi ${phase.position} dari ${phase.total}`,
-        thinking: () => `AI sedang berpikir… ${secs} dtk`,
-        writing: () => `Menulis kode… ${(phase.chars / 1000).toFixed(1)}k karakter`,
-        retry: () => `AI sedang sibuk, mencoba lagi (${phase.attempt}/${phase.max})…`,
-      }[phase.kind]();
-    };
-    const statusTimer = setInterval(renderStatus, 1000);
-    const setPhase = (next) => { phase = next; renderStatus(); };
-    const stopBtn = h('button', { class: 'stop', type: 'button' }, 'Stop');
-    stopBtn.onclick = async () => {
-      stopBtn.disabled = true;
-      stopBtn.textContent = 'Menghentikan…';
-      await api('POST', `/api/ai/jobs/${message.id}/cancel`).catch((err) => toast(err.message, 'error'));
-    };
-    const loading = h('div', { class: 'msg loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), status, stopBtn);
-    const activity = activityView();
-    box.append(activity.el, loading);
-    aiScroll();
-
-    let final = null;
-    for (let attempt = 0; attempt < 30 && !final; attempt++) {
-      ai.stream = new AbortController();
-      try {
-        const res = await fetch(`/api/ai/jobs/${message.id}/events`, { credentials: 'same-origin', signal: ai.stream.signal });
-        if (res.status === 401) {
-          location.href = HOME;
-          return;
-        }
-        if (!res.ok) throw new Error(`Gagal (${res.status})`);
-        activity.reset(); // server mengirim ulang semua event sejak awal job
-        for await (const event of readEvents(res)) {
-          activity.handle(event);
-          if (event.credits) { ai.credits = event.credits; renderCredits(); }
-          if (event.type === 'vision') setPhase({ kind: 'vision' });
-          else if (event.type === 'queued') setPhase({ kind: 'queued', position: event.position, total: event.total });
-          else if (event.type === 'running' || (event.type === 'thinking' && phase.kind !== 'writing')) setPhase({ kind: 'thinking' });
-          else if (event.type === 'retry') setPhase({ kind: 'retry', attempt: event.attempt, max: event.max });
-          else if (event.type === 'progress') setPhase({ kind: 'writing', chars: event.chars });
-          else if (event.type === 'done' || event.type === 'error') final = event;
-        }
-      } catch { /* koneksi putus: sambung lagi di bawah */ }
-      if (!final) await new Promise((r) => setTimeout(r, Math.min(1000 * (attempt + 1), 5000)));
-    }
-
-    clearInterval(statusTimer);
-    loading.remove();
-    activity.finish();
-    ai.busy = false;
-    ai.jobId = null;
-    ai.stream = null;
-    if (!final) {
-      box.append(errorBubble('Koneksi ke server terputus. Muat ulang halaman untuk melihat hasilnya.'));
-    } else if (final.type === 'done') {
-      box.append(renderAiReply(final.message));
-      if (final.touched?.length) await syncFromServer(final.touched, { openFirst: true });
-    } else {
-      box.append(errorBubble(final.error));
-    }
-    updateAiComposer();
-    aiScroll();
   }
 
   // Muat ulang file yang diubah server (oleh AI atau Batalkan) ke editor, pohon file, dan preview.
@@ -2715,158 +2106,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     }
     if (!$('#dataView').hidden) dbLoad();
     reloadPreview();
-  }
-
-  // Markdown sederhana (judul, list, **tebal**, `kode`, blok kode) dirender lewat DOM, tanpa innerHTML.
-  function inlineMd(text) {
-    return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean).map((part) => {
-      if (part.startsWith('`') && part.endsWith('`')) return h('code', {}, part.slice(1, -1));
-      if (part.startsWith('**') && part.endsWith('**')) return h('strong', {}, part.slice(2, -2));
-      return part;
-    });
-  }
-
-  function renderMarkdown(text) {
-    const out = h('div', { class: 'md' });
-    const lines = text.split('\n');
-    let list = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.startsWith('```')) {
-        const code = [];
-        while (++i < lines.length && !lines[i].startsWith('```')) code.push(lines[i]);
-        out.append(h('pre', {}, h('code', {}, code.join('\n'))));
-        list = null;
-        continue;
-      }
-      if (line.trim().startsWith('|')) {
-        const rows = [];
-        for (; i < lines.length && lines[i].trim().startsWith('|'); i++) {
-          const cells = lines[i].trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
-          if (!cells.every((c) => /^:?-{2,}:?$/.test(c))) rows.push(cells); // lewati baris pemisah |---|
-        }
-        i--;
-        if (!rows.length) continue;
-        const [headRow, ...bodyRows] = rows;
-        out.append(h('div', { class: 'md-table' }, h('table', {},
-          h('thead', {}, h('tr', {}, headRow.map((c) => h('th', {}, inlineMd(c))))),
-          h('tbody', {}, bodyRows.map((r) => h('tr', {}, r.map((c) => h('td', {}, inlineMd(c)))))))));
-        list = null;
-        continue;
-      }
-      const heading = line.match(/^#{1,6}\s+(.*)/);
-      const item = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);
-      if (heading) {
-        out.append(h('p', { class: 'md-h' }, inlineMd(heading[1])));
-        list = null;
-      } else if (item) {
-        if (!list) out.append((list = h('ul')));
-        list.append(h('li', {}, inlineMd(item[1])));
-      } else if (line.trim()) {
-        out.append(h('p', {}, inlineMd(line)));
-        list = null;
-      } else {
-        list = null;
-      }
-    }
-    return out;
-  }
-
-  function renderAiReply(m) {
-    const wrap = h('div', { class: 'msg assistant' }, renderMarkdown(m.content || 'Selesai.'));
-    if (m.mode === 'plan') {
-      wrap.classList.add('plan');
-      wrap.prepend(h('div', { class: 'plan-label' }, 'Rencana'));
-      const runBtn = h('button', { type: 'button', class: 'plan-run' }, '▶ Jalankan rencana ini');
-      runBtn.onclick = () => {
-        if (ai.busy) return;
-        runBtn.disabled = true;
-        runBtn.textContent = 'Dijalankan di mode Builder';
-        setAiMode('build');
-        $('#aiInput').value = 'Jalankan rencana di atas.';
-        sendPrompt();
-      };
-      wrap.append(runBtn);
-      return wrap;
-    }
-    if (!m.changes.length) return wrap;
-
-    const kind = (c) => (c.action === 'table' ? 'table' : c.action === 'delete' ? 'delete' : m.before[c.path] == null ? 'new' : 'edit');
-    const label = { new: 'baru', edit: 'ubah', delete: 'hapus', table: 'tabel' };
-    const actions = h('div', { class: 'changes-actions' });
-    const card = h('div', { class: 'changes' },
-      h('div', { class: 'changes-head' }, h('span', {}, `${m.changes.length} perubahan`)),
-      m.changes.map((c) => (c.action === 'table'
-        ? h('button', {
-          type: 'button',
-          class: 'change-row',
-          title: 'Buka di editor database',
-          onclick: () => { db.active = c.name; setMode('data'); },
-        },
-        h('span', { class: 'badge table' }, label.table),
-        h('span', { class: 'path' }, `${c.name} (${c.columns.map((col) => col.name).join(', ')})`),
-        h('span', { class: 'view' }, 'buka'))
-        : h('button', {
-          type: 'button',
-          class: 'change-row',
-          title: c.action === 'delete' ? c.path : 'Lihat perubahan',
-          onclick: () => (c.action === 'delete' ? null : showDiff(c, m.before[c.path] ?? '')),
-        },
-        h('span', { class: `badge ${kind(c)}` }, label[kind(c)]),
-        h('span', { class: 'path' }, c.path),
-        c.action === 'delete' ? null : h('span', { class: 'view' }, 'lihat')))),
-      actions);
-    const setStatus = (text, cls = '') => actions.replaceChildren(h('span', { class: `changes-status ${cls}` }, text));
-    const STATES = {
-      kept: () => setStatus('✓ Perubahan disimpan'),
-      reverted: () => setStatus('↩ Dibatalkan — file dikembalikan ke versi sebelumnya', 'muted'),
-      failed: () => setStatus(m.error || 'Gagal menerapkan perubahan. File dikembalikan seperti semula.', 'error'),
-    };
-
-    if (m.applyState !== 'pending') {
-      STATES[m.applyState]?.();
-      wrap.append(card);
-      return wrap;
-    }
-
-    // Perubahan sudah diterapkan server (preview sudah berubah); tunggu Simpan atau Batalkan.
-    const keepBtn = h('button', { type: 'button', class: 'apply' }, '✓ Simpan');
-    const revertBtn = h('button', { type: 'button' }, 'Batalkan');
-    const pendingCard = {
-      markKept() {
-        STATES.kept();
-        if (ai.pendingCard === pendingCard) ai.pendingCard = null;
-      },
-    };
-    ai.pendingCard = pendingCard;
-    const settle = async (action) => {
-      keepBtn.disabled = revertBtn.disabled = true;
-      if (action === 'revert') revertBtn.textContent = 'Mengembalikan…';
-      ai.applying = true;
-      updateAiComposer();
-      try {
-        const res = await api('POST', `/api/ai/messages/${m.id}/${action}`);
-        if (ai.pendingCard === pendingCard) ai.pendingCard = null;
-        STATES[res.message.applyState]?.();
-        if (action === 'revert') await syncFromServer(res.touched);
-      } catch (err) {
-        toast(err.message, 'error');
-        keepBtn.disabled = revertBtn.disabled = false;
-        revertBtn.textContent = 'Batalkan';
-      } finally {
-        ai.applying = false;
-        updateAiComposer();
-      }
-    };
-    keepBtn.onclick = () => settle('keep');
-    revertBtn.onclick = () => settle('revert');
-    actions.replaceChildren(
-      h('span', { class: 'changes-question' }, 'Perubahan sudah tampil di preview. Simpan perubahan ini?'),
-      keepBtn,
-      revertBtn,
-    );
-    wrap.append(card);
-    return wrap;
   }
 
   // `before` = isi file sebelum perubahan AI ('' untuk file baru).
@@ -2915,17 +2154,10 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     });
   }
 
-  function autoGrow() {
-    const input = $('#aiInput');
-    input.style.height = 'auto';
-    input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
-  }
-
   function bindAiEvents() {
-    document.querySelectorAll('[data-ai-mode]').forEach((btn) => {
-      btn.onclick = () => { setAiMode(btn.dataset.aiMode); autoFocus($('#aiInput')); };
-    });
-    setAiMode(ai.mode);
+    const context = editorContext();
+    connectAi(context.get('editor'));
+    mount(AiPanel, { target: $('#aiPanel'), context });
     document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
       btn.onclick = () => setMode(btn.dataset.mode);
     });
@@ -2940,17 +2172,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     $('#dbNewTable').onclick = () => openDialog(CreateTableDialog);
     $('#aiCredits').onclick = () => openTopup();
     $('#planBadge').onclick = () => openTopup('plans');
-    $('#aiTopupBtn').onclick = () => openTopup();
-    $('#aiForm').onsubmit = (e) => { e.preventDefault(); sendPrompt(); };
-    bindAiAttachments();
-    const input = $('#aiInput');
-    input.addEventListener('input', () => { autoGrow(); updateAiComposer(); });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-        e.preventDefault();
-        sendPrompt();
-      }
-    });
   }
 
   // ---------- Database (mode Data) ----------

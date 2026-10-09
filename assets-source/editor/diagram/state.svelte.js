@@ -2,12 +2,13 @@
 // Diagram dibuat AI (kode Mermaid) dari file & database project dan disimpan di server per jenis; dibuat ulang hanya
 // saat user menekan "Update diagram". connect() dipanggil editor.js sebelum komponen dipasang.
 import { DIAGRAM_NAMES } from './info.js';
+import { createActivity } from '../ai/activity.svelte.js';
 
 export const ZOOM_MIN = 0.1;
 export const ZOOM_MAX = 5;
 
 // saved: { jenis: { code, notes, updatedAt, canFix } } dari server; busy: jenis yang sedang dibuat AI.
-// status/activity: selama AI membuat diagram — teks status & panel proses AI (elemen dari activityView di editor.js).
+// status/activity: selama AI membuat diagram — teks status & proses AI (createActivity, ditampilkan Activity.svelte).
 // edit: mode Edit — { code, base, error, preview } (preview = kode yang digambar, menyusul ketikan sebentar kemudian).
 // view: posisi & skala kanvas (x, y dalam px layar; z = zoom); w/h = ukuran asli SVG; touched = user sudah zoom/geser.
 // tick: naik untuk menggambar ulang (mis. tema berganti).
@@ -116,7 +117,7 @@ export async function generate(renderError, { instruction } = {}) {
   const kind = diagram.kind;
   diagram.busy = kind;
   diagram.status = `AI sedang membaca project dan menggambar diagram ${DIAGRAM_NAMES[kind]}… (bisa sampai 1–2 menit)`;
-  diagram.activity = host.activityView(() => canvasEl?.querySelector('.diagram-progress'));
+  diagram.activity = createActivity(() => canvasEl?.querySelector('.diagram-progress'));
   try {
     await host.saveAll(); // AI membaca file dari server, jadi simpan perubahan dulu
     const res = await stream({

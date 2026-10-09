@@ -6,6 +6,7 @@
 <script>
   import { getContext, tick, untrack } from 'svelte';
   import Icon from '../Icon.svelte';
+  import Activity from '../ai/Activity.svelte';
   import { DIAGRAM_NAMES } from './info.js';
   import { diagram, savedKind, setCanvas, setEditError, fitDiagram, load, generate, renameLabel, costPerPrompt } from './state.svelte.js';
   import { panZoom } from './panzoom.js';
@@ -91,26 +92,12 @@
     }
   }
 
-  // Elemen yang dibuat di luar Svelte (SVG Mermaid, panel proses AI) dipasang apa adanya.
+  // SVG Mermaid (dibuat di luar Svelte) dipasang apa adanya.
   function place(node, el) {
     const put = (x) => node.replaceChildren(...(x ? [x] : []));
     put(el);
     return { update: put };
   }
-  function append(node, el) {
-    let current = el;
-    if (el) node.append(el);
-    return {
-      update(next) {
-        if (next === current) return;
-        current?.remove();
-        current = next;
-        if (next) node.append(next);
-      },
-      destroy() { current?.remove(); },
-    };
-  }
-
   // Klik (bukan seret) teks di diagram saat mode Edit.
   const LABEL_TAGS = new Set(['text', 'tspan', 'span', 'p', 'div', 'b', 'strong', 'i', 'em']);
   function labelAt(x, y) {
@@ -151,8 +138,9 @@
     <div class="diagram-loading"><span class="dots"><i></i><i></i><i></i></span>Memuat diagram…</div>
   {:else if diagram.busy === diagram.kind}
     <!-- Proses AI (berpikir & kode Mermaid yang sedang ditulis) tampil di bawah status selama diagram dibuat. -->
-    <div class="diagram-progress" use:append={diagram.activity?.el}>
+    <div class="diagram-progress">
       <div class="diagram-loading"><span class="dots"><i></i><i></i><i></i></span><span>{diagram.status}</span></div>
+      {#if diagram.activity}<Activity activity={diagram.activity} />{/if}
     </div>
   {:else if !savedKind()}
     <div class="db-empty">
