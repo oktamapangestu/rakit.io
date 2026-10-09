@@ -1,4 +1,12 @@
 import { mount, unmount } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
+import { core as state } from '../editor/files/state.svelte.js';
+import FileTree from '../editor/files/FileTree.svelte';
+import FileUsage from '../editor/files/Usage.svelte';
+import Tabs from '../editor/files/Tabs.svelte';
+import Breadcrumbs from '../editor/files/Breadcrumbs.svelte';
+import ImageViewer from '../editor/files/ImageViewer.svelte';
+import NewProjectDialog from '../editor/files/NewProjectDialog.svelte';
 import Topup from '../editor/Topup.svelte';
 import Functions from '../editor/functions/Functions.svelte';
 import History from '../editor/history/History.svelte';
@@ -98,22 +106,9 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   const formatBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
   // ---------- State ----------
-  const state = {
-    me: null,
-    entries: [],
-    expanded: new Set(),
-    selected: null,
-    tabs: [],
-    active: null,
-    models: new Map(), // path -> monaco model
-    saved: new Map(), // path -> isi terakhir yang tersimpan di server
-    viewStates: new Map(),
-    saveTimers: new Map(),
-    saveChains: new Map(),
-    previewPath: 'index.html',
-    previewRoute: null, // alamat yang diketik user di bar preview (path + ?query + #hash); null = ikuti previewPath
-    autosave: storage.get('rakit.autosave', true),
-  };
+  // Keadaan inti (project, file, tab) ada di assets-source/editor/files/state.svelte.js, reaktif supaya pohon file,
+  // tab, dan breadcrumb (komponen) mengikuti perubahan di sini.
+  state.autosave = storage.get('rakit.autosave', true);
   let monaco;
   let editor;
 
@@ -203,74 +198,13 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     modal({ title, input: { placeholder, value }, buttons: [{ label: 'OK', primary: true }, { label: 'Batal', value: null }] });
 
   // ---------- Explorer ----------
-  function fileIcon(entry, open) {
-    if (entry.type === 'dir') return h('span', { class: 'ficon dir' }, svg(open ? ICON.folderOpen : ICON.folder));
-    const ext = extOf(entry.path);
-    if (isImage(entry.path)) return h('span', { class: 'ficon img' }, svg(ICON.image));
-    const label = { html: '<>', css: '#', js: 'JS' }[ext] ?? '•';
-    return h('span', { class: `ficon ${ext}` }, label);
-  }
-
-  // Frontend/backend: folder functions/ dijalankan di server dan tidak pernah dikirim ke browser (sama dengan
-  // hidden() di go/internal/sites/sites.go); file lain disajikan apa adanya ke pengunjung.
-  const isBackend = (p) => /^functions(\/|$)/i.test(p);
-  function sideLabel(entry) {
-    if (isBackend(entry.path)) return h('span', { class: 'side be', title: 'Backend: berjalan di server (fungsi /api/fn), kodenya tidak bisa dilihat pengunjung' }, 'BE');
-    if (entry.type === 'dir') return null;
-    return h('span', { class: 'side fe', title: 'Frontend: dikirim ke browser, kodenya bisa dilihat pengunjung' }, 'FE');
-  }
-
-  function childrenOf(dir) {
-    return state.entries
-      .filter((e) => parentOf(e.path) === dir)
-      .sort((a, b) => (a.type !== b.type ? (a.type === 'dir' ? -1 : 1) : a.name.localeCompare(b.name)));
-  }
-
-  function renderTree() {
-    const tree = $('#tree');
-    const rows = [];
-    const walk = (dir, depth) => {
-      for (const entry of childrenOf(dir)) {
-        const isDir = entry.type === 'dir';
-        const open = state.expanded.has(entry.path);
-        const cls = ['row', state.selected === entry.path && 'selected', isDirty(entry.path) && 'dirty'].filter(Boolean).join(' ');
-        rows.push(h('div', {
-          class: cls,
-          style: `padding-left:${8 + depth * 12}px`,
-          title: entry.path,
-          dataset: { path: entry.path, type: entry.type },
-        },
-        h('span', { class: `chev${open ? ' open' : ''}` }, isDir ? svg(ICON.chevron) : null),
-        fileIcon(entry, open),
-        h('span', { class: 'name' }, entry.name),
-        sideLabel(entry),
-        h('button', { type: 'button', class: 'row-more', title: 'Menu', 'aria-label': `Menu ${entry.name}` }, '⋯')));
-        if (isDir && open) walk(entry.path, depth + 1);
-      }
-    };
-    walk('', 0);
-    if (!rows.length) rows.push(h('div', { class: 'empty' }, 'Belum ada file. Klik kanan di sini, pakai tombol di atas, atau seret gambar ke sini.'));
-    tree.replaceChildren(...rows);
-  }
-
-  function renderUsage(usage) {
-    const pct = Math.min(100, (usage.size / usage.limits.totalSize) * 100);
-    const nearlyFull = pct >= 80 || usage.entries >= usage.limits.entries * 0.9;
-    $('#usage').replaceChildren(
-      `${formatBytes(usage.size)} / ${formatBytes(usage.limits.totalSize)} · ${usage.entries} item`,
-      h('div', { class: 'usage-bar' }, h('div', { style: `width:${pct}%` })),
-      nearlyFull && ai.credits?.topupEnabled && !ai.credits.plan
-        ? h('button', { type: 'button', class: 'usage-upgrade', onclick: () => openTopup('plans') }, 'Storage hampir penuh · tambah dengan langganan')
-        : '', // replaceChildren() bawaan browser menulis null sebagai teks "null"
-    );
-  }
+  // Pohon file & pemakaian storage digambar FileTree.svelte & Usage.svelte dari state.
 
   async function loadTree() {
     const { files, usage } = await api('GET', '/api/files');
     state.entries = files;
     state.limits = usage.limits;
-    renderTree();
-    renderUsage(usage);
+    state.usage = usage;
   }
 
   function expandTo(path) {
@@ -290,12 +224,15 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
   // ---------- Editor & tab ----------
   const isDirty = (path) => state.models.has(path) && state.models.get(path).getValue() !== state.saved.get(path);
+  // state.dirty (reaktif) mengikuti isDirty: tanda ● di tab, pohon file, dan judul halaman.
+  const markDirty = (path) => { if (isDirty(path)) state.dirty.add(path); else state.dirty.delete(path); };
 
   function createModel(path, content, savedContent = content) {
     const model = monaco.editor.createModel(content, undefined, monaco.Uri.parse(`file:///${path}`));
     model.onDidChangeContent(() => onContentChange(path));
     state.models.set(path, model);
     state.saved.set(path, savedContent);
+    markDirty(path);
     return model;
   }
 
@@ -338,44 +275,11 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       editor.setModel(null);
     }
     $('#welcome').hidden = Boolean(path);
-    renderTabs();
-    renderTree();
-    renderBreadcrumbs();
     updateStatus();
     flowFollow();
   }
 
-  function renderTabs() {
-    const names = state.tabs.map(baseName);
-    $('#tabs').replaceChildren(...state.tabs.map((path) => {
-      const duplicate = names.filter((n) => n === baseName(path)).length > 1;
-      const cls = ['tab', path === state.active && 'active', isDirty(path) && 'dirty'].filter(Boolean).join(' ');
-      return h('div', {
-        class: cls,
-        title: path,
-        onclick: () => { setMode('code'); activate(path); },
-        onauxclick: (e) => { if (e.button === 1) closeTab(path); },
-      },
-      fileIcon({ type: 'file', path }),
-      h('span', {}, baseName(path)),
-      duplicate && parentOf(path) ? h('span', { class: 'tab-dir' }, parentOf(path)) : null,
-      h('button', {
-        class: 'close',
-        title: 'Tutup',
-        onclick: (e) => { e.stopPropagation(); closeTab(path); },
-      }, svg(ICON.close)));
-    }));
-    $('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    const projectName = state.project ? `${state.project.name} · ` : '';
-    document.title = `${state.active ? `${isDirty(state.active) ? '● ' : ''}${baseName(state.active)} · ` : ''}${projectName}rakit.io`;
-  }
-
-  function renderBreadcrumbs() {
-    const el = $('#breadcrumbs');
-    if (!state.active) return el.replaceChildren();
-    const parts = state.active.split('/');
-    el.replaceChildren(...parts.flatMap((part, i) => (i ? [h('span', { class: 'sep' }, '›'), h('span', {}, part)] : [h('span', {}, part)])));
-  }
+  // Tab & breadcrumb digambar Tabs.svelte & Breadcrumbs.svelte dari state.
 
   function disposeFile(path) {
     clearTimeout(state.saveTimers.get(path));
@@ -384,6 +288,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     state.models.delete(path);
     state.saved.delete(path);
     state.viewStates.delete(path);
+    state.dirty.delete(path);
   }
 
   function removeTabs(predicate) {
@@ -418,10 +323,8 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
   // ---------- Simpan ----------
   function onContentChange(path) {
-    renderTabs();
+    markDirty(path);
     flowContentChanged(path);
-    const row = $(`#tree .row[data-path="${CSS.escape(path)}"]`);
-    row?.classList.toggle('dirty', isDirty(path));
     if (isDirty(path)) setSaveStatus('Belum disimpan', 'dirty');
     if (state.autosave) {
       clearTimeout(state.saveTimers.get(path));
@@ -449,8 +352,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       if (!state.models.has(path)) return true;
       state.saved.set(path, content);
       setSaveStatus(`Tersimpan ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`, 'saved');
-      renderTabs();
-      $(`#tree .row[data-path="${CSS.escape(path)}"]`)?.classList.toggle('dirty', isDirty(path));
+      markDirty(path);
       if (!quiet) schedulePreviewReload();
       refreshUsageSoon();
       return true;
@@ -522,7 +424,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       if (isDirty(newPath) && state.autosave) save(newPath);
     }
     state.tabs = state.tabs.map(map);
-    state.expanded = new Set([...state.expanded].map(map));
+    state.expanded = new SvelteSet([...state.expanded].map(map));
     if (state.active) state.active = map(state.active);
     if (state.selected) state.selected = map(state.selected);
     if (within(state.previewPath, from)) {
@@ -597,17 +499,14 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       if (!hasFiles(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
-      const dir = dropDir(e);
-      tree.querySelectorAll('.row.drop-dir').forEach((r) => r.classList.toggle('drop-dir', r.dataset.path === dir));
-      const row = dir && tree.querySelector(`.row[data-path="${CSS.escape(dir)}"]`);
-      if (row) row.classList.add('drop-dir');
+      state.dropDir = dropDir(e) || null;
     });
     tree.addEventListener('drop', (e) => {
       if (!hasFiles(e)) return;
       e.preventDefault();
       depth = 0;
       tree.classList.remove('drop-target');
-      tree.querySelectorAll('.row.drop-dir').forEach((r) => r.classList.remove('drop-dir'));
+      state.dropDir = null;
       uploadImages([...e.dataTransfer.files], dropDir(e));
     });
   }
@@ -673,42 +572,12 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   function openImage(path) {
-    const entry = state.entries.find((e) => e.path === path);
-    const root = $('#modal');
-    const url = imageUrl(path);
-    const info = h('span', {}, entry ? formatBytes(entry.size) : '');
-    const img = h('img', { src: url, alt: path });
-    img.onload = () => { info.textContent = `${img.naturalWidth} × ${img.naturalHeight} px · ${entry ? formatBytes(entry.size) : ''}`; };
-    img.onerror = () => { info.textContent = 'Gambar tidak bisa ditampilkan.'; };
-
-    const close = () => {
-      root.hidden = true;
-      root.replaceChildren();
-      document.removeEventListener('keydown', onKey, true);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
-    const snippets = [
-      ['Path', `/${path}`],
-      ['HTML', `<img src="/${path}" alt="${baseName(path).replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ')}">`],
-      ['CSS', `background-image: url('/${path}');`],
-    ];
-
-    root.replaceChildren(h('div', { class: 'modal image-modal', role: 'dialog', 'aria-label': `Gambar ${path}` },
-      h('div', { class: 'topup-head' },
-        h('div', {}, h('h3', {}, baseName(path)), h('p', {}, info)),
-        h('button', { class: 'icon-btn', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close))),
-      h('div', { class: 'image-stage' }, img),
-      h('div', { class: 'image-snippets' }, snippets.map(([label, code]) => h('div', { class: 'snippet' },
-        h('span', { class: 'snippet-label' }, label),
-        h('code', {}, code),
-        h('button', { type: 'button', onclick: () => copyText(code, `${label} disalin`) }, 'Salin')))),
-      h('div', { class: 'modal-buttons' },
-        h('button', { type: 'button', onclick: () => { close(); pickImages(parentOf(path), path); } }, 'Ganti gambar…'),
-        h('button', { type: 'button', class: 'danger', onclick: () => { close(); deleteEntry(path); } }, 'Hapus'),
-        h('button', { type: 'button', class: 'primary', onclick: close }, 'Tutup'))));
-    root.hidden = false;
-    root.onmousedown = (e) => { if (e.target === root) close(); };
-    document.addEventListener('keydown', onKey, true);
+    openDialog(ImageViewer, {
+      path,
+      src: imageUrl(path),
+      onReplace: () => pickImages(parentOf(path), path),
+      onDelete: () => deleteEntry(path),
+    });
   }
 
   // ---------- Context menu ----------
@@ -1065,7 +934,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       text: e.text,
     })), () => null);
     model.pushStackElement();
-    renderTabs();
     if (state.autosave) save(path);
     toast(state.autosave ? `${what} diubah di ${path}` : `${what} diubah di ${path} (belum disimpan)`);
   }
@@ -1505,42 +1373,12 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   function openNewProject() {
-    const { body, close } = openPanel('db-modal');
-    const base = state.project.siteHost.slice(state.project.slug.length); // ".rakit.io"
-    const slugInput = h('input', { placeholder: 'tokokue', spellcheck: 'false', autocomplete: 'off', maxlength: '30' });
-    const nameInput = h('input', { placeholder: 'Toko Kue Bu Sari', maxlength: '60' });
-    const preview = h('strong', {}, `namamu${base}`);
-    slugInput.addEventListener('input', () => {
-      const cleaned = slugInput.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-      if (cleaned !== slugInput.value) slugInput.value = cleaned;
-      preview.textContent = `${cleaned || 'namamu'}${base}`;
-    });
-    const error = h('p', { class: 'db-form-error' });
-    const submit = h('button', { type: 'submit', class: 'primary' }, 'Buat project');
-    const form = h('form', {
-      onsubmit: async (e) => {
-        e.preventDefault();
-        submit.disabled = true;
-        try {
-          const { project } = await api('POST', '/api/projects', { slug: slugInput.value, name: nameInput.value });
-          close();
-          await saveAll();
-          location.href = projectUrl(project.slug);
-        } catch (err) {
-          error.textContent = err.message;
-          submit.disabled = false;
-        }
+    openDialog(NewProjectDialog, {
+      onCreated: async (project) => {
+        await saveAll();
+        location.href = projectUrl(project.slug);
       },
-    },
-    h('h3', {}, 'Project baru'),
-    h('p', { class: 'db-note' }, 'Setiap project adalah website terpisah dengan alamat, file, database, dan riwayat AI sendiri. Kredit AI dipakai bersama untuk semua project.'),
-    h('label', { class: 'db-field' }, h('span', { class: 'db-field-label' }, 'Alamat website'), slugInput),
-    h('p', { class: 'project-preview' }, 'Websitemu: ', preview),
-    h('label', { class: 'db-field' }, h('span', { class: 'db-field-label' }, 'Nama project', h('span', { class: 'col-type' }, 'opsional')), nameInput),
-    error,
-    h('div', { class: 'modal-buttons' }, h('button', { type: 'button', onclick: close }, 'Batal'), submit));
-    body.append(form);
-    slugInput.focus();
+    });
   }
 
   async function renameProject() {
@@ -1579,7 +1417,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     $('#siteLink').href = p.siteUrl;
     $('#visitSite').href = p.siteUrl;
     $('#projectSwitch').title = `Project: ${p.name} — ganti atau buat project`;
-    document.title = `${p.name} · rakit.io`;
     renderPublish();
   }
 
@@ -1797,25 +1634,26 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
   // ---------- Event ----------
   function bindEvents() {
+    const context = editorContext();
+    mount(FileTree, { target: $('#tree'), context });
+    mount(FileUsage, { target: $('#usage'), context });
+    mount(Tabs, { target: $('#tabs'), context, props: { onSelect: (path) => { setMode('code'); activate(path); }, onClose: closeTab } });
+    mount(Breadcrumbs, { target: $('#breadcrumbs'), context });
     const tree = $('#tree');
     tree.addEventListener('click', (e) => {
       const row = e.target.closest('.row');
       if (!row) return;
       const { path, type } = row.dataset;
       if (e.target.closest('.row-more')) {
-        // Posisi tombol dibaca sebelum renderTree(): setelahnya tombol ini sudah diganti elemen baru.
         const rect = e.target.closest('.row-more').getBoundingClientRect();
         state.selected = path;
-        renderTree();
         showMenu(rect.right, rect.bottom + 4, treeMenu(state.entries.find((x) => x.path === path)), { align: 'right' });
         return;
       }
       state.selected = path;
       if (type === 'dir') {
         state.expanded.has(path) ? state.expanded.delete(path) : state.expanded.add(path);
-        renderTree();
       } else if (isImage(path)) {
-        renderTree();
         openImage(path);
       } else {
         setMode('code');
@@ -1827,10 +1665,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       e.preventDefault();
       const row = e.target.closest('.row');
       const entry = row ? state.entries.find((x) => x.path === row.dataset.path) : null;
-      if (entry) {
-        state.selected = entry.path;
-        renderTree();
-      }
+      if (entry) state.selected = entry.path;
       showMenu(e.clientX, e.clientY, treeMenu(entry));
     });
     tree.addEventListener('keydown', (e) => {
@@ -1848,7 +1683,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     $('#uploadBtn').onclick = () => pickImages();
     bindImageDrop(tree);
     $('#refreshBtn').onclick = () => loadTree().catch((err) => toast(err.message, 'error'));
-    $('#collapseBtn').onclick = () => { state.expanded.clear(); renderTree(); };
+    $('#collapseBtn').onclick = () => state.expanded.clear();
     $('#reloadPreview').onclick = reloadPreview;
     bindPreviewUrl();
     bindBlockPicker();
@@ -2096,9 +1931,8 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
         // Lewat model supaya Ctrl+Z tetap bisa; isinya sama dengan versi tersimpan, jadi tidak disimpan ulang.
         if (model.getValue() !== content) model.pushEditOperations([], [{ range: model.getFullModelRange(), text: content }], () => null);
       } catch { /* abaikan: file akan dimuat saat dibuka */ }
+      markDirty(path);
     }
-    renderTabs();
-    renderTree();
     const first = paths.find((p) => state.entries.some((e) => e.path === p && e.type === 'file'));
     if (openFirst && first) {
       expandTo(first);

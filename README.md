@@ -69,7 +69,8 @@ tab Data / editor database (`database/`), tab Riwayat versi (`history/`), pengat
 Mode publikasi (`publish/`), tab Console (`console/`), panel Baca Alur Kode (`flow/`; sorotan baris & sinkron dengan
 Monaco tetap di `editor.js`), tab Diagram (`diagram/`; gestur zoom/geser di `diagram/panzoom.js`, Mermaid di
 `mermaid.js`), panel AI (`ai/`: percakapan, job & Proses AI, lampiran, kartu perubahan; Proses AI juga dipakai
-Diagram), dialog penjelasan fitur (`FeatureInfo.svelte`).
+Diagram), dialog penjelasan fitur (`FeatureInfo.svelte`), pohon file/tab/breadcrumb/penampil gambar/project baru (`files/`;
+keadaan inti `core` di `files/state.svelte.js`, model Monaco & antrean simpan tetap di `editor.js`).
 - Keadaan yang juga dipakai kode vanilla disimpan di modul rune `<nama>.svelte.js` (mis.
   `database/state.svelte.js`), bukan di dalam komponen.
 - Komponen memakai sambungan ke editor (api, toast, dialog konfirmasi, kotak AI, buka file, …) lewat
