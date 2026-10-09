@@ -1,39 +1,25 @@
-import { mount, unmount } from 'svelte';
+import { mount, unmount, flushSync } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 import { core as state } from '../editor/files/state.svelte.js';
-import FileTree from '../editor/files/FileTree.svelte';
-import FileUsage from '../editor/files/Usage.svelte';
-import Tabs from '../editor/files/Tabs.svelte';
-import Breadcrumbs from '../editor/files/Breadcrumbs.svelte';
 import ImageViewer from '../editor/files/ImageViewer.svelte';
 import NewProjectDialog from '../editor/files/NewProjectDialog.svelte';
-import PreviewPanel from '../editor/preview/PreviewPanel.svelte';
 import App from '../editor/shell/App.svelte';
-import { ui, toast, showMenu, hideMenu } from '../editor/shell/state.svelte.js';
+import { ui, views, toast, showMenu } from '../editor/shell/state.svelte.js';
 import ConfirmDialog from '../editor/shell/ConfirmDialog.svelte';
 import DiffDialog from '../editor/shell/DiffDialog.svelte';
 import ImageEditDialog from '../editor/preview/ImageEditDialog.svelte';
 import { preview, MAX_BLOCKS, pageName } from '../editor/preview/state.svelte.js';
 import Topup from '../editor/Topup.svelte';
-import Functions from '../editor/functions/Functions.svelte';
-import History from '../editor/history/History.svelte';
 import Assistant from '../editor/assistant/Assistant.svelte';
 import SettingsDialog from '../editor/settings/SettingsDialog.svelte';
 import PublishDialog from '../editor/publish/PublishDialog.svelte';
 import PublishModeDialog from '../editor/publish/PublishModeDialog.svelte';
 import { SPARK, CLOSE } from '../editor/icons.js';
-import TableList from '../editor/database/TableList.svelte';
-import DbUsage from '../editor/database/Usage.svelte';
-import DbMain from '../editor/database/DbMain.svelte';
 import CreateTableDialog from '../editor/database/CreateTableDialog.svelte';
 import { db, connect as connectDb, load as loadDb, loadRows as loadDbRows } from '../editor/database/state.svelte.js';
 import { tableUrl } from '../editor/database/types.js';
 import { rupiah, shortDate } from '../editor/format.js';
 import { clipText, fnFixPrompt } from '../editor/handoff.js';
-import ConsoleTab from '../editor/console/Console.svelte';
-import FlowPanel from '../editor/flow/FlowPanel.svelte';
-import DiagramView from '../editor/diagram/DiagramView.svelte';
-import AiPanel from '../editor/ai/AiPanel.svelte';
 import FeatureInfo from '../editor/FeatureInfo.svelte';
 import {
   ai, connect as connectAi, setMode as setAiModeState, setInput as setAiInput, initHistory as initAiHistory,
@@ -1333,60 +1319,86 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     ui.lang = { html: 'HTML', css: 'CSS', javascript: 'JavaScript' }[model.getLanguageId()] ?? model.getLanguageId();
   }
 
-  // ---------- Splitter ----------
-  function initSplitters() {
-    const widths = storage.get('rakit.widths', {});
-    if (widths.sidebar) $('#sidebar').style.width = `${widths.sidebar}px`;
-    if (widths.preview) $('#preview').style.width = `${widths.preview}px`;
-
-    document.querySelectorAll('.splitter').forEach((splitter) => {
-      splitter.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        const target = $(`#${splitter.dataset.target}`);
-
-        // Lapisan transparan di atas semua elemen (termasuk iframe preview & Monaco) selama drag:
-        // kursor tetap col-resize dan semua gerakan mouse tertangkap di dokumen ini.
-        const overlay = Object.assign(document.createElement('div'), { className: 'resize-overlay' });
-        document.body.append(overlay);
-        splitter.classList.add('dragging');
-
-        const onMove = (ev) => {
-          if (ev.buttons === 0) return end(); // tombol sudah dilepas di luar jangkauan (mis. di luar jendela)
-          const rect = target.getBoundingClientRect();
-          const width = splitter.dataset.target === 'sidebar'
-            ? Math.min(Math.max(ev.clientX - rect.left, 160), 600)
-            : Math.min(Math.max(rect.right - ev.clientX, 240), innerWidth - 480);
-          target.style.width = `${width}px`;
-        };
-        const end = () => {
-          window.removeEventListener('pointermove', onMove);
-          window.removeEventListener('pointerup', end);
-          window.removeEventListener('pointercancel', end);
-          window.removeEventListener('blur', end);
-          overlay.remove();
-          splitter.classList.remove('dragging');
-          storage.set('rakit.widths', {
-            sidebar: $('#sidebar').getBoundingClientRect().width || widths.sidebar,
-            preview: $('#preview').getBoundingClientRect().width || widths.preview,
-          });
-        };
-        window.addEventListener('pointermove', onMove);
-        window.addEventListener('pointerup', end);
-        window.addEventListener('pointercancel', end);
-        window.addEventListener('blur', end);
-      });
-    });
-  }
+  // Splitter: assets-source/editor/shell/resize.js (attachment di App.svelte).
 
   // ---------- Event ----------
-  function bindEvents() {
-    const context = editorContext();
-    mount(FileTree, { target: $('#tree'), context });
-    mount(FileUsage, { target: $('#usage'), context });
-    mount(Tabs, { target: $('#tabs'), context, props: { onSelect: (path) => { setMode('code'); activate(path); }, onClose: closeTab } });
-    mount(Breadcrumbs, { target: $('#breadcrumbs'), context });
-    const tree = $('#tree');
+  // Aksi tombol & panel di kerangka editor (App.svelte, prop actions).
+  function appActions() {
+    return {
+      toggleSidebar,
+      togglePreview,
+      setMode,
+      setMobileView,
+      setLayout: (layout) => {
+        setLayout(layout);
+        ui.layoutAttention = false;
+        storage.set('rakit.layoutSeen', true);
+      },
+      projectMenu: showProjectMenu,
+      accountMenu: showAccountMenu,
+      copySite: () => copyText(state.project.siteUrl),
+      publish: openPublish,
+      topup: (tab) => openTopup(tab),
+      info: showFeatureInfo,
+      createEntry: (type, dir) => createEntry(type, dir),
+      upload: () => pickImages(),
+      refresh: () => loadTree().catch((err) => toast(err.message, 'error')),
+      collapse: () => state.expanded.clear(),
+      openIndex: () => {
+        if (state.entries.some((x) => x.path === 'index.html')) openFile('index.html');
+        else toast('index.html belum ada — buat dulu lewat "File baru"', 'error');
+      },
+      tree: treeEvents,
+      selectTab: (path) => { setMode('code'); activate(path); },
+      closeTab,
+      toggleFlow: () => toggleFlow(),
+      // ← / → di panel Baca Alur Kode (bukan saat mengetik pertanyaan) untuk pindah langkah; Esc menutup panel.
+      flowKey: (e) => {
+        if (e.target.closest('textarea, input')) return;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); stopFlowPlay(); selectFlowStep(flow.step + 1); }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); stopFlowPlay(); selectFlowStep(flow.step - 1); }
+        if (e.key === 'Escape') toggleFlow(false);
+      },
+      flow: {
+        explain: explainFlow,
+        select: selectFlowStep,
+        stopPlay: stopFlowPlay,
+        togglePlay: toggleFlowPlay,
+        close: () => toggleFlow(false),
+        goBack: flowGoBack,
+        openRef: openFlowRef,
+        flashLines: flashFlowLines,
+        ask: askFlow,
+        toggleWide: () => { flow.wide = !flow.wide; },
+        saveShowChart: (open) => { flow.showChart = open; storage.set('rakit.flowChart', open); },
+      },
+      setAutosave: (on) => {
+        state.autosave = on;
+        storage.set('rakit.autosave', on);
+        if (on) saveAll();
+      },
+      historyMenu: showHistoryMenu,
+      clearHistory,
+      newConversation,
+      newTable: () => openDialog(CreateTableDialog),
+      preview: {
+        go: previewGo,
+        currentRoute,
+        reload: reloadPreview,
+        info: () => showFeatureInfo('preview'),
+        togglePick: () => setPick(!pick.on),
+        toggleEdit: () => setTextEdit(!textEdit.on),
+        pickGo: () => { setMobileView('editor'); setMode('ai'); },
+        pickDone: () => setPick(false),
+        textDone: () => setTextEdit(false),
+        setDevice,
+        isMobile: () => mobileQuery.matches,
+      },
+    };
+  }
+
+  // Pohon file (attachment #tree): klik baris / tombol ⋯, klik kanan, F2 & Delete, seret gambar ke folder.
+  function treeEvents(tree) {
     tree.addEventListener('click', (e) => {
       const row = e.target.closest('.row');
       if (!row) return;
@@ -1420,51 +1432,13 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       if (e.key === 'F2') { e.preventDefault(); renameEntry(state.selected); }
       if (e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) { e.preventDefault(); deleteEntry(state.selected); }
     });
-
-    document.addEventListener('mousedown', (e) => { if (!e.target.closest('#ctxmenu')) hideMenu(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideMenu(); });
-    window.addEventListener('blur', hideMenu);
-
-    $('#newFileBtn').onclick = () => createEntry('file');
-    $('#newFolderBtn').onclick = () => createEntry('dir');
-    $('#uploadBtn').onclick = () => pickImages();
     bindImageDrop(tree);
-    $('#refreshBtn').onclick = () => loadTree().catch((err) => toast(err.message, 'error'));
-    $('#collapseBtn').onclick = () => state.expanded.clear();
+  }
+
+  function bindEvents() {
     bindBlockPicker();
-    $('#togglePreview').onclick = togglePreview;
-    $('#publishBtn').onclick = openPublish;
-    $('#toggleSidebar').onclick = toggleSidebar;
     // Tombol Simple/Coding disorot (bercahaya) sampai pengguna pertama kali memakainya.
     ui.layoutAttention = !storage.get('rakit.layoutSeen', false);
-    document.querySelectorAll('.layout-switch [data-layout]').forEach((btn) => {
-      btn.onclick = () => {
-        setLayout(btn.dataset.layout);
-        ui.layoutAttention = false;
-        storage.set('rakit.layoutSeen', true);
-      };
-    });
-
-    const autosave = $('#autosave');
-    autosave.checked = state.autosave;
-    autosave.onchange = () => {
-      state.autosave = autosave.checked;
-      storage.set('rakit.autosave', state.autosave);
-      if (state.autosave) saveAll();
-    };
-
-    $('#avatarBtn').onclick = (e) => { e.stopPropagation(); showAccountMenu(); };
-    $('#copySite').onclick = () => copyText(state.project.siteUrl);
-    $('#projectSwitch').onclick = (e) => { e.stopPropagation(); showProjectMenu($('#projectSwitch')); };
-    $('#welcome').addEventListener('click', (e) => {
-      const action = e.target.closest('[data-action]')?.dataset.action;
-      if (action === 'new-file') createEntry('file', '');
-      else if (action === 'new-folder') createEntry('dir', '');
-      else if (action === 'open-index') {
-        if (state.entries.some((x) => x.path === 'index.html')) openFile('index.html');
-        else toast('index.html belum ada — buat dulu lewat "File baru"', 'error');
-      }
-    });
 
     // Shortcut global (saat fokus di luar Monaco).
     document.addEventListener('keydown', (e) => {
@@ -1510,11 +1484,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
   function showFeatureInfo(key) {
     if (FEATURE_INFO[key]) openDialog(FeatureInfo, { key });
-  }
-
-  function bindFeatureInfo() {
-    $('#modeInfo').onclick = () => showFeatureInfo(ui.mode);
-    $('#filesInfo').onclick = () => showFeatureInfo('files');
   }
 
   // Area editor punya dua mode: 'code' (Monaco) dan 'ai' (chat asisten).
@@ -1572,7 +1541,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   // ---------- Riwayat percakapan ----------
-  async function showHistoryMenu() {
+  async function showHistoryMenu(anchor) {
     let data;
     try {
       data = await api('GET', '/api/ai/threads');
@@ -1580,7 +1549,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       return toast(err.message, 'error');
     }
     const when = (ms) => new Date(ms).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    const rect = $('#aiHistory').getBoundingClientRect();
+    const rect = anchor.getBoundingClientRect();
     showMenu(rect.left, rect.bottom + 6, [
       { label: 'Percakapan baru', run: newConversation },
       data.threads.length ? '-' : null,
@@ -1634,23 +1603,9 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   function bindAiEvents() {
-    const context = editorContext();
-    connectAi(context.get('editor'));
-    mount(AiPanel, { target: $('#aiPanel'), context });
-    document.querySelectorAll('.mode-switch [data-mode]').forEach((btn) => {
-      btn.onclick = () => setMode(btn.dataset.mode);
-    });
-    $('#aiReset').onclick = newConversation;
-    $('#aiHistory').onclick = showHistoryMenu;
-    $('#aiClear').onclick = clearHistory;
-    document.querySelectorAll('.mobile-nav [data-view]').forEach((btn) => {
-      btn.onclick = () => setMobileView(btn.dataset.view);
-    });
+    connectAi(editorContext().get('editor'));
     setMobileView(document.body.dataset.mobileView || 'editor');
     mobileQuery.addEventListener('change', applyResponsiveEditor);
-    $('#dbNewTable').onclick = () => openDialog(CreateTableDialog);
-    $('#aiCredits').onclick = () => openTopup();
-    $('#planBadge').onclick = () => openTopup('plans');
   }
 
   // ---------- Database (mode Data) ----------
@@ -1660,11 +1615,9 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   function dbLoad() {
     if (!dbMounted) {
       dbMounted = true;
-      const context = editorContext();
-      connectDb(context.get('editor'));
-      mount(TableList, { target: $('#dbTableList'), context });
-      mount(DbUsage, { target: $('#dbUsage'), context });
-      mount(DbMain, { target: $('#dbMain'), context });
+      connectDb(editorContext().get('editor'));
+      ui.loaded.data = true;
+      flushSync();
     }
     return loadDb();
   }
@@ -1677,9 +1630,9 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   function diagramLoad() {
     if (!diagramMounted) {
       diagramMounted = true;
-      const context = editorContext();
-      connectDiagram(context.get('editor'));
-      mount(DiagramView, { target: $('#diagramView'), context });
+      connectDiagram(editorContext().get('editor'));
+      ui.loaded.diagram = true;
+      flushSync();
     }
     return loadDiagram();
   }
@@ -1916,27 +1869,9 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
   // ---------- Tampilan panel ----------
   // Panel digambar FlowPanel.svelte dari state flow; aksi di bawah ini (dan di atas) yang menyentuh Monaco/file.
-  let flowApp;
   function mountFlowPanel() {
-    flowApp ??= mount(FlowPanel, {
-      target: $('#flowPanel'),
-      context: editorContext(),
-      props: {
-        actions: {
-          explain: explainFlow,
-          select: selectFlowStep,
-          stopPlay: stopFlowPlay,
-          togglePlay: toggleFlowPlay,
-          close: () => toggleFlow(false),
-          goBack: flowGoBack,
-          openRef: openFlowRef,
-          flashLines: flashFlowLines,
-          ask: askFlow,
-          toggleWide: () => $('#flowPanel').classList.toggle('wide'),
-          saveShowChart: (open) => { flow.showChart = open; storage.set('rakit.flowChart', open); },
-        },
-      },
-    });
+    ui.loaded.flow = true;
+    flushSync();
   }
 
   // Dulu menggambar ulang panel; kini tinggal efek sampingnya: putaran otomatis berhenti dan sorotan di editor
@@ -1984,14 +1919,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   function bindFlowEvents() {
-    $('#flowBtn').addEventListener('click', () => toggleFlow());
-    // ← / → di panel (bukan saat mengetik pertanyaan) untuk pindah langkah; Esc menutup panel.
-    $('#flowPanel').addEventListener('keydown', (e) => {
-      if (e.target.closest('textarea, input')) return;
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); stopFlowPlay(); selectFlowStep(flow.step + 1); }
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); stopFlowPlay(); selectFlowStep(flow.step - 1); }
-      if (e.key === 'Escape') toggleFlow(false);
-    });
     editorReady.then(() => {
       editor.onDidChangeCursorPosition(flowSyncFromCursor);
       if (storage.get('rakit.flowOpen', false)) toggleFlow(true);
@@ -2002,7 +1929,6 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   // Tab Console: assets-source/editor/console (log & saringan di state.svelte.js, tampilan Console.svelte). Log dari
   // preview diterima sejak awal, jadi sambungannya disiapkan saat log pertama tiba.
   let consoleConnected = false;
-  let consoleApp;
   const consoleActive = () => ui.mode === 'console';
   function connectConsoleOnce() {
     if (consoleConnected) return;
@@ -2015,22 +1941,26 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
   function devConsoleOpen() {
     connectConsoleOnce();
-    consoleApp ??= mount(ConsoleTab, { target: $('#consoleView'), context: editorContext() });
+    ui.loaded.console = true;
+    flushSync();
     openConsole();
   }
   // ---------- Fungsi serverless ----------
   // Tab Fungsi: komponen Svelte assets-source/editor/functions/Functions.svelte, dipasang sekali lalu dimuat
   // ulang setiap tab dibuka.
-  let fnApp;
   function fnLoad() {
-    fnApp ??= mount(Functions, { target: $('#fnView'), context: editorContext() });
-    fnApp.load();
+    ui.loaded.fn = true;
+    flushSync();
+    views.fn.load();
   }
 
   // ---------- Riwayat versi ----------
   // Tab Riwayat: komponen Svelte assets-source/editor/history/History.svelte, dipasang saat pertama dibuka.
-  let historyApp;
-  const historyView = () => (historyApp ??= mount(History, { target: $('#historyView'), context: editorContext() }));
+  function historyView() {
+    ui.loaded.history = true;
+    flushSync();
+    return views.history;
+  }
 
   // ---------- Asisten AI untuk website pengguna ----------
   // Disembunyikan sementara dari editor (menu & daftar keuntungan paket). Server, widget di website yang sudah
@@ -2268,27 +2198,9 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   async function init() {
-    // Kerangka editor (App.svelte) dipasang paling awal: semua bagian lain memakai elemen di dalamnya.
-    mount(App, { target: $('.app') });
-    // Panel preview dipasang paling awal: info project & status publikasi langsung menulis ke keadaannya.
-    mount(PreviewPanel, {
-      target: $('#preview'),
-      props: {
-        actions: {
-          go: previewGo,
-          currentRoute,
-          reload: reloadPreview,
-          info: () => showFeatureInfo('preview'),
-          togglePick: () => setPick(!pick.on),
-          toggleEdit: () => setTextEdit(!textEdit.on),
-          pickGo: () => { setMobileView('editor'); setMode('ai'); },
-          pickDone: () => setPick(false),
-          textDone: () => setTextEdit(false),
-          setDevice,
-          isMobile: () => mobileQuery.matches,
-        },
-      },
-    });
+    // Kerangka editor (App.svelte) dipasang paling awal: Monaco & preview memakai elemen di dalamnya. Pohon file,
+    // tab, dan panel AI baru tampil setelah data akun dimuat (ui.ready).
+    mount(App, { target: $('.app'), context: editorContext(), props: { actions: appActions() } });
     editorReady = setupEditor();
     editorReady.catch((err) => {
       console.error(err);
@@ -2315,11 +2227,11 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
     if (storage.get('rakit.previewHidden', false) && !isSimple()) togglePreview();
     setLayout(isSimple() ? 'simple' : 'coding');
     setDevice(storage.get('rakit.device', 'desktop'));
-    initSplitters();
     bindEvents();
     bindAiEvents();
+    ui.ready = true;
+    flushSync();
     bindFlowEvents();
-    bindFeatureInfo();
     const credits = loadCredits();
 
     await loadTree();

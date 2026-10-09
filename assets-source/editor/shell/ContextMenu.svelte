@@ -1,6 +1,6 @@
 <!--
   Menu konteks (#ctxmenu): menu file di pohon, akun, project, riwayat percakapan. Isinya dari showMenu() di
-  state.svelte.js; ditutup editor.js saat klik di luar, Esc, atau jendela kehilangan fokus.
+  state.svelte.js; tertutup saat klik di luar menu, Esc, atau jendela kehilangan fokus.
 -->
 <script>
   import { menu, hideMenu } from './state.svelte.js';
@@ -22,6 +22,9 @@
     el.style.top = `${Math.max(4, Math.min(m.y, innerHeight - height - 4))}px`;
   });
 </script>
+
+<svelte:document onmousedown={(e) => { if (!el.contains(e.target)) hideMenu(); }} onkeydown={(e) => { if (e.key === 'Escape') hideMenu(); }} />
+<svelte:window onblur={hideMenu} />
 
 <div class="ctxmenu" class:history-menu={m?.wide} id="ctxmenu" hidden={!m} bind:this={el}>
   {#if m}

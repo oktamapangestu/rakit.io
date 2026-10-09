@@ -11,7 +11,14 @@ export const ui = $state({
   cursor: '',
   lang: '',
   pubStatus: null, // hasil GET /api/publish (publikasi manual)
+  // Bagian yang butuh data akun & project (pohon file, tab, panel AI) dipasang setelah /api/me selesai.
+  ready: false,
+  // Tab & panel yang dipasang saat pertama kali dibuka.
+  loaded: { data: false, diagram: false, fn: false, history: false, console: false, flow: false },
 });
+
+// Komponen yang fungsinya dipanggil editor.js (bind:this di App.svelte): fn.load(), history.showList()/load().
+export const views = {};
 
 // Menu konteks (ContextMenu.svelte): null = tertutup.
 // { x, y, items: [{ label, hint?, danger?, run } | '-'], align: 'left' | 'right', label?: { title, sub }, wide? }

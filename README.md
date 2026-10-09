@@ -61,9 +61,11 @@ npm run build   # bundel & minify assets-source/ -> public/
 Tiap skrip di `assets-source/js/` dibundel jadi satu file (`scripts/bundle.mjs`, esbuild + compiler Svelte),
 beserta modul & komponen yang diimpornya.
 
-**Editor sedang dipindah bertahap ke [Svelte 5](https://svelte.dev)** (runes). Bagian yang sudah dipindah ada
-di `assets-source/editor/` dan dipasang dari `editor.js` dengan `mount()`; `editor.js` tidak lagi membuat elemen
-sendiri (tanpa `h()`), tinggal logika: Monaco, simpan file, preview & iframe, pengikat event. Sudah dipindah: Langganan & isi ulang kredit (`Topup.svelte`), tab Fungsi (`functions/`),
+**Antarmuka editor ditulis dengan [Svelte 5](https://svelte.dev)** (runes; dipindah bertahap dari JS tanpa framework).
+Komponennya ada di `assets-source/editor/`. `editor.js` memasang satu komponen akar, `shell/App.svelte`, yang menyusun semua bagian
+editor; `editor.js` sendiri tidak lagi membuat elemen atau memasang event per tombol, tinggal logika (Monaco, simpan
+file, preview & iframe, API) yang diberikan ke App lewat prop `actions` dan ke komponen lain lewat context.
+Bagian-bagiannya: Langganan & isi ulang kredit (`Topup.svelte`), tab Fungsi (`functions/`),
 tab Data / editor database (`database/`), tab Riwayat versi (`history/`), pengaturan Asisten AI website
 (`assistant/`, masih disembunyikan lewat `SHOW_ASSISTANT`), dialog Pengaturan (`settings/`), dialog Publikasikan &
 Mode publikasi (`publish/`), tab Console (`console/`), panel Baca Alur Kode (`flow/`; sorotan baris & sinkron dengan
@@ -74,13 +76,14 @@ keadaan inti `core` di `files/state.svelte.js`, model Monaco & antrean simpan te
 (`preview/`: bar alamat, pilih blok & chip-nya di kotak prompt, mode Edit, ukuran layar, dialog ganti gambar; pesan
 dari/ke iframe dan logika edit teks/gambar tetap di `editor.js`), kerangka editor (`shell/App.svelte`: header,
 panel, tab mode, lencana kredit & langganan, status simpan, status bar, navigasi HP; keadaan tampilan `ui` di
-`shell/state.svelte.js`, pengikat tombol & shortcut tetap di `editor.js`), menu konteks & toast (`showMenu()`,
+`shell/state.svelte.js`, splitter di `shell/resize.js`), menu konteks & toast (`showMenu()`,
 `toast()` di `shell/state.svelte.js`), dialog tanya/konfirmasi (`shell/ConfirmDialog.svelte`) dan dialog perbandingan
 file (`shell/DiffDialog.svelte`). `editor.html` kini hanya berisi wadah `.app` kosong dan `#modal`.
 - Keadaan yang juga dipakai `editor.js` disimpan di modul rune `<nama>.svelte.js` (mis.
   `database/state.svelte.js`), bukan di dalam komponen.
 - Komponen memakai sambungan ke editor (api, toast, dialog konfirmasi, kotak AI, buka file, …) lewat
-  `getContext('editor')`, diisi `editorContext()` di `editor.js`. Dialog dibuka dengan `openDialog(Komponen, props)`
+  `getContext('editor')`, diisi `editorContext()` di `editor.js`. Tab yang berat (Data, Diagram, Fungsi, Riwayat,
+  Console, Baca Alur Kode) baru dirender App saat pertama kali dibuka (`ui.loaded`). Dialog dibuka dengan `openDialog(Komponen, props)`
   (komponen menerima prop `close`; Esc atau klik di luar dialog menutupnya; hanya satu dialog sekaligus, dialog baru
 menutup yang lama).
 - Gaya CSS tetap di `assets-source/css/editor.css` (kelas yang sama dengan versi lama tanpa framework).

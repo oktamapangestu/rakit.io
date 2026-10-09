@@ -16,6 +16,7 @@ export const flow = $state({
   seq: 0,
   pending: null, // { path, step }: langkah yang dibuka setelah penjelasan file itu dimuat (tombol Kembali)
   showChart: true,
+  wide: false, // panel dilebarkan
 });
 
 export const flowSteps = () => flow.saved?.explanation?.steps ?? [];
