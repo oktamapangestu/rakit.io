@@ -1,8 +1,10 @@
 // Versi bahasa Inggris aplikasi (rakit.io/en/...), dibuat saat build dari sumber berbahasa Indonesia.
 //
-// Kode di assets-source/js dan public/editor.html tetap ditulis dalam bahasa Indonesia. Kamus di
-// assets-source/i18n/en/<file>.json memetakan teks Indonesia -> Inggris, lalu skrip ini menulis:
-//   public/js/en/<file>.js     (diminify)   dari assets-source/js/<file>.js
+// Kode di assets-source/js, komponen Svelte di assets-source/editor, dan public/editor.html tetap ditulis dalam
+// bahasa Indonesia. Kamus di assets-source/i18n/en/<file>.json memetakan teks Indonesia -> Inggris, lalu skrip
+// ini menulis:
+//   public/js/en/<file>.js     (dibundel & diminify, lihat scripts/bundle.mjs) dari assets-source/js/<file>.js
+//                              beserta modul & komponen .svelte yang diimpornya (memakai kamus <file>.js yang sama)
 //   public/en/editor.html                   dari public/editor.html
 // Halaman landing & panduan berbahasa Inggris ditulis tangan (public/en/index.html, public/en/panduan.html).
 //
@@ -11,6 +13,9 @@
 //   - template `...`        -> isi mentahnya apa adanya, termasuk ${ekspresi}, mis. "Gagal (${res.status})".
 //     Terjemahannya wajib memuat ${ekspresi} yang sama persis (urutannya boleh berbeda).
 //   - HTML: potongan teks di antara tag (tanpa spasi tepi) dan nilai atribut title/placeholder/aria-label/alt.
+//   - Svelte: teks & atribut di markup seperti HTML (teks persis lebih dulu, lalu tanpa spasi tepi), kode di
+//     <script> dan di dalam {...} seperti JS. Kalimat yang memuat nilai ditulis sebagai satu template literal,
+//     mis. {`Sisa ${n} kredit`}, supaya satu kalimat = satu kunci kamus.
 // Teks yang tidak ada di kamus (atau terjemahannya kosong) dibiarkan berbahasa Indonesia. Teks yang sengaja
 // tidak diubah ditulis dengan terjemahan yang sama, mis. "folder": "folder".
 //
@@ -21,7 +26,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { transformSync } from 'esbuild';
+import { parse as parseSvelte } from 'svelte/compiler';
+import { bundle } from './bundle.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DICT_DIR = path.join(ROOT, 'assets-source/i18n/en');
@@ -203,6 +209,64 @@ export function translateJS(src, dict, report) {
   return out;
 }
 
+// ---------- Svelte ----------
+
+// Jenis simpul template Svelte (selain itu: simpul estree = kode JS).
+const SVELTE_NODE = /^(Root|Fragment|Text|Comment|ExpressionTag|HtmlTag|ConstTag|DebugTag|RenderTag|AttachTag|RegularElement|Component|SlotElement|TitleElement|Svelte[A-Za-z]+|IfBlock|EachBlock|AwaitBlock|KeyBlock|SnippetBlock|Attribute|SpreadAttribute|[A-Za-z]+Directive|Script)$/;
+const escapeText = (s, attr) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;')
+  .replace(/"/g, attr ? '&quot;' : '"');
+
+export function translateSvelte(src, dict, report, file = 'komponen.svelte') {
+  const ast = parseSvelte(src, { modern: true, filename: file });
+  const edits = [];
+  // Kunci: teks persis, lalu dengan spasi dirapatkan (seperti hasil Svelte, mis. " dan " di antara dua <code>
+  // yang dipisah baris baru), lalu tanpa spasi tepi.
+  const text = (node, attr) => {
+    const collapsed = node.data.replace(/\s+/g, ' ');
+    const trimmed = collapsed.trim();
+    if (!trimmed) return;
+    const whole = [node.data, collapsed].find((k) => dict[k]);
+    const key = whole ?? trimmed;
+    const en = dict[key];
+    if (en) {
+      report.used.add(key);
+      const raw = src.slice(node.start, node.end);
+      const out = whole ? escapeText(en, attr) : raw.replace(raw.trim(), escapeText(en, attr));
+      edits.push({ start: node.start, end: node.end, text: out });
+    } else if (looksIndonesian(key)) {
+      report.missing.add(key);
+    }
+  };
+  const code = (node) => {
+    const out = translateJS(src.slice(node.start, node.end), dict, report);
+    if (out !== src.slice(node.start, node.end)) edits.push({ start: node.start, end: node.end, text: out });
+  };
+  const walk = (node, attr) => {
+    if (Array.isArray(node)) return node.forEach((n) => walk(n, attr));
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'Text') {
+      if (attr !== false) text(node, attr === true || attr === 'component');
+      return;
+    }
+    if (node.type === 'Comment') return;
+    if (node.type && !SVELTE_NODE.test(node.type)) return code(node);
+    if (node.type === 'Attribute') return walk(node.value, attr === 'component' || HTML_ATTRS.includes(node.name));
+    // Prop teks komponen (mis. <AiButton label="Perbaiki dengan AI" />) diterjemahkan seperti title/placeholder.
+    const component = node.type === 'Component' || node.type === 'SvelteComponent' || node.type === 'SvelteSelf';
+    for (const [key, child] of Object.entries(node)) {
+      if (key === 'metadata' || key === 'css' || key === 'loc') continue;
+      walk(child, component && key === 'attributes' ? 'component' : node.type === 'Script' ? undefined : attr);
+    }
+  };
+  walk(ast.instance);
+  walk(ast.module);
+  walk(ast.fragment);
+  edits.sort((a, b) => b.start - a.start);
+  let out = src;
+  for (const e of edits) out = out.slice(0, e.start) + e.text + out.slice(e.end);
+  return out;
+}
+
 // ---------- HTML ----------
 
 const HTML_ATTRS = ['title', 'placeholder', 'aria-label', 'alt'];
@@ -279,7 +343,7 @@ function saveDict(name, dict) {
   fs.writeFileSync(path.join(DICT_DIR, `${name}.json`), `${JSON.stringify(dict, null, 2)}\n`);
 }
 
-function run(mode) {
+async function run(mode) {
   let missingTotal = 0;
   let errors = 0;
   const jobs = [
@@ -287,10 +351,21 @@ function run(mode) {
     ...HTML_FILES.map((name) => ({ name, kind: 'html', src: path.join(ROOT, 'public', name) })),
   ];
   for (const job of jobs) {
-    const src = fs.readFileSync(job.src, 'utf8');
     const dict = loadDict(job.name);
     const report = { used: new Set(), missing: new Set(), errors: [] };
-    const out = job.kind === 'js' ? translateJS(src, dict, report) : translateHTML(src, dict, report);
+    let out;
+    if (job.kind === 'js') {
+      // Modul & komponen yang diimpor ikut diterjemahkan dengan kamus yang sama; build = tulis hasil bundelnya.
+      await bundle(job.src, path.join(ROOT, 'public/js/en', job.name), {
+        write: mode === 'build',
+        translate: {
+          js: (src) => translateJS(src, dict, report),
+          svelte: (src, file) => translateSvelte(src, dict, report, file),
+        },
+      });
+    } else {
+      out = translateHTML(fs.readFileSync(job.src, 'utf8'), dict, report);
+    }
     for (const e of report.errors) console.error(`  ${job.name}: ${e}`);
     errors += report.errors.length;
 
@@ -309,17 +384,14 @@ function run(mode) {
       console.log(`  ${job.name}: ${missing.length} teks belum diterjemahkan`);
       for (const k of missing.slice(0, mode === 'check' ? Infinity : 10)) console.log(`    - ${JSON.stringify(k).slice(0, 140)}`);
     }
-    if (unused.length) console.log(`  ${job.name}: ${unused.length} terjemahan tidak dipakai lagi (teks sumbernya berubah?)`);
+    if (unused.length) {
+      console.log(`  ${job.name}: ${unused.length} terjemahan tidak dipakai lagi (teks sumbernya berubah?)`);
+      for (const k of unused.slice(0, mode === 'check' ? Infinity : 10)) console.log(`    - ${JSON.stringify(k).slice(0, 140)}`);
+    }
 
-    if (mode === 'build') {
-      if (job.kind === 'js') {
-        const min = transformSync(out, { minify: true, legalComments: 'none', target: 'es2020', loader: 'js' }).code;
-        fs.mkdirSync(path.join(ROOT, 'public/js/en'), { recursive: true });
-        fs.writeFileSync(path.join(ROOT, 'public/js/en', job.name), min);
-      } else {
-        fs.mkdirSync(path.join(ROOT, 'public/en'), { recursive: true });
-        fs.writeFileSync(path.join(ROOT, 'public/en', job.name), localizeEditorPage(out));
-      }
+    if (mode === 'build' && job.kind === 'html') {
+      fs.mkdirSync(path.join(ROOT, 'public/en'), { recursive: true });
+      fs.writeFileSync(path.join(ROOT, 'public/en', job.name), localizeEditorPage(out));
     }
   }
   if (mode === 'check' && (missingTotal || errors)) process.exit(1);
@@ -333,5 +405,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2);
   }
   console.log(`== Bahasa Inggris (${mode}) ==`);
-  run(mode);
+  await run(mode);
 }

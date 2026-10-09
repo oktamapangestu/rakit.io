@@ -1,3 +1,10 @@
+import { mount, unmount } from 'svelte';
+import Topup from '../editor/Topup.svelte';
+import Functions from '../editor/functions/Functions.svelte';
+import { rupiah, shortDate } from '../editor/format.js';
+import { clipText, fnFixPrompt } from '../editor/handoff.js';
+import { consoleLines } from '../editor/functions/console.js';
+
 (() => {
   'use strict';
 
@@ -1620,6 +1627,48 @@
     return close;
   }
 
+  // ---------- Komponen Svelte (assets-source/editor) ----------
+  // Sambungan komponen ke editor, dipasang sebagai context 'editor' (getContext('editor') di komponen).
+  let svelteContext;
+  function editorContext() {
+    svelteContext ??= new Map([['editor', {
+      api,
+      toast,
+      ask,
+      confirm: modal,
+      copyText,
+      askAi,
+      saveAll,
+      loadTree,
+      fileExists: (path) => state.entries.some((e) => e.path === path),
+      openCode: async (path) => { setMode('code'); expandTo(path); await openFile(path); },
+      topupEnabled: () => Boolean(ai.credits?.topupEnabled),
+      openTopup,
+      openDialog,
+      icons: { refresh: ICON.refresh, trash: ICON.trash },
+    }]]);
+    return svelteContext;
+  }
+
+  // Dialog dari komponen Svelte di #modal (seperti openSheet): klik di luar dialog menutupnya. Komponen
+  // menerima prop close.
+  function openDialog(Component, props = {}) {
+    const root = $('#modal');
+    let app;
+    const close = () => {
+      if (!app) return;
+      unmount(app);
+      app = null;
+      root.hidden = true;
+      root.replaceChildren();
+    };
+    root.replaceChildren();
+    root.hidden = false;
+    root.onmousedown = (e) => { if (e.target === root) close(); };
+    app = mount(Component, { target: root, props: { ...props, close }, context: editorContext() });
+    return close;
+  }
+
   async function openPublish() {
     let st;
     try {
@@ -2136,11 +2185,7 @@
   }
 
   // Jembatan dari fitur lain (fungsi, database, diagram, Baca Alur Kode, editor) ke panel AI: tombol yang
-  // mengisi kotak AI dengan permintaan beserta konteksnya. Log/kode panjang dipotong.
-  const clipText = (text, max = 1500) => {
-    const t = String(text ?? '').trim();
-    return t.length > max ? `${t.slice(0, max)}…` : t;
-  };
+  // mengisi kotak AI dengan permintaan beserta konteksnya (lihat juga assets-source/editor/handoff.js).
   function aiButton(label, text, { cls = 'fn-btn', mode = 'build' } = {}) {
     return h('button', {
       type: 'button', class: `${cls} ai-handoff`,
@@ -2148,16 +2193,6 @@
       onclick: (e) => { e.stopPropagation(); askAi(typeof text === 'function' ? text() : text, mode); },
     }, h('span', { class: 'ai-spark', 'aria-hidden': 'true' }, '✦'), label);
   }
-  // Permintaan perbaikan untuk eksekusi fungsi yang gagal (dari log atau uji coba).
-  function fnFixPrompt(name, { status, error, logs, trigger, request }) {
-    const info = [status ? `status ${status}` : '', trigger ? `dipicu ${trigger}` : ''].filter(Boolean).join(', ');
-    const parts = [`Fungsi functions/${name}.js gagal${info ? ` (${info})` : ''}. Cari penyebabnya dan perbaiki kodenya.`];
-    if (request) parts.push(`Request:\n${request}`);
-    if (error) parts.push(`Error:\n${clipText(error)}`);
-    if (logs) parts.push(`console:\n${clipText(logs)}`);
-    return parts.join('\n\n');
-  }
-
   function showFeatureInfo(key) {
     const info = FEATURE_INFO[key];
     if (!info) return;
@@ -4837,6 +4872,10 @@
   }
 
   // ---------- Console ----------
+  // Keluaran console fungsi serverless, diwarnai per level (sama dengan functions/ConsoleView.svelte).
+  const consoleView = (text) => h('pre', { class: 'fn-pre logs' }, consoleLines(text).map((l) =>
+    h('span', { class: `log-line ${l.level}` }, l.tag ? [h('b', { class: 'log-level' }, l.tag), l.text] : l.text)));
+
   // Semua log di satu tempat, berlabel sumbernya: FE (console & error halaman di preview, diteruskan skrip
   // yang disisipkan server — go/internal/sites/console.js), BE (eksekusi fungsi serverless dari log server),
   // Jaringan (fetch/XHR dan file yang gagal dimuat), dan Sistem (halaman dimuat, catatan lain).
@@ -5014,513 +5053,17 @@
     renderConsoleList();
   }
 
+  // ---------- Fungsi serverless ----------
+  // Tab Fungsi: komponen Svelte assets-source/editor/functions/Functions.svelte, dipasang sekali lalu dimuat
+  // ulang setiap tab dibuka.
+  let fnApp;
+  function fnLoad() {
+    fnApp ??= mount(Functions, { target: $('#fnView'), context: editorContext() });
+    fnApp.load();
+  }
+
   // ---------- Riwayat versi ----------
   // Bahasa dibuat sederhana untuk pemula: "versi" = potret semua file project pada satu waktu.
-  // ---------- Fungsi serverless ----------
-  // Kode backend di functions/<nama>.js, dipanggil lewat <situs>/api/fn/<nama> (lihat go/internal/fn):
-  // berjalan di server dengan akses db (sebagai pemilik), env (rahasia project), dan fetch.
-  const FN_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
-  const fnState = { data: null, logs: [], logFilter: '', openLog: null, open: null, form: { method: 'POST', query: '', body: '{\n  "nama": "Ani"\n}' }, result: null, running: false };
-  const FN_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-  const pad2 = (n) => String(n).padStart(2, '0');
-
-  // Jadwal cron (WIB) dalam kalimat, untuk bentuk yang dibuat dialog Jadwal; selain itu ekspresinya.
-  function describeCron(c) {
-    let m;
-    if ((m = /^\*\/(\d+) \* \* \* \*$/.exec(c))) return `setiap ${m[1]} menit`;
-    if (c === '0 * * * *') return 'setiap jam';
-    if ((m = /^(\d+) (\d+) \* \* \*$/.exec(c))) return `setiap hari ${pad2(m[2])}.${pad2(m[1])}`;
-    if ((m = /^(\d+) (\d+) \* \* ([0-7])$/.exec(c))) return `setiap ${FN_DAYS[m[3]]} ${pad2(m[2])}.${pad2(m[1])}`;
-    return c;
-  }
-
-  const fnTemplate = (name) => [
-    `// Fungsi serverless — dipanggil lewat /api/fn/${name}`,
-    '// req: { method, query, headers, body } · ctx: { db, env, fetch, ai }',
-    '//   db   : list / get / insert / update / delete tabel project (sebagai pemilik)',
-    '//   env  : rahasia project (atur di tab Fungsi), mis. env.TELEGRAM_TOKEN',
-    '//   fetch: memanggil API luar',
-    "//   ai   : ai.chat('…') / ai.json / ai.embed — provider & API key di tab Fungsi → Provider AI",
-    'export default async function (req, { db, env, fetch, ai }) {',
-    "  const nama = req.body?.nama ?? req.query.nama ?? 'dunia';",
-    '  return { pesan: `Halo, ${nama}!`, waktu: new Date().toISOString() };',
-    '}',
-    '',
-  ].join('\n');
-
-  async function fnLoadLogs() {
-    try {
-      const q = fnState.logFilter ? `&name=${encodeURIComponent(fnState.logFilter)}` : '';
-      fnState.logs = (await api('GET', `/api/functions/logs?limit=50${q}`)).logs;
-    } catch { /* tetap tampilkan yang lama */ }
-  }
-
-  async function fnLoad() {
-    try {
-      [fnState.data] = await Promise.all([api('GET', '/api/functions'), fnLoadLogs()]);
-    } catch (err) {
-      $('#fnView').replaceChildren(h('div', { class: 'fn-wrap' }, h('p', { class: 'history-empty error' }, err.message)));
-      return;
-    }
-    renderFn();
-  }
-
-  async function fnCreate() {
-    const name = (await ask('Fungsi baru', 'nama-fungsi (huruf kecil, angka, - atau _)'))?.toLowerCase();
-    if (!name) return;
-    if (!FN_NAME_RE.test(name)) return toast('Nama fungsi: huruf kecil, angka, - atau _ (maks. 40)', 'error');
-    const path = `functions/${name}.js`;
-    if (state.entries.some((e) => e.path === path)) return toast(`Fungsi "${name}" sudah ada`, 'error');
-    try {
-      await api('POST', '/api/files', { path });
-      await api('PUT', '/api/files/content', { path, content: fnTemplate(name) });
-      await loadTree();
-      fnState.open = name;
-      await fnLoad();
-      toast(`Fungsi ${name} dibuat`);
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  }
-
-  async function fnRun(name) {
-    fnState.running = true;
-    fnState.result = null;
-    renderFn();
-    try {
-      await saveAll(); // jalankan kode yang terakhir diketik
-      fnState.result = await api('POST', `/api/functions/${encodeURIComponent(name)}/run`, fnState.form);
-    } catch (err) {
-      fnState.result = { error: err.message };
-    }
-    fnState.running = false;
-    renderFn();
-    fnLoad(); // perbarui kuota & log
-  }
-
-  function openSchedule(f) {
-    const min = fnState.data.cron.minMinutes; // 0 = paket tanpa jadwal
-    const current = f.schedule?.cron ?? '';
-    // Satu elemen hanya bisa tampil di satu tempat: kolom jam terpisah untuk harian & mingguan.
-    const dayTime = h('input', { type: 'time', value: '07:00', 'aria-label': 'Jam (harian)' });
-    const weekTime = h('input', { type: 'time', value: '07:00', 'aria-label': 'Jam (mingguan)' });
-    const day = h('select', {}, [1, 2, 3, 4, 5, 6, 0].map((d) => h('option', { value: d }, FN_DAYS[d])));
-    const custom = h('input', { value: current, placeholder: 'menit jam tanggal bulan hari, mis. 0 7 * * 1-5', spellcheck: 'false' });
-    let m;
-    if ((m = /^(\d+) (\d+) \* \* (?:[0-7]|\*)$/.exec(current))) dayTime.value = weekTime.value = `${pad2(m[2])}:${pad2(m[1])}`;
-    if ((m = /^\d+ \d+ \* \* ([0-7])$/.exec(current))) day.value = m[1] === '7' ? '0' : m[1];
-    const timeCron = (input, dow) => { const [hh, mm] = (input.value || '07:00').split(':'); return `${Number(mm)} ${Number(hh)} * * ${dow}`; };
-    const options = [
-      { id: 'off', label: 'Tanpa jadwal', cron: () => '' },
-      { id: '5', label: 'Setiap 5 menit', cron: () => '*/5 * * * *', every: 5 },
-      { id: '15', label: 'Setiap 15 menit', cron: () => '*/15 * * * *', every: 15 },
-      { id: '30', label: 'Setiap 30 menit', cron: () => '*/30 * * * *', every: 30 },
-      { id: 'hour', label: 'Setiap jam', cron: () => '0 * * * *', every: 60 },
-      { id: 'day', label: 'Setiap hari jam', cron: () => timeCron(dayTime, '*'), every: 1440, extra: [dayTime] },
-      { id: 'week', label: 'Setiap minggu', cron: () => timeCron(weekTime, day.value), every: 10080, extra: [day, weekTime] },
-      { id: 'custom', label: 'Kustom (cron, WIB)', cron: () => custom.value, extra: [custom] },
-    ];
-    const guess = () => {
-      if (!current) return 'off';
-      const known = { '*/5 * * * *': '5', '*/15 * * * *': '15', '*/30 * * * *': '30', '0 * * * *': 'hour' }[current];
-      if (known) return known;
-      if (/^\d+ \d+ \* \* \*$/.test(current)) return 'day';
-      if (/^\d+ \d+ \* \* [0-7]$/.test(current)) return 'week';
-      return 'custom';
-    };
-    let chosen = guess();
-    const save = h('button', { type: 'button', class: 'primary' }, 'Simpan');
-    const sync = () => document.querySelectorAll('.cron-option').forEach((el) => el.setAttribute('aria-checked', String(el.dataset.id === chosen)));
-    const close = openSheet('publish-modal', 'Jadwal fungsi', (done) => [
-      h('h3', {}, `Jadwal ${f.name}`),
-      min === 0
-        ? h('div', { class: 'cron-locked' },
-          h('p', {}, 'Jadwal (cron) tersedia untuk paket Pro dan Unlimited: fungsi berjalan otomatis, mis. kirim rekap harian atau bersihkan data lama.'),
-          ai.credits?.topupEnabled ? h('button', { type: 'button', class: 'fn-btn primary', onclick: () => { done(); openTopup('plans'); } }, 'Lihat paket') : null)
-        : h('p', { class: 'fn-note' }, `Berjalan otomatis (WIB) memakai versi publik fungsi; req.method = "CRON". Paketmu: paling sering tiap ${min} menit.`),
-      h('div', { class: 'cron-options', role: 'radiogroup' }, options.map((o) => {
-        const blocked = o.id !== 'off' && (min === 0 || (o.every && o.every < min));
-        return h('div', { class: `cron-option${blocked ? ' blocked' : ''}`, role: 'radio', dataset: { id: o.id }, tabindex: 0,
-          onclick: (e) => { if (blocked || ['INPUT', 'SELECT'].includes(e.target.tagName)) return; chosen = o.id; sync(); } },
-        h('span', { class: 'cron-dot' }), h('span', { class: 'cron-label' }, o.label),
-        o.extra ? h('span', { class: 'cron-extra', onclick: () => { if (!blocked) { chosen = o.id; sync(); } } }, ...o.extra) : null,
-        blocked && o.every ? h('span', { class: 'cron-plan' }, min ? `min. ${min} mnt` : 'Pro') : null);
-      })),
-      f.schedule?.lastRunAt ? h('p', { class: 'fn-note' }, `Terakhir berjalan ${new Date(f.schedule.lastRunAt).toLocaleString('id-ID')} — status ${f.schedule.lastStatus ?? '-'}`) : null,
-      h('div', { class: 'modal-buttons' }, save, h('button', { type: 'button', onclick: done }, 'Batal')),
-    ]);
-    sync();
-    save.onclick = async () => {
-      save.disabled = true;
-      try {
-        const cron = options.find((o) => o.id === chosen).cron();
-        fnState.data = await api('PUT', `/api/functions/${encodeURIComponent(f.name)}/schedule`, { cron });
-        close();
-        renderFn();
-        toast(cron ? `Jadwal ${f.name}: ${describeCron(cron)}` : `Jadwal ${f.name} dimatikan`);
-      } catch (err) {
-        toast(err.message, 'error');
-        save.disabled = false;
-      }
-    };
-  }
-
-  // Kepala section tab Fungsi: judul (+ jumlah) di kiri, kontrol di kanan.
-  const fnSectionHead = (title, count, ...tools) => h('div', { class: 'fn-section-head' },
-    h('h4', {}, title, count != null ? h('span', { class: 'fn-count' }, String(count)) : null), ...tools);
-
-  // Keluaran console fungsi: baris berawalan "[warn] ", "[error] " dst. (lihat go/internal/fn/prelude.js) memulai
-  // entri berlevel; baris lanjutan (mis. JSON bertingkat) ikut level entri sebelumnya.
-  const LOG_LEVEL_RE = /^\[(info|warn|error|debug)\] /;
-  function consoleView(text) {
-    let level = 'log';
-    return h('pre', { class: 'fn-pre logs' }, text.replace(/\n$/, '').split('\n').map((line) => {
-      const m = LOG_LEVEL_RE.exec(line);
-      if (m) level = m[1];
-      else if (!/^\s/.test(line) && !/^[}\]]/.test(line)) level = 'log';
-      return h('span', { class: `log-line ${level}` }, m ? [h('b', { class: 'log-level' }, m[1]), line.slice(m[0].length)] : line || ' ');
-    }));
-  }
-  const logPeek = (text) => text.split('\n').find((l) => l.trim())?.replace(LOG_LEVEL_RE, '').slice(0, 120) ?? '';
-  const logLines = (text) => text.replace(/\n$/, '').split('\n').length;
-
-  function fnLogsSection(d) {
-    const TRIGGER = { http: 'Pengunjung', cron: 'Jadwal', test: 'Uji coba' };
-    const when = (ms) => {
-      const t = new Date(ms);
-      const time = t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      return t.toDateString() === new Date().toDateString() ? time : `${t.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} ${time}`;
-    };
-    const filter = h('select', { onchange: async (e) => { fnState.logFilter = e.target.value; await fnLoadLogs(); renderFn(); } },
-      h('option', { value: '' }, 'Semua fungsi'), d.functions.map((f) => h('option', { value: f.name, selected: f.name === fnState.logFilter }, f.name)));
-    return h('section', { class: 'fn-section' },
-      fnSectionHead('Log eksekusi', null, filter,
-        h('button', { type: 'button', class: 'icon-btn', title: 'Muat ulang log', onclick: async () => { await fnLoadLogs(); renderFn(); } }, svg(ICON.refresh))),
-      fnState.logs.length
-        ? h('ul', { class: 'fn-logs' }, fnState.logs.map((l) => {
-          const open = fnState.openLog === l.id;
-          return h('li', { class: open ? 'open' : '' },
-            h('button', { type: 'button', class: 'fn-log-row', onclick: () => { fnState.openLog = open ? null : l.id; renderFn(); } },
-              h('span', { class: 'fn-log-time' }, when(l.createdAt)),
-              h('code', {}, l.name),
-              h('span', { class: 'fn-log-peek', title: l.logs ? 'Keluaran console' : '' },
-                l.error ? h('span', { class: 'peek-error' }, l.error) : l.logs ? logPeek(l.logs) : ''),
-              l.logs ? h('span', { class: 'fn-log-count', title: 'Jumlah baris console' }, `${logLines(l.logs)} baris`) : null,
-              h('span', { class: `fn-chip ${l.trigger}` }, TRIGGER[l.trigger] ?? l.trigger),
-              l.dev ? h('span', { class: 'env-badge' }, 'DEV') : null,
-              h('span', { class: `fn-status s${String(l.status)[0]}` }, l.status),
-              h('span', { class: 'fn-log-ms' }, `${l.ms} ms`),
-              h('span', { class: 'fn-log-more' }, open ? '▴' : '▾')),
-            open && l.error ? h('p', { class: 'fn-error' }, l.error) : null,
-            open && l.logs ? [h('div', { class: 'fn-label' }, 'console'), consoleView(l.logs)] : null,
-            open && !l.logs && !l.error ? h('p', { class: 'fn-note fn-log-empty' }, 'Tidak ada keluaran console. Tambahkan console.log(...) di kode fungsi untuk melihat isinya di sini.') : null,
-            open && (l.error || l.status >= 500) ? h('div', { class: 'fn-ai-fix' },
-              aiButton('Perbaiki dengan AI', () => fnFixPrompt(l.name, { status: l.status, error: l.error, logs: l.logs, trigger: (TRIGGER[l.trigger] ?? l.trigger).toLowerCase() }))) : null);
-        }))
-        : h('p', { class: 'fn-placeholder' }, 'Belum ada eksekusi. Panggilan dari pengunjung, jadwal, dan uji coba tercatat di sini (100 terakhir).'));
-  }
-
-  function fnTryPanel(f) {
-    const method = h('select', { onchange: (e) => { fnState.form.method = e.target.value; } },
-      ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => h('option', { value: m, selected: m === fnState.form.method }, m)));
-    const query = h('input', { value: fnState.form.query, placeholder: 'query, mis. nama=Ani&halaman=2', spellcheck: 'false', oninput: (e) => { fnState.form.query = e.target.value; } });
-    const body = h('textarea', { rows: 5, spellcheck: 'false', placeholder: 'body JSON (opsional)', oninput: (e) => { fnState.form.body = e.target.value; } });
-    body.value = fnState.form.body;
-    const r = fnState.result;
-    let shown = r?.body ?? '';
-    try { shown = JSON.stringify(JSON.parse(shown), null, 2); } catch { /* bukan JSON */ }
-    return h('div', { class: 'fn-try' },
-      h('div', { class: 'fn-try-row' }, method, query,
-        h('button', { type: 'button', class: 'fn-run', disabled: fnState.running, onclick: () => fnRun(f.name) }, fnState.running ? 'Menjalankan…' : '▶ Jalankan')),
-      body,
-      r ? h('div', { class: 'fn-result' },
-        r.status ? h('div', { class: 'fn-result-head' },
-          h('span', { class: `fn-status s${String(r.status)[0]}` }, r.status), h('span', {}, `${r.ms} ms`), r.headers?.['content-type'] ? h('code', {}, r.headers['content-type']) : null) : null,
-        r.error ? h('p', { class: 'fn-error' }, r.error) : null,
-        shown ? h('pre', { class: 'fn-pre' }, shown) : null,
-        r.logs ? [h('div', { class: 'fn-label' }, 'console'), consoleView(r.logs)] : null,
-        // Hanya bila fungsinya benar-benar berjalan (ada status) — bukan kuota habis/gagal menyimpan.
-        r.status && (r.error || r.status >= 500) ? h('div', { class: 'fn-ai-fix' },
-          aiButton('Perbaiki dengan AI', () => fnFixPrompt(f.name, {
-            status: r.status, error: r.error || (r.status >= 500 ? shown : ''), logs: r.logs, trigger: 'uji coba',
-            request: [`${fnState.form.method} /api/fn/${f.name}${fnState.form.query ? `?${fnState.form.query}` : ''}`, clipText(fnState.form.body, 1000)].filter(Boolean).join('\n'),
-          }))) : null) : null);
-  }
-
-  // ---------- Provider AI (library ai.* di fungsi; API key milik pemilik project) ----------
-  // Contoh model hanya saran di kotak isian; nama model mana pun yang dikenal provider bisa diketik.
-  const AI_KIND_INFO = {
-    openai: { name: 'openai', keyUrl: 'https://platform.openai.com/api-keys', models: ['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4.1'], embed: 'text-embedding-3-small' },
-    anthropic: { name: 'claude', keyUrl: 'https://console.anthropic.com/settings/keys', models: ['claude-sonnet-4-5', 'claude-haiku-4-5'], embed: '' },
-    gemini: { name: 'gemini', keyUrl: 'https://aistudio.google.com/apikey', models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'], embed: 'gemini-embedding-001' },
-    compatible: { name: '', keyUrl: '', models: [], embed: '' },
-  };
-  // Endpoint kompatibel OpenAI yang populer: isi base URL & nama sekali klik.
-  const AI_PRESETS = [
-    { label: 'DeepSeek', name: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-    { label: 'Groq', name: 'groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
-    { label: 'OpenRouter', name: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
-    { label: 'Mistral', name: 'mistral', baseUrl: 'https://api.mistral.ai/v1', model: 'mistral-small-latest' },
-    { label: 'Together', name: 'together', baseUrl: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo' },
-  ];
-  const fnAiTests = new Map(); // nama provider -> hasil tes terakhir
-
-  // Pernyataan soal API key pengguna (tampil di bagian Provider AI dan di dialog tambah/ubah provider).
-  const aiKeyDisclaimer = () => h('div', { class: 'ai-disclaimer', role: 'note' },
-    h('strong', {}, '🔒 API key-mu tetap milikmu.'),
-    ' rakit.io tidak akan mengambil, membagikan, atau memakai API key dan token AI-mu untuk keperluan apa pun selain meneruskan panggilan ',
-    h('code', {}, 'ai.*'), ' dari fungsimu sendiri ke provider yang kamu pilih. Key tidak pernah dikirim ke browser maupun ke kode fungsi, dan dihapus dari database rakit.io saat provider dihapus. ',
-    'Sebagai pengaman tambahan, pasang batas pemakaian (spending limit) di dashboard provider dan ganti key bila curiga bocor.');
-
-  async function testAiProvider(name) {
-    fnAiTests.set(name, { running: true });
-    renderFn();
-    try {
-      fnAiTests.set(name, await api('POST', `/api/functions/ai-providers/${encodeURIComponent(name)}/test`));
-    } catch (err) {
-      fnAiTests.set(name, { ok: false, error: err.message });
-    }
-    fnState.data = await api('GET', '/api/functions').catch(() => fnState.data); // pemakaian hari ini
-    renderFn();
-  }
-
-  function openAiProvider(existing = null) {
-    const kinds = fnState.data.aiKinds;
-    const kind = h('select', { disabled: Boolean(existing) }, Object.keys(AI_KIND_INFO).map((k) => h('option', { value: k, selected: k === (existing?.kind ?? 'openai') }, kinds[k] ?? k)));
-    const name = h('input', { value: existing?.name ?? 'openai', disabled: Boolean(existing), spellcheck: 'false', autocomplete: 'off',
-      oninput: (e) => { e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '-'); nameTouched = true; } });
-    const baseUrl = h('input', { value: existing?.baseUrl ?? '', placeholder: 'https://api.deepseek.com/v1', spellcheck: 'false', autocomplete: 'off' });
-    const apiKey = h('input', { type: 'password', autocomplete: 'new-password', placeholder: existing ? `kosongkan untuk tetap memakai key ${existing.keyHint}` : 'sk-…' });
-    const modelList = h('datalist', { id: 'aiModelList' });
-    const model = h('input', { value: existing?.model ?? '', list: 'aiModelList', spellcheck: 'false', autocomplete: 'off' });
-    const embedModel = h('input', { value: existing?.embedModel ?? '', spellcheck: 'false', autocomplete: 'off' });
-    const isDefault = h('input', { type: 'checkbox', checked: existing ? existing.default : !fnState.data.aiProviders.length });
-    const keyLink = h('a', { target: '_blank', rel: 'noopener' }, 'Dapatkan API key ↗');
-    const presets = h('div', { class: 'ai-presets' }, AI_PRESETS.map((p) => h('button', {
-      type: 'button', class: 'fn-chip',
-      onclick: () => { baseUrl.value = p.baseUrl; if (!existing) name.value = p.name; if (!model.value) model.value = p.model; },
-    }, p.label)));
-    let nameTouched = Boolean(existing);
-    const urlRow = h('label', {}, 'Base URL', baseUrl);
-    const embedRow = h('label', {}, 'Model embedding ', h('span', { class: 'ai-optional' }, '(opsional, untuk ai.embed)'), embedModel);
-    const sync = () => {
-      const info = AI_KIND_INFO[kind.value];
-      const compatible = kind.value === 'compatible';
-      if (!nameTouched) name.value = info.name;
-      presets.hidden = !compatible;
-      urlRow.firstChild.textContent = compatible ? 'Base URL' : 'Base URL (opsional, kosongkan untuk alamat resmi)';
-      baseUrl.required = compatible;
-      keyLink.hidden = !info.keyUrl;
-      keyLink.href = info.keyUrl || '#';
-      modelList.replaceChildren(...info.models.map((m) => h('option', { value: m })));
-      model.placeholder = info.models[0] ?? 'nama model, mis. deepseek-chat';
-      embedRow.hidden = kind.value === 'anthropic';
-      embedModel.placeholder = info.embed || 'nama model embedding (bila didukung)';
-    };
-    kind.addEventListener('change', sync);
-    const save = h('button', { type: 'submit', class: 'primary' }, 'Simpan & tes');
-    const close = openSheet('publish-modal ai-provider-modal', 'Provider AI', (done) => [
-      h('h3', {}, existing ? `Ubah provider ${existing.name}` : 'Tambah provider AI'),
-      h('p', {}, 'Fungsi memakai AI lewat ', h('code', {}, 'ai.chat()'), ', ', h('code', {}, 'ai.json()'), ', dan ', h('code', {}, 'ai.embed()'),
-        ' dengan API key milikmu sendiri — biayanya ditagih provider langsung ke akunmu, bukan oleh rakit.io.'),
-      aiKeyDisclaimer(),
-      h('form', { class: 'ai-provider-form', onsubmit: async (e) => {
-        e.preventDefault();
-        save.disabled = true;
-        try {
-          fnState.data = await api('PUT', '/api/functions/ai-providers', {
-            name: name.value, kind: kind.value, baseUrl: baseUrl.value, apiKey: apiKey.value,
-            model: model.value, embedModel: embedModel.value, default: isDefault.checked,
-          });
-          done();
-          toast(`Provider ${name.value} disimpan. Mengetes koneksi…`);
-          testAiProvider(name.value);
-        } catch (err) {
-          toast(err.message, 'error');
-          save.disabled = false;
-        }
-      } },
-      h('div', { class: 'ai-row' }, h('label', {}, 'Jenis', kind), h('label', {}, 'Nama di kode', name)),
-      presets,
-      urlRow,
-      h('label', {}, h('span', { class: 'ai-label-row' }, 'API key', keyLink), apiKey),
-      h('label', {}, 'Model chat', model, modelList),
-      embedRow,
-      h('label', { class: 'ai-check' }, isDefault, 'Jadikan default (dipakai bila kode tidak menyebut provider)'),
-      h('div', { class: 'modal-buttons' }, save, h('button', { type: 'button', onclick: done }, 'Batal'))),
-    ]);
-    sync();
-    (existing ? apiKey : kind).focus();
-    return close;
-  }
-
-  async function deleteAiProvider(p) {
-    const ok = await modal({ title: `Hapus provider ${p.name}?`, message: `Fungsi yang memakai provider '${p.name}' akan gagal sampai provider ditambahkan lagi. API key-nya ikut dihapus dari server.`, buttons: [{ label: 'Hapus', value: true, danger: true }, { label: 'Batal', value: null }] });
-    if (!ok) return;
-    try {
-      fnState.data = await api('DELETE', `/api/functions/ai-providers/${encodeURIComponent(p.name)}`);
-      fnAiTests.delete(p.name);
-      renderFn();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  }
-
-  async function makeDefaultAiProvider(p) {
-    try {
-      fnState.data = await api('PUT', '/api/functions/ai-providers', { ...p, apiKey: '', default: true });
-      renderFn();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  }
-
-  const AI_EXAMPLE = [
-    "export default async function (req, { db, ai }) {",
-    "  // Teks: provider default, atau pilih { provider: 'gemini', model: '…' }",
-    "  const { text } = await ai.chat(`Buat deskripsi singkat untuk produk: ${req.body.nama}`, {",
-    "    system: 'Kamu penulis toko online yang ramah. Jawab dalam bahasa Indonesia.',",
-    "  });",
-    "",
-    "  // JSON terstruktur: hasilnya langsung objek",
-    "  const data = await ai.json(`Ambil nama & nomor HP dari: ${req.body.pesan}`, { nama: 'string', hp: 'string' });",
-    "",
-    "  // Gambar (vision): URL https, path gambar di project, atau data URL",
-    "  const cek = await ai.chat('Apakah ini bukti transfer? Sebutkan nominalnya.', { images: [req.body.bukti] });",
-    "",
-    "  // Embedding: cari data yang maknanya mirip",
-    "  const [a, b] = await ai.embed(['kue coklat', 'brownies']);",
-    "  return { text, data, cek: cek.text, mirip: ai.similarity(a, b) };",
-    "}",
-  ].join('\n');
-
-  function fnAiProviders(d) {
-    const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}rb` : String(n));
-    const rows = d.aiProviders.map((p) => {
-      const t = fnAiTests.get(p.name);
-      return h('li', {},
-        h('div', { class: 'ai-prov-main' },
-          h('div', { class: 'ai-prov-title' },
-            h('code', {}, p.name),
-            h('span', { class: 'fn-chip' }, d.aiKinds[p.kind] ?? p.kind),
-            p.default ? h('span', { class: 'fn-chip ai-default' }, 'default') : null),
-          h('div', { class: 'ai-prov-meta' },
-            h('span', { title: 'Model chat' }, p.model),
-            p.embedModel ? h('span', { title: 'Model embedding' }, `embed: ${p.embedModel}`) : null,
-            h('span', { title: 'API key' }, `key ${p.keyHint}`),
-            h('span', { title: 'Pemakaian hari ini (WIB)' }, p.today.calls
-              ? `${p.today.calls} panggilan · ${fmt(p.today.inputTokens + p.today.outputTokens)} token${p.today.errors ? ` · ${p.today.errors} gagal` : ''} hari ini`
-              : 'belum dipakai hari ini')),
-          t ? h('div', { class: `ai-test ${t.running ? '' : t.ok ? 'ok' : 'fail'}` },
-            t.running ? 'Mengetes koneksi…' : t.ok ? `✓ Tersambung (${t.ms} ms) — jawaban: "${String(t.text).trim().slice(0, 60)}"` : `✕ ${t.error}`) : null),
-        h('div', { class: 'ai-prov-actions' },
-          h('button', { type: 'button', class: 'fn-btn', disabled: t?.running, onclick: () => testAiProvider(p.name) }, 'Tes'),
-          !p.default ? h('button', { type: 'button', class: 'fn-btn', onclick: () => makeDefaultAiProvider(p) }, 'Jadikan default') : null,
-          h('button', { type: 'button', class: 'fn-btn', onclick: () => openAiProvider(p) }, 'Ubah'),
-          h('button', { type: 'button', class: 'icon-btn', title: `Hapus ${p.name}`, onclick: () => deleteAiProvider(p) }, svg(ICON.trash))));
-    });
-    return h('section', { class: 'fn-section' },
-      fnSectionHead('Provider AI', d.aiProviders.length || null,
-        d.aiProviders.length ? aiButton('Buat fitur AI', 'Buatkan fungsi serverless yang memakai ai.chat dari provider AI-ku untuk ') : null,
-        h('button', { type: 'button', class: 'fn-btn primary', onclick: () => openAiProvider() }, '+ Tambah provider')),
-      h('p', { class: 'fn-note' }, 'Pakai AI di fungsi lewat ', h('code', {}, 'ai.chat()'), ', ', h('code', {}, 'ai.json()'), ', dan ', h('code', {}, 'ai.embed()'),
-        ' — satu cara untuk OpenAI, Claude, Gemini, dan endpoint kompatibel OpenAI (DeepSeek, Groq, OpenRouter, …). Memakai API key milikmu; waktu menunggu AI tidak dihitung ke batas waktu fungsi.'),
-      aiKeyDisclaimer(),
-      rows.length ? h('ul', { class: 'fn-secrets ai-providers' }, rows)
-        : h('p', { class: 'fn-placeholder' }, 'Belum ada provider. Tambahkan API key OpenAI, Claude, Gemini, atau provider lain, lalu panggil ai.chat(…) dari fungsi.'),
-      h('details', { class: 'fn-help ai-example' },
-        h('summary', {}, 'Contoh kode'),
-        h('div', { class: 'ai-example-tools' }, h('button', { type: 'button', class: 'fn-btn', onclick: () => copyText(AI_EXAMPLE, 'Contoh kode disalin') }, 'Salin')),
-        h('pre', { class: 'fn-pre' }, AI_EXAMPLE)));
-  }
-
-  function fnSecrets(d) {
-    const name = h('input', { placeholder: 'NAMA_RAHASIA', spellcheck: 'false', autocomplete: 'off', oninput: (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'); } });
-    const value = h('input', { type: 'password', placeholder: 'isi (mis. API key)', autocomplete: 'new-password' });
-    const save = async () => {
-      try {
-        fnState.data = await api('PUT', '/api/functions/secrets', { name: name.value, value: value.value });
-        toast(`Rahasia ${name.value} disimpan`);
-        renderFn();
-      } catch (err) {
-        toast(err.message, 'error');
-      }
-    };
-    const remove = async (s) => {
-      const ok = await modal({ title: `Hapus rahasia ${s.name}?`, message: 'Fungsi yang memakai env.' + s.name + ' akan mendapat undefined.', buttons: [{ label: 'Hapus', value: true, danger: true }, { label: 'Batal', value: null }] });
-      if (!ok) return;
-      try {
-        fnState.data = await api('DELETE', `/api/functions/secrets/${encodeURIComponent(s.name)}`);
-        renderFn();
-      } catch (err) {
-        toast(err.message, 'error');
-      }
-    };
-    return h('section', { class: 'fn-section' },
-      fnSectionHead('Rahasia (env)', d.secrets.length || null),
-      h('p', { class: 'fn-note' }, 'Untuk API key & token. Dibaca fungsi lewat ', h('code', {}, 'env.NAMA'), ' — tidak pernah terkirim ke browser pengunjung, dan isinya tidak ditampilkan lagi setelah disimpan.'),
-      d.secrets.length ? h('ul', { class: 'fn-secrets' }, d.secrets.map((s) => h('li', {},
-        h('code', {}, s.name), h('span', { class: 'fn-dots' }, '••••••••'),
-        h('button', { type: 'button', class: 'icon-btn', title: `Hapus ${s.name}`, onclick: () => remove(s) }, svg(ICON.trash))))) : null,
-      h('form', { class: 'fn-secret-form', onsubmit: (e) => { e.preventDefault(); save(); } }, name, value, h('button', { type: 'submit', class: 'fn-btn primary' }, 'Simpan')));
-  }
-
-  function renderFn() {
-    const d = fnState.data;
-    if (!d) return;
-    const usage = d.usage;
-    const list = d.functions.map((f) => h('div', { class: `fn-item${fnState.open === f.name ? ' open' : ''}` },
-      h('div', { class: 'fn-item-head' },
-        h('span', { class: 'fn-icon' }, svg('M9.3 1 3 9.2h4.2L6.3 15l6.6-8.4H8.7z')),
-        h('div', { class: 'fn-item-text' },
-          h('strong', {}, f.name,
-            f.schedule ? h('span', { class: `fn-sched${f.schedule.active ? '' : ' off'}`, title: f.schedule.note || `Berikutnya: ${f.schedule.nextRunAt ? new Date(f.schedule.nextRunAt).toLocaleString('id-ID') : '-'}` },
-              `⏱ ${describeCron(f.schedule.cron)}`) : null),
-          h('code', { title: f.url }, f.url.replace(/^https?:\/\//, ''))),
-        h('button', { type: 'button', class: 'fn-btn', onclick: () => openSchedule(f) }, 'Jadwal'),
-        h('button', { type: 'button', class: 'fn-btn', onclick: () => copyText(f.url, 'URL fungsi disalin') }, 'Salin URL'),
-        h('button', { type: 'button', class: 'fn-btn', onclick: async () => { setMode('code'); expandTo(f.path); await openFile(f.path); } }, 'Buka kode'),
-        aiButton('Ubah', `Ubah fungsi ${f.path} supaya `),
-        h('button', { type: 'button', class: 'fn-btn primary', onclick: () => { fnState.open = fnState.open === f.name ? null : f.name; fnState.result = null; renderFn(); } }, fnState.open === f.name ? 'Tutup' : 'Coba')),
-      fnState.open === f.name ? fnTryPanel(f) : null));
-    const used = usage.limit ? Math.min(1, usage.today / usage.limit) : 0;
-    $('#fnView').replaceChildren(h('div', { class: 'fn-wrap' },
-      h('div', { class: 'fn-head' },
-        h('div', {}, h('h3', {}, 'Fungsi serverless'),
-          h('p', {}, 'Kode backend yang berjalan di server: simpan API key dengan aman, olah data, kirim notifikasi, atau panggil layanan lain.')),
-        h('div', { class: 'fn-head-actions' },
-          aiButton('Buat dengan AI', 'Buatkan fungsi serverless yang '),
-          h('button', { type: 'button', class: 'fn-new', onclick: fnCreate }, '+ Fungsi baru'))),
-      h('div', { class: 'fn-usage' },
-        h('div', { class: 'fn-usage-top' },
-          h('span', { class: 'fn-usage-count' }, h('strong', {}, usage.today.toLocaleString('id-ID')), ` / ${usage.limit.toLocaleString('id-ID')} eksekusi hari ini`),
-          h('span', { class: 'fn-usage-meta' },
-            h('span', { class: 'fn-chip' }, `Paket ${usage.plan}`),
-            h('span', { class: 'fn-chip', title: 'Batas per eksekusi' }, `maks. ${d.limits.timeoutSeconds} dtk`),
-            h('span', { class: 'fn-chip', title: 'Batas memori per eksekusi' }, `${d.limits.memoryMb} MB`))),
-        h('div', { class: `fn-meter${used >= 0.9 ? ' full' : ''}`, role: 'progressbar', 'aria-label': 'Eksekusi hari ini', 'aria-valuemin': '0', 'aria-valuemax': String(usage.limit), 'aria-valuenow': String(usage.today) },
-          h('span', { style: `width: ${(used * 100).toFixed(1)}%` }))),
-      h('section', { class: 'fn-section' },
-        fnSectionHead('Fungsi', d.functions.length),
-        list.length ? list : h('div', { class: 'fn-empty' },
-          h('span', { class: 'fn-icon' }, svg('M9.3 1 3 9.2h4.2L6.3 15l6.6-8.4H8.7z')),
-          h('p', {}, 'Belum ada fungsi. Fungsi disimpan di folder ', h('code', {}, 'functions/'), ' dan langsung bisa dipanggil dari halaman website-mu.'),
-          h('button', { type: 'button', class: 'fn-btn primary', onclick: fnCreate }, 'Buat fungsi pertama'))),
-      fnAiProviders(d),
-      fnSecrets(d),
-      fnLogsSection(d),
-      h('details', { class: 'fn-help' },
-        h('summary', {}, 'Cara memanggil dari halaman website'),
-        h('pre', { class: 'fn-pre' }, [
-          "const res = await fetch('/api/fn/kirim-pesan', {",
-          "  method: 'POST',",
-          "  headers: { 'Content-Type': 'application/json' },",
-          "  body: JSON.stringify({ nama: 'Ani', pesan: 'Halo!' }),",
-          '});',
-          'const data = await res.json();',
-        ].join('\n')))));
-  }
-
   const hist = { list: [], history: null, selected: null, detail: null, seq: 0 };
 
   // Panel sempit (HP): daftar versi dan detailnya ditampilkan bergantian, masing-masing layar penuh.
@@ -6003,362 +5546,44 @@
   }
 
   // ---------- Langganan & isi ulang kredit (QRIS) ----------
-  const rupiah = (n) => `Rp${n.toLocaleString('id-ID')}`;
-  const shortDate = (iso) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-  const mb = (bytes) => `${Math.round(bytes / 1048576)} MB`;
-  const PLAN_RANK = { pro: 1, unlimited: 2 };
-
-  // tab: 'plans' (langganan) | 'credits' (paket kredit). Default: langganan kalau belum berlangganan.
-  // intro: tampilan sambutan saat editor pertama kali dibuka (ada tombol "Nanti saja").
-  // tab 'assistant': isi ulang Saldo Asisten AI website; `after` dipanggil setelah modal ditutup dari layar sukses.
+  // Tampilan & alur pembayarannya: komponen Svelte assets-source/editor/Topup.svelte.
+  // tab: 'plans' (langganan) | 'credits' (paket kredit) | 'assistant' (Saldo Asisten AI website).
+  // intro: sambutan saat editor pertama kali dibuka. after: dipanggil setelah isi saldo asisten berhasil.
   function openTopup(tab, { intro = false, after = null } = {}) {
     const root = $('#modal');
-    const body = h('div', { class: 'modal topup-modal', role: 'dialog', 'aria-label': 'Langganan & kredit AI' });
-    let pollTimer;
-    let countdownTimer;
-    let closed = false;
-
-    const stopTimers = () => {
-      clearTimeout(pollTimer);
-      clearInterval(countdownTimer);
-    };
-    // Tampilan promosi memakai modal lebar di tengah layar; kembali normal saat lanjut ke pembayaran/ditutup.
-    const setPromoLayout = (on) => {
-      root.classList.toggle('promo-backdrop', on);
-      body.classList.toggle('promo-modal', on);
-    };
+    let app;
     const close = () => {
-      closed = true;
-      stopTimers();
-      setPromoLayout(false);
+      if (!app) return;
+      unmount(app);
+      app = null;
+      root.classList.remove('promo-backdrop');
       root.hidden = true;
       root.replaceChildren();
       document.removeEventListener('keydown', onKey, true);
     };
     const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
 
-    root.replaceChildren(body);
+    root.replaceChildren();
     root.hidden = false;
     root.onmousedown = (e) => { if (e.target === root) close(); };
     document.addEventListener('keydown', onKey, true);
-
-    const head = (title, subtitle) => h('div', { class: 'topup-head' },
-      h('div', {}, h('h3', {}, title), subtitle ? h('p', {}, subtitle) : null),
-      h('button', { class: 'icon-btn', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close)));
-    const loadingView = (text) => h('div', { class: 'topup-loading' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), text);
-    const errorView = (message) => [
-      h('p', { class: 'topup-error' }, message),
-      h('div', { class: 'modal-buttons' }, h('button', { type: 'button', class: 'primary', onclick: showPackages }, 'Coba lagi')),
-    ];
-
-    let data;
-    async function showPackages() {
-      stopTimers();
-      body.replaceChildren(head('Langganan & kredit AI'), loadingView('Memuat paket…'));
-      try {
-        data = await api('GET', '/api/billing/packages');
-      } catch (err) {
-        return body.replaceChildren(head('Langganan & kredit AI'), ...errorView(err.message));
-      }
-      if (closed) return;
-      ai.credits = data.credits;
-      renderCredits();
-      if (tab === 'assistant') {
-        if (!data.enabled || !data.assistantPackages?.length) {
-          return body.replaceChildren(head('Isi saldo asisten'), h('p', { class: 'topup-error' }, 'Pembayaran belum tersedia saat ini.'));
-        }
-        return showAssistantPackages();
-      }
-      if (!data.enabled || (!data.packages.length && !data.plans.length)) {
-        return body.replaceChildren(head('Langganan & kredit AI'),
-          h('p', { class: 'topup-error' }, 'Pembayaran belum tersedia saat ini.'));
-      }
-      if (intro) {
-        if (!data.plans.length || data.credits.plan) return close(); // tidak ada yang bisa ditawarkan
-        return showPromo();
-      }
-      if (!data.plans.length) tab = 'credits';
-      if (!data.packages.length) tab = 'plans';
-      tab ??= data.credits.plan ? 'credits' : 'plans';
-      if (tab === 'plans') showPlans();
-      else showCredits();
-    }
-
-    const tabs = () => (data.plans.length && data.packages.length
-      ? h('div', { class: 'topup-tabs', role: 'tablist' }, [['plans', 'Langganan'], ['credits', 'Isi kredit']].map(([id, label]) => h('button', {
-        type: 'button',
-        role: 'tab',
-        'aria-selected': String(tab === id),
-        onclick: () => { tab = id; if (id === 'plans') showPlans(); else showCredits(); },
-      }, label)))
-      : null);
-
-    // Promosi langganan untuk pengguna gratis (muncul maks. sekali sehari, lihat maybeShowPlansIntro).
-    function showPromo() {
-      setPromoLayout(true);
-      const free = data.credits;
-      const freeStore = data.free?.storage;
-      const times = (a, b) => (a && b && a / b >= 1.5 ? `${Math.round(a / b)}×` : null);
-      const CHECK = 'M6.2 11.6 2.9 8.3l-.9.9 4.2 4.2 8-8-.9-.9z';
-      const RIBBON = { pro: 'Paling populer', unlimited: 'Paling lega' };
-
-      const features = (plan) => [
-        plan.credits
-          ? [`${plan.credits.toLocaleString('id-ID')} kredit AI / 30 hari`, times(plan.credits, free.limit * 30)]
-          : [`AI hingga ${plan.dailyLimit} prompt / hari`, times(plan.dailyLimit, free.limit)],
-        [`Storage ${mb(plan.storage.totalSize)} per project`, times(plan.storage.totalSize, freeStore?.totalSize)],
-        [`Database ${mb(plan.storage.dbBytes)} per project`, times(plan.storage.dbBytes, freeStore?.dbBytes)],
-        [`Gambar hingga ${mb(plan.storage.imageSize)} per file`, times(plan.storage.imageSize, freeStore?.imageSize)],
-        [`${plan.storage.entries.toLocaleString('id-ID')} file & folder`, times(plan.storage.entries, freeStore?.entries)],
-        [`Riwayat versi ${plan.history.days} hari`, times(plan.history.days, data.free?.history?.days)],
-        ...(SHOW_ASSISTANT && plan.assistant ? [[`Saldo asisten AI website ${rupiah(plan.assistant)}/30 hari`, null]] : []),
-      ];
-      const cards = data.plans.map((plan, i) => h('div', { class: `promo-card ${plan.id}`, style: `--delay:${120 + i * 90}ms` },
-        RIBBON[plan.id] ? h('span', { class: 'promo-ribbon' }, RIBBON[plan.id]) : null,
-        h('div', { class: 'promo-name' }, plan.name),
-        h('div', { class: 'promo-price' }, rupiah(plan.price), h('span', {}, '/30 hari')),
-        h('ul', { class: 'promo-features' }, features(plan).map(([text, mult]) => h('li', {},
-          svg(CHECK), h('span', {}, text), mult ? h('b', { class: 'promo-mult', title: 'dibanding paket Gratis' }, mult) : null))),
-        h('button', { type: 'button', class: 'promo-cta', onclick: () => startPayment({ planId: plan.id }) }, `Mulai ${plan.name}`)));
-
-      const left = free.freeRemaining;
-      const bonus = free.bonusRemaining ?? 0;
-      body.replaceChildren(...[
-        h('button', { class: 'icon-btn promo-close', type: 'button', title: 'Tutup', onclick: close }, svg(ICON.close)),
-        h('div', { class: 'promo-hero' },
-          h('span', { class: 'promo-orb a' }), h('span', { class: 'promo-orb b' }),
-          h('span', { class: 'promo-kicker' }, svg(SPARK), 'Upgrade rakit.io'),
-          h('h2', {}, 'Bangun lebih banyak, lebih cepat.'),
-          h('p', {}, 'Kredit AI berlimpah, storage lega, dan upload gambar lebih besar.'),
-          bonus
-            ? h('div', { class: 'promo-today' },
-              h('span', {}, `Bonus awal ${bonus} kredit masih tersedia (sekali, tidak berkurang tiap hari)`))
-            : null,
-          free.limit
-            ? h('div', { class: `promo-today${left ? '' : ' empty'}` },
-              h('span', {}, left ? `Kredit gratis hari ini tinggal ${left} dari ${free.limit}` : `Kredit gratis hari ini (${free.limit}) sudah habis`),
-              h('span', { class: 'promo-meter' }, h('i', { style: `width:${free.limit ? (left / free.limit) * 100 : 0}%` })))
-            : null),
-        h('div', { class: 'promo-grid' }, cards),
-        h('ul', { class: 'promo-trust' },
-          h('li', {}, svg(CHECK), 'Bayar QRIS — semua e-wallet & m-banking'),
-          h('li', {}, svg(CHECK), 'Aktif instan setelah bayar'),
-          h('li', {}, svg(CHECK), 'Tanpa tagihan otomatis')),
-        data.livemode ? null : h('p', { class: 'topup-test promo-test' }, 'Mode uji coba — tidak ada uang sungguhan yang ditarik.'),
-        h('button', { type: 'button', class: 'promo-later', onclick: close }, 'Nanti saja, lanjut dengan paket Gratis'),
-      ].filter(Boolean));
-    }
-
-    function showPlans() {
-      const current = data.credits.plan;
-      const features = (plan) => [
-        plan.credits ? `${plan.credits.toLocaleString('id-ID')} kredit AI tiap 30 hari` : `AI tanpa kuota bulanan (maks. ${plan.dailyLimit} prompt/hari)`,
-        `Storage ${mb(plan.storage.totalSize)} per project`,
-        `Database ${mb(plan.storage.dbBytes)} per project`,
-        `Upload gambar hingga ${mb(plan.storage.imageSize)} per file`,
-        `Riwayat versi ${plan.history.days} hari`,
-        SHOW_ASSISTANT && plan.assistant ? `Saldo asisten AI website ${rupiah(plan.assistant)} / 30 hari` : null,
-        `Maks. ${plan.storage.entries.toLocaleString('id-ID')} file & folder`,
-      ];
-      const cards = data.plans.map((plan) => {
-        const isCurrent = current?.id === plan.id;
-        const lower = current && PLAN_RANK[plan.id] < PLAN_RANK[current.id];
-        const label = isCurrent ? 'Perpanjang 30 hari' : lower ? `Kamu sudah ${current.name}` : current ? `Upgrade ke ${plan.name}` : `Pilih ${plan.name}`;
-        return h('div', { class: `plan-card${isCurrent ? ' current' : ''}${plan.id === 'unlimited' ? ' featured' : ''}` },
-          h('div', { class: 'plan-name' }, plan.name, isCurrent ? h('span', { class: 'plan-tag' }, 'Aktif') : null),
-          h('div', { class: 'plan-price' }, rupiah(plan.price), h('span', {}, ' / 30 hari')),
-          h('ul', { class: 'plan-features' }, features(plan).filter(Boolean).map((text) => h('li', {}, text))),
-          h('button', {
-            type: 'button',
-            class: lower ? '' : 'primary',
-            disabled: lower,
-            onclick: () => startPayment({ planId: plan.id }),
-          }, label));
-      });
-
-      const free = data.credits;
-      const status = current
-        ? h('div', { class: 'topup-balance' },
-          h('span', {}, `Paket ${current.name} aktif sampai `, h('strong', {}, shortDate(current.expiresAt))),
-          h('strong', {}, current.id === 'unlimited' ? `${current.quotaRemaining}/${current.quota} prompt hari ini` : `${current.quotaRemaining} kredit`))
-        : h('div', { class: 'topup-balance' },
-          h('span', {}, 'Paket sekarang: ', h('strong', {}, 'Gratis')),
-          h('span', {}, `Bonus awal ${free.bonusLimit} kredit + ${free.limit} kredit/hari · storage 20 MB`));
-
-      body.replaceChildren(...[
-        intro
-          ? head('Bangun lebih banyak dengan rakit.io', 'Kamu sedang memakai paket Gratis. Berlangganan untuk kredit AI lebih banyak dan storage lebih besar. Bayar sekali dengan QRIS untuk 30 hari, tanpa tagihan otomatis.')
-          : head('Langganan rakit.io', 'Bayar sekali dengan QRIS untuk 30 hari, tanpa tagihan otomatis. Bonus storage langsung aktif setelah pembayaran.'),
-        intro ? null : tabs(),
-        status,
-        h('div', { class: 'plan-grid' }, cards),
-        current && current.id !== 'unlimited' && data.plans.some((p) => p.id === 'unlimited')
-          ? h('p', { class: 'topup-note' }, `Upgrade ke Unlimited: sisa masa aktif ${current.name} dikonversi jadi hari Unlimited sesuai harga.`)
-          : null,
-        data.livemode ? null : h('p', { class: 'topup-test' }, 'Mode uji coba — tidak ada uang sungguhan yang ditarik.'),
-        intro ? h('div', { class: 'modal-buttons' }, h('button', { type: 'button', onclick: close }, 'Nanti saja, pakai paket Gratis')) : null,
-      ].filter(Boolean));
-    }
-
-    function showCredits() {
-
-      let selected = data.packages[Math.min(1, data.packages.length - 1)];
-      const cards = data.packages.map((pkg) => h('button', {
-        type: 'button',
-        class: 'pkg',
-        onclick: () => { selected = pkg; mark(); },
+    app = mount(Topup, {
+      target: root,
+      props: {
+        tab,
+        intro,
+        api,
+        showAssistant: SHOW_ASSISTANT,
+        icons: { close: ICON.close, spark: SPARK },
+        onCredits: (credits) => { ai.credits = credits; renderCredits(); },
+        onPlanPaid: () => loadTree().catch(() => {}), // perbarui kuota storage di sidebar
+        onUseAI: () => { close(); setMode('ai'); },
+        onAfter: () => { close(); after?.(); },
+        // Promosi memakai modal lebar di tengah layar.
+        onPromo: (on) => root.classList.toggle('promo-backdrop', on),
+        onClose: close,
       },
-      h('span', { class: 'pkg-credits' }, String(pkg.credits)),
-      h('span', { class: 'pkg-label' }, 'kredit'),
-      h('span', { class: 'pkg-price' }, rupiah(pkg.price))));
-      const mark = () => cards.forEach((card, i) => card.classList.toggle('selected', data.packages[i] === selected));
-      mark();
-
-      const c = data.credits;
-      body.replaceChildren(...[
-        head('Isi ulang kredit AI', 'Kredit yang dibeli tidak hangus, dan dipakai setelah kuota langganan & kredit gratis harianmu habis.'),
-        tabs(),
-        h('div', { class: 'topup-balance' },
-          h('span', {}, 'Sisa kredit sekarang'),
-          h('strong', {}, `${c.remaining} kredit`)),
-        h('div', { class: 'pkg-grid' }, cards),
-        data.livemode ? null : h('p', { class: 'topup-test' }, 'Mode uji coba — tidak ada uang sungguhan yang ditarik.'),
-        h('div', { class: 'modal-buttons' },
-          h('button', { type: 'button', onclick: close }, 'Batal'),
-          h('button', { type: 'button', class: 'primary', onclick: () => startPayment({ packageId: selected.id }) }, 'Bayar dengan QRIS')),
-      ].filter(Boolean)); // replaceChildren() bawaan browser menulis null sebagai teks "null"
-    }
-
-    // Paket isi ulang Saldo Asisten AI (Rupiah dibayar = saldo yang didapat).
-    function showAssistantPackages() {
-      let selected = data.assistantPackages[Math.min(1, data.assistantPackages.length - 1)];
-      const cards = data.assistantPackages.map((pkg) => h('button', {
-        type: 'button',
-        class: 'pkg',
-        onclick: () => { selected = pkg; mark(); },
-      },
-      h('span', { class: 'pkg-credits' }, rupiah(pkg.amount)),
-      h('span', { class: 'pkg-label' }, 'saldo asisten')));
-      const mark = () => cards.forEach((card, i) => card.classList.toggle('selected', data.assistantPackages[i] === selected));
-      mark();
-      body.replaceChildren(...[
-        head('Isi saldo asisten AI', 'Saldo dipakai setiap kali asisten menjawab pengunjung websitemu. Saldo tidak hangus.'),
-        h('div', { class: 'pkg-grid' }, cards),
-        data.livemode ? null : h('p', { class: 'topup-test' }, 'Mode uji coba — tidak ada uang sungguhan yang ditarik.'),
-        h('div', { class: 'modal-buttons' },
-          h('button', { type: 'button', onclick: close }, 'Batal'),
-          h('button', { type: 'button', class: 'primary', onclick: () => startPayment({ assistantPackageId: selected.id }) }, 'Bayar dengan QRIS')),
-      ].filter(Boolean));
-    }
-
-    async function startPayment(item) {
-      setPromoLayout(false);
-      body.replaceChildren(head('Pembayaran'), loadingView('Membuat kode QRIS…'));
-      try {
-        const { payment } = item.planId
-          ? await api('POST', '/api/billing/subscribe', { planId: item.planId })
-          : item.assistantPackageId
-            ? await api('POST', '/api/billing/assistant-topup', { packageId: item.assistantPackageId })
-            : await api('POST', '/api/billing/topup', { packageId: item.packageId });
-        if (!closed) showPayment(payment);
-      } catch (err) {
-        if (!closed) body.replaceChildren(head('Pembayaran'), ...errorView(err.message));
-      }
-    }
-
-    function showPayment(payment) {
-      const timer = h('strong', {}, '');
-      const status = h('div', { class: 'pay-status' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), 'Menunggu pembayaran…');
-      const qr = payment.qr
-        ? h('img', { class: 'qr', src: payment.qr, alt: 'Kode QRIS' })
-        : h('div', { class: 'qr qr-missing' }, 'Kode QR tidak tersedia. Gunakan halaman pembayaran.');
-
-      body.replaceChildren(
-        head('Scan untuk membayar', payment.plan ? `Langganan ${payment.plan} 30 hari` : payment.assistant ? `Saldo Asisten AI ${rupiah(payment.amount)}` : `${payment.credits} kredit AI`),
-        h('div', { class: 'pay-body' },
-          h('div', { class: 'qr-card' },
-            h('div', { class: 'qris-label' }, 'QRIS'),
-            qr,
-            h('div', { class: 'pay-amount' }, rupiah(payment.amount)),
-            h('div', { class: 'pay-timer' }, 'Bayar dalam ', timer)),
-          h('div', { class: 'pay-side' },
-            h('p', { class: 'pay-title' }, payment.instructions?.title || 'Cara membayar'),
-            h('ol', { class: 'pay-steps' }, (payment.instructions?.steps?.length
-              ? payment.instructions.steps
-              : ['Buka aplikasi e-wallet atau mobile banking yang mendukung QRIS.', 'Scan kode QR di samping.', 'Periksa nominal, lalu konfirmasi pembayaran.']
-            ).map((step) => h('li', {}, step))),
-            status,
-            payment.checkoutUrl ? h('a', { class: 'pay-link', href: payment.checkoutUrl, target: '_blank', rel: 'noopener' }, 'Buka halaman pembayaran ↗') : null)),
-        h('div', { class: 'modal-buttons' },
-          h('button', { type: 'button', onclick: () => { tab = payment.plan ? 'plans' : payment.assistant ? 'assistant' : 'credits'; showPackages(); } }, 'Ganti paket'),
-          h('button', { type: 'button', onclick: close }, 'Tutup')),
-      );
-
-      const tick = () => {
-        const ms = Date.parse(payment.expiresAt) - Date.now();
-        if (Number.isNaN(ms)) return (timer.textContent = '—');
-        if (ms <= 0) return showEnded('expired');
-        const m = Math.floor(ms / 60000);
-        const s = Math.floor((ms % 60000) / 1000);
-        timer.textContent = `${m}:${String(s).padStart(2, '0')}`;
-      };
-      tick();
-      countdownTimer = setInterval(tick, 1000);
-
-      const poll = async () => {
-        if (closed) return;
-        try {
-          const res = await api('GET', `/api/billing/payments/${encodeURIComponent(payment.id)}`);
-          if (closed) return;
-          if (res.credits) { ai.credits = res.credits; renderCredits(); }
-          if (res.payment.status === 'succeeded') return showSuccess(res.payment, res.credits);
-          if (res.payment.status !== 'pending') return showEnded(res.payment.status);
-        } catch { /* coba lagi di putaran berikutnya */ }
-        pollTimer = setTimeout(poll, 3000);
-      };
-      pollTimer = setTimeout(poll, 3000);
-    }
-
-    function showSuccess(payment, credits) {
-      stopTimers();
-      const plan = credits?.plan;
-      if (payment.plan) loadTree().catch(() => {}); // perbarui kuota storage di sidebar
-      body.replaceChildren(
-        head('Pembayaran berhasil'),
-        h('div', { class: 'topup-result ok' },
-          h('div', { class: 'result-icon' }, '✓'),
-          payment.assistant
-            ? [h('h4', {}, `+${rupiah(payment.amount)} saldo asisten`),
-              h('p', {}, 'Asisten di websitemu siap menjawab pengunjung. Terima kasih!')]
-            : payment.plan
-            ? [h('h4', {}, `${plan?.name ?? payment.plan} aktif`),
-              h('p', {}, plan ? `Berlaku sampai ${shortDate(plan.expiresAt)}. Bonus storage sudah aktif di semua project-mu. Terima kasih!` : 'Terima kasih!')]
-            : [h('h4', {}, `+${payment.credits} kredit ditambahkan`),
-              h('p', {}, `Sisa kreditmu sekarang ${credits?.remaining ?? ''} kredit. Terima kasih!`)]),
-        h('div', { class: 'modal-buttons' },
-          payment.assistant
-            ? h('button', { type: 'button', class: 'primary', onclick: () => { close(); after?.(); } }, 'Kembali ke pengaturan asisten')
-            : h('button', { type: 'button', class: 'primary', onclick: () => { close(); setMode('ai'); } }, 'Lanjut pakai AI')),
-      );
-    }
-
-    function showEnded(status) {
-      stopTimers();
-      const text = {
-        expired: 'Waktu pembayaran habis. Buat kode QRIS baru untuk mencoba lagi.',
-        failed: 'Pembayaran gagal. Silakan coba lagi.',
-        canceled: 'Pembayaran dibatalkan.',
-      }[status] ?? 'Pembayaran tidak dapat diproses.';
-      body.replaceChildren(
-        head('Pembayaran tidak selesai'),
-        h('div', { class: 'topup-result' }, h('div', { class: 'result-icon' }, '!'), h('p', {}, text)),
-        h('div', { class: 'modal-buttons' },
-          h('button', { type: 'button', onclick: close }, 'Tutup'),
-          h('button', { type: 'button', class: 'primary', onclick: showPackages }, 'Coba lagi')),
-      );
-    }
-
-    showPackages();
+    });
   }
 
   // Tema warna editor, disamakan dengan palet UI.

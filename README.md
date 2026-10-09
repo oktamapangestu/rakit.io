@@ -54,9 +54,25 @@ data/          database & file user (dibuat otomatis, jangan di-commit)
 Edit sumbernya di `assets-source/`, lalu bangun ulang:
 
 ```bash
-npm install     # sekali saja (memasang esbuild)
-npm run build   # minify assets-source/ -> public/
+npm install     # sekali saja (memasang esbuild & Svelte)
+npm run build   # bundel & minify assets-source/ -> public/
 ```
+
+Tiap skrip di `assets-source/js/` dibundel jadi satu file (`scripts/bundle.mjs`, esbuild + compiler Svelte),
+beserta modul & komponen yang diimpornya.
+
+**Editor sedang dipindah bertahap ke [Svelte 5](https://svelte.dev)** (runes). Bagian yang sudah dipindah ada
+di `assets-source/editor/` dan dipasang dari `editor.js` dengan `mount()`. Bagian lain masih vanilla JS
+(`h()` + DOM). Sudah dipindah: Langganan & isi ulang kredit (`Topup.svelte`), tab Fungsi (`functions/`).
+- Komponen memakai sambungan ke editor (api, toast, dialog konfirmasi, kotak AI, buka file, …) lewat
+  `getContext('editor')`, diisi `editorContext()` di `editor.js`. Dialog dibuka dengan `openDialog(Komponen, props)`
+  (komponen menerima prop `close`).
+- Gaya CSS tetap di `assets-source/css/editor.css` (kelas yang sama dengan versi vanilla).
+- Teks ditulis dalam bahasa Indonesia apa adanya di markup (termasuk prop teks komponen, mis.
+  `<AiButton label="Ubah" />`), tanpa fungsi `t()`. Kalimat yang memuat nilai ditulis
+  sebagai satu template literal, mis. ``{`Sisa ${c.remaining} kredit`}``, supaya satu kalimat = satu kunci kamus
+  (lihat bagian bahasa di bawah). Svelte membuang spasi di awal/akhir isi elemen, jadi teks yang butuh spasi tepi
+  ditulis sebagai string: `<span>{' / 30 hari'}</span>`.
 
 Server menyisipkan `?v=<hash>` pada referensi aset di HTML dan mengirimnya dengan
 `Cache-Control: immutable`, sehingga pengunjung otomatis memuat versi baru saat
@@ -73,7 +89,7 @@ lewat tombol ID/EN, yaitu `?lang=id|en`). Bila cookie berisi `en`, alamat Indone
   Indonesianya diubah, ubah juga versi Inggrisnya (id anchor harus tetap sama).
 - **Editor** tetap ditulis dalam bahasa Indonesia. `npm run build` membuat `public/js/en/*.js` dan
   `public/en/editor.html` dari kamus `assets-source/i18n/en/<file>.json` (teks Indonesia → Inggris; lihat
-  `scripts/i18n.mjs`). Setelah menambah/mengubah teks di editor:
+  `scripts/i18n.mjs`). Komponen Svelte yang diimpor `editor.js` memakai kamus `editor.js.json` yang sama. Setelah menambah/mengubah teks di editor:
   ```bash
   npm run i18n:extract   # teks baru masuk ke kamus dengan nilai "" — isi terjemahannya
   npm run build

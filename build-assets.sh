@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Minify aset frontend rakit.io.
-# Sumber asli: assets-source/js, assets-source/css
+# Sumber asli: assets-source/js, assets-source/css (+ modul & komponen Svelte di assets-source/editor, dibundel
+#              ke skrip yang mengimpornya oleh scripts/bundle.mjs)
 # Hasil:       public/js, public/css  (nama file sama, isi diminify), plus versi Inggris di public/js/en
 #              dan public/en/editor.html (lihat scripts/i18n.mjs)
 set -euo pipefail
@@ -14,8 +15,7 @@ echo "== Minify JavaScript =="
 for f in assets-source/js/*.js; do
   name=$(basename "$f")
   before=$(wc -c < "$f")
-  "$ESBUILD" "$f" --minify --legal-comments=none --target=es2020 \
-    --outfile="public/js/$name" --log-level=warning
+  node scripts/bundle.mjs "$f" "public/js/$name"
   after=$(wc -c < "public/js/$name")
   pct=$(( (before - after) * 100 / before ))
   printf "  %-14s %7d -> %7d bytes  (-%d%%)\n" "$name" "$before" "$after" "$pct"
