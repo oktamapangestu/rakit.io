@@ -7,17 +7,30 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { compile } from 'svelte/compiler';
+import { compile, compileModule } from 'svelte/compiler';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = path.join(ROOT, 'assets-source') + path.sep;
 
 // translate: { js(src, file), svelte(src, file) } -> sumber yang sudah diterjemahkan (hanya untuk file di
 // assets-source/, bukan node_modules). write = false: hanya memeriksa (i18n check/extract).
+// Peringatan compiler Svelte -> format esbuild (baris menunjuk ke sumber asli).
+const toWarning = (w, file, source) => ({
+  text: `${w.code}: ${w.message}`,
+  location: w.start && { file, line: w.start.line, column: w.start.column, lineText: source.split('\n')[w.start.line - 1] },
+});
+
 export async function bundle(entry, outfile, { translate = null, write = true } = {}) {
   const plugins = [{
     name: 'rakit',
     setup(b) {
+      // Modul dengan rune ($state, $derived) di luar komponen, mis. state bersama: <nama>.svelte.js.
+      b.onLoad({ filter: /\.svelte\.js$/ }, async (args) => {
+        let source = await fs.readFile(args.path, 'utf8');
+        if (translate && args.path.startsWith(SOURCE)) source = translate.js(source, args.path);
+        const { js, warnings } = compileModule(source, { filename: path.relative(ROOT, args.path), generate: 'client' });
+        return { contents: js.code, loader: 'js', resolveDir: path.dirname(args.path), warnings: warnings.map((w) => toWarning(w, args.path, source)) };
+      });
       b.onLoad({ filter: /\.svelte$/ }, async (args) => {
         let source = await fs.readFile(args.path, 'utf8');
         if (translate && args.path.startsWith(SOURCE)) source = translate.svelte(source, args.path);
@@ -26,10 +39,7 @@ export async function bundle(entry, outfile, { translate = null, write = true } 
           contents: js.code,
           loader: 'js',
           resolveDir: path.dirname(args.path),
-          warnings: warnings.map((w) => ({
-            text: `${w.code}: ${w.message}`,
-            location: w.start && { file: args.path, line: w.start.line, column: w.start.column, lineText: source.split('\n')[w.start.line - 1] },
-          })),
+          warnings: warnings.map((w) => toWarning(w, args.path, source)),
         };
       });
       if (translate) {

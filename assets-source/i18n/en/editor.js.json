@@ -425,7 +425,7 @@
   "Privat — tidak tampil di API publik": "Private — hidden from the public API",
   "Hapus baris": "Delete row",
   "Belum ada data. Klik \"+ Baris\", atau kirim data dari websitemu.": "No data yet. Click \"+ Row\", or send data from your website.",
-  "${from}–${to} dari ${dbState.total} baris": "${from}–${to} of ${dbState.total} rows",
+  "${from}–${to} dari ${db.total} baris": "${from}–${to} of ${db.total} rows",
   "Sebelumnya": "Previous",
   "Berikutnya": "Next",
   "Klik dua kali untuk mengubah": "Double-click to edit",
@@ -433,8 +433,6 @@
   "Baris #${row.id} di tabel \"${t.name}\" akan dihapus permanen.": "Row #${row.id} in table \"${t.name}\" will be deleted permanently.",
   "Tabel yang ditunjuk": "Referenced table",
   "— pilih tabel —": "— choose a table —",
-  "— kosongkan —": "— empty —",
-  "(gagal memuat baris)": "(couldn't load rows)",
   "2026-12-31 atau 2026-12-31T19:00": "2026-12-31 or 2026-12-31T19:00",
   "Baris ditambahkan": "Row added",
   "Tambah baris ke ${t.name}": "Add a row to ${t.name}",
@@ -1061,5 +1059,6 @@
   " / 30 hari": " / 30 days",
   "${plan?.name ?? payment.plan} aktif": "${plan?.name ?? payment.plan} active",
   "langsung": "live",
-  "folder": "folder"
+  "folder": "folder",
+  "otomatis": "auto"
 }

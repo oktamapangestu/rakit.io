@@ -63,10 +63,13 @@ beserta modul & komponen yang diimpornya.
 
 **Editor sedang dipindah bertahap ke [Svelte 5](https://svelte.dev)** (runes). Bagian yang sudah dipindah ada
 di `assets-source/editor/` dan dipasang dari `editor.js` dengan `mount()`. Bagian lain masih vanilla JS
-(`h()` + DOM). Sudah dipindah: Langganan & isi ulang kredit (`Topup.svelte`), tab Fungsi (`functions/`).
+(`h()` + DOM). Sudah dipindah: Langganan & isi ulang kredit (`Topup.svelte`), tab Fungsi (`functions/`),
+tab Data / editor database (`database/`).
+- Keadaan yang juga dipakai kode vanilla disimpan di modul rune `<nama>.svelte.js` (mis.
+  `database/state.svelte.js`), bukan di dalam komponen.
 - Komponen memakai sambungan ke editor (api, toast, dialog konfirmasi, kotak AI, buka file, …) lewat
   `getContext('editor')`, diisi `editorContext()` di `editor.js`. Dialog dibuka dengan `openDialog(Komponen, props)`
-  (komponen menerima prop `close`).
+  (komponen menerima prop `close`; Esc atau klik di luar dialog menutupnya).
 - Gaya CSS tetap di `assets-source/css/editor.css` (kelas yang sama dengan versi vanilla).
 - Teks ditulis dalam bahasa Indonesia apa adanya di markup (termasuk prop teks komponen, mis.
   `<AiButton label="Ubah" />`), tanpa fungsi `t()`. Kalimat yang memuat nilai ditulis

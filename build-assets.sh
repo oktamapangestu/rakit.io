@@ -17,8 +17,9 @@ for f in assets-source/js/*.js; do
   before=$(wc -c < "$f")
   node scripts/bundle.mjs "$f" "public/js/$name"
   after=$(wc -c < "public/js/$name")
-  pct=$(( (before - after) * 100 / before ))
-  printf "  %-14s %7d -> %7d bytes  (-%d%%)\n" "$name" "$before" "$after" "$pct"
+  # Hasil bundel bisa lebih besar dari sumbernya (ikut memuat komponen & runtime Svelte).
+  pct=$(( (after - before) * 100 / before ))
+  printf "  %-14s %7d -> %7d bytes  (%+d%%)\n" "$name" "$before" "$after" "$pct"
 done
 
 echo "== Minify CSS =="
