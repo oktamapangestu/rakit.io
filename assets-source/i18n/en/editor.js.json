@@ -684,7 +684,7 @@
   "Request dari halaman ${e.page || '/'} gagal:\\n${clipText(e.text)}\\n\\nCari penyebabnya (kode yang memanggilnya, tabel database / akses publik, atau fungsi serverless yang dituju) dan perbaiki.": "A request from page ${e.page || '/'} failed:\\n${clipText(e.text)}\\n\\nFind the cause (the code that calls it, the database table / public access, or the serverless function it targets) and fix it.",
   "Ada error di console halaman ${e.page || '/'}:\\n${clipText(e.text)}\\n\\nCari penyebabnya dan perbaiki kodenya.": "There's an error in the console of page ${e.page || '/'}:\\n${clipText(e.text)}\\n\\nFind the cause and fix the code.",
   "Halaman ${e.page}": "Page ${e.page}",
-  "${devConsole.unread} error baru": "${devConsole.unread} new errors",
+  "${unread} error baru": "${unread} new errors",
   "pengunjung": "visitor",
   "jadwal": "schedule",
   "uji coba": "test",

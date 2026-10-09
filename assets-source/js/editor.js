@@ -15,7 +15,10 @@ import { db, connect as connectDb, load as loadDb, loadRows as loadDbRows } from
 import { tableUrl } from '../editor/database/types.js';
 import { rupiah, shortDate } from '../editor/format.js';
 import { clipText, fnFixPrompt } from '../editor/handoff.js';
-import { consoleLines } from '../editor/functions/console.js';
+import ConsoleTab from '../editor/console/Console.svelte';
+import FlowPanel from '../editor/flow/FlowPanel.svelte';
+import { flow, flowSteps, flowStale } from '../editor/flow/state.svelte.js';
+import { connect as connectConsole, add as addConsoleLog, open as openConsole } from '../editor/console/state.svelte.js';
 
 (() => {
   'use strict';
@@ -1646,7 +1649,13 @@ import { consoleLines } from '../editor/functions/console.js';
       imageUrl,
       hasPlan: () => Boolean(ai.credits?.plan),
       schedulePreviewReload,
-      icons: { refresh: ICON.refresh, trash: ICON.trash, table: ICON.table, gear: ICON.gear, lock: ICON.lock, close: ICON.close },
+      reloadPreview,
+      consoleActive,
+      renderConsoleBadge,
+      renderMarkdown,
+      linkifyLines,
+      loadMermaid,
+      icons: { refresh: ICON.refresh, trash: ICON.trash, table: ICON.table, gear: ICON.gear, lock: ICON.lock, close: ICON.close, flow: ICON.flow },
     }]]);
     return svelteContext;
   }
@@ -3657,30 +3666,11 @@ import { consoleLines } from '../editor/functions/console.js';
   // Panel di samping editor kode: AI menjelaskan alur file yang sedang dibuka langkah demi langkah. Klik langkah →
   // barisnya disorot di editor; klik baris di editor → langkahnya dibuka. Rujukan ke file lain membuka file itu
   // (dengan tombol kembali). Gratis dengan batas harian; hasil disimpan server per file + hash isi.
-  const flow = {
-    open: false,
-    path: null, // file yang sedang ditampilkan panel
-    saved: null, // { explanation, hash, createdAt } dari server
-    hash: null, // hash isi editor sekarang
-    step: 0, // indeks langkah aktif
-    loading: null, // path yang sedang dijelaskan AI
-    remaining: null,
-    limit: null,
-    back: [], // [{ path, step }] untuk tombol "Kembali"
-    chats: new Map(), // path -> [{ q, a }]
-    asking: false,
-    playTimer: null,
-    seq: 0,
-    pending: null, // { path, step }: langkah yang dibuka setelah penjelasan file itu dimuat (tombol Kembali)
-    decoIds: new Map(), // path -> id dekorasi Monaco di model file itu
-    showChart: storage.get('rakit.flowChart', true),
-  };
+  // Keadaan panel ada di assets-source/editor/flow/state.svelte.js (dipakai juga FlowPanel.svelte). Id dekorasi
+  // Monaco per file disimpan di sini.
+  flow.showChart = storage.get('rakit.flowChart', true);
+  const flowDeco = new Map(); // path -> id dekorasi Monaco di model file itu
   const FLOW_EXT = ['html', 'css', 'js'];
-  const FLOW_KINDS = {
-    start: 'Mulai', input: 'Masukan', process: 'Proses', decision: 'Keputusan', loop: 'Perulangan',
-    function: 'Fungsi', event: 'Menunggu aksi', request: 'Permintaan', output: 'Hasil', end: 'Selesai',
-  };
-  const FLOW_NOTE = { bug: ['✕', 'Bug'], warn: ['!', 'Perlu dicek'], tip: ['✦', 'Saran'], info: ['i', 'Info'] };
   const canFlow = (path) => Boolean(path) && FLOW_EXT.includes(extOf(path));
 
   async function sha256(text) {
@@ -3688,9 +3678,6 @@ import { consoleLines } from '../editor/functions/console.js';
     return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
-  const flowStale = () => Boolean(flow.saved && flow.hash && flow.saved.hash !== flow.hash);
-  const flowSteps = () => flow.saved?.explanation?.steps ?? [];
-  const lineLabel = (lines) => lines.map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`)).join(', ');
 
   function updateFlowButton() {
     const btn = $('#flowBtn');
@@ -3705,8 +3692,12 @@ import { consoleLines } from '../editor/functions/console.js';
     $('#codeView').classList.toggle('with-flow', flow.open);
     storage.set('rakit.flowOpen', flow.open);
     stopFlowPlay();
-    if (flow.open) flowFollow(true);
-    else applyFlowHighlight();
+    if (flow.open) {
+      mountFlowPanel();
+      flowFollow(true);
+    } else {
+      applyFlowHighlight();
+    }
     updateFlowButton();
   }
 
@@ -3778,7 +3769,7 @@ import { consoleLines } from '../editor/functions/console.js';
         flow.saved = out.saved;
         flow.hash = out.saved.hash;
         flow.step = 0;
-        flow.chats.delete(path);
+        delete flow.chats[path];
       }
       if (out.cached) toast('Penjelasan untuk isi file ini sudah ada — ditampilkan tanpa memakai jatah.');
     } catch (err) {
@@ -3792,13 +3783,13 @@ import { consoleLines } from '../editor/functions/console.js';
   // ---------- Sorotan di editor ----------
   // Dekorasi dipasang langsung di model file (bukan di editor), supaya tidak tertinggal saat ganti tab.
   function setFlowDecorations(marks) {
-    for (const [p, ids] of flow.decoIds) {
+    for (const [p, ids] of flowDeco) {
       const m = state.models.get(p);
       if (m && !m.isDisposed()) m.deltaDecorations(ids, []);
     }
-    flow.decoIds.clear();
+    flowDeco.clear();
     const model = editor?.getModel();
-    if (model && marks.length) flow.decoIds.set(state.active, model.deltaDecorations([], marks));
+    if (model && marks.length) flowDeco.set(state.active, model.deltaDecorations([], marks));
   }
 
   function flashLines(a, b) {
@@ -3872,16 +3863,11 @@ import { consoleLines } from '../editor/functions/console.js';
     } else {
       applyFlowHighlight({ reveal });
     }
-    renderFlowSteps();
-    renderFlowPlayer();
-    highlightFlowChart();
-    $(`#flowPanel .flow-step[data-i="${flow.step}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   function stopFlowPlay() {
     clearInterval(flow.playTimer);
     flow.playTimer = null;
-    $('#flowPanel .flow-play')?.classList.remove('on');
   }
 
   function toggleFlowPlay() {
@@ -3891,7 +3877,6 @@ import { consoleLines } from '../editor/functions/console.js';
       if (flow.step >= flowSteps().length - 1) return stopFlowPlay();
       selectFlowStep(flow.step + 1);
     }, 6000);
-    renderFlowPlayer();
   }
 
   // Buka file rujukan; baris yang dirujuk disorot sebentar. Tombol "Kembali" mengembalikan ke langkah ini.
@@ -3918,87 +3903,37 @@ import { consoleLines } from '../editor/functions/console.js';
     await openFile(prev.path);
   }
 
-  // ---------- Diagram alur (Mermaid dari langkah, bukan dari AI — jadi selalu valid) ----------
-  function flowChartCode(steps) {
-    const label = (s) => `${s.id}. ${s.title}`.replace(/["`]/g, "'").replace(/[<>#;{}[\]|]/g, ' ').replace(/\s+/g, ' ').trim();
-    const shape = (s) => {
-      const t = label(s);
-      switch (s.kind) {
-        case 'start': case 'end': return `(["${t}"])`;
-        case 'decision': return `{"${t}"}`;
-        case 'loop': return `{{"${t}"}}`;
-        case 'function': return `[["${t}"]]`;
-        case 'input': case 'output': case 'request': return `[/"${t}"/]`;
-        case 'event': return `>"${t}"]`;
-        default: return `["${t}"]`;
-      }
-    };
-    const lines = ['flowchart TD'];
-    steps.forEach((s) => lines.push(`  S${s.id}${shape(s)}`));
-    steps.forEach((s, i) => {
-      if (s.next.length) {
-        for (const e of s.next) {
-          const text = e.label.replace(/["`|<>#;]/g, ' ').trim();
-          lines.push(text ? `  S${s.id} -->|"${text}"| S${e.to}` : `  S${s.id} --> S${e.to}`);
-        }
-      } else if (i < steps.length - 1 && s.kind !== 'end') {
-        lines.push(`  S${s.id} --> S${steps[i + 1].id}`);
-      }
-    });
-    return lines.join('\n');
-  }
-
-  async function renderFlowChart() {
-    const box = $('#flowPanel .flow-chart-box');
-    const steps = flowSteps();
-    if (!box || !steps.length || !flow.showChart) return;
-    const seq = flow.seq;
-    const id = `flowchart-render-${Date.now()}`;
-    box.replaceChildren(h('div', { class: 'flow-muted' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), ' Menggambar diagram…'));
-    try {
-      const mermaid = await loadMermaid();
-      const { svg: markup } = await mermaid.render(id, flowChartCode(steps));
-      if (seq !== flow.seq || !box.isConnected) return;
-      const svgEl = new DOMParser().parseFromString(markup, 'text/html').querySelector('svg');
-      if (!svgEl) throw new Error('Mermaid tidak menghasilkan SVG');
-      const imported = document.importNode(svgEl, true);
-      const vb = imported.viewBox?.baseVal;
-      Object.assign(imported.style, { width: `${vb?.width || 300}px`, maxWidth: '100%', height: 'auto' });
-      imported.querySelectorAll('g.node').forEach((node) => {
-        const m = node.id.match(/flowchart-S(\d+)-/);
-        if (!m) return;
-        node.dataset.step = m[1];
-        node.style.cursor = 'pointer';
-        node.addEventListener('click', () => selectFlowStep(Number(m[1]) - 1));
-      });
-      box.replaceChildren(imported);
-      highlightFlowChart();
-    } catch (err) {
-      console.error(err);
-      box.replaceChildren(h('div', { class: 'flow-muted' }, 'Diagram alur tidak bisa digambar untuk file ini.'));
-    } finally {
-      ['', 'd', 'i'].forEach((p) => {
-        const el = document.getElementById(`${p}${id}`);
-        if (el && !box.contains(el)) el.remove();
-      });
-    }
-  }
-
-  function highlightFlowChart() {
-    $('#flowPanel .flow-chart-box')?.querySelectorAll('g.node').forEach((node) => {
-      node.classList.toggle('flow-node-active', Number(node.dataset.step) === flow.step + 1);
-    });
-  }
-
   // ---------- Tampilan panel ----------
-  function flowRefChip(ref, { compact = false } = {}) {
-    return h('button', {
-      type: 'button', class: 'flow-ref', title: ref.note ? `${ref.note} — buka ${ref.path}` : `Buka ${ref.path}`,
-      onclick: () => openFlowRef(ref),
-    },
-    fileIcon({ type: 'file', path: ref.path }),
-    h('span', { class: 'flow-ref-path' }, `${ref.path}${ref.line ? `:${ref.line}` : ''}`),
-    !compact && ref.note ? h('span', { class: 'flow-ref-note' }, ref.note) : null);
+  // Panel digambar FlowPanel.svelte dari state flow; aksi di bawah ini (dan di atas) yang menyentuh Monaco/file.
+  let flowApp;
+  function mountFlowPanel() {
+    flowApp ??= mount(FlowPanel, {
+      target: $('#flowPanel'),
+      context: editorContext(),
+      props: {
+        actions: {
+          explain: explainFlow,
+          select: selectFlowStep,
+          stopPlay: stopFlowPlay,
+          togglePlay: toggleFlowPlay,
+          close: () => toggleFlow(false),
+          goBack: flowGoBack,
+          openRef: openFlowRef,
+          flashLines: flashFlowLines,
+          ask: askFlow,
+          toggleWide: () => $('#flowPanel').classList.toggle('wide'),
+          saveShowChart: (open) => { flow.showChart = open; storage.set('rakit.flowChart', open); },
+        },
+      },
+    });
+  }
+
+  // Dulu menggambar ulang panel; kini tinggal efek sampingnya: putaran otomatis berhenti dan sorotan di editor
+  // diperbarui (digulir ke langkah aktif bila penjelasannya tampil).
+  function renderFlow() {
+    if (!flow.open) return;
+    stopFlowPlay();
+    applyFlowHighlight({ reveal: Boolean(flow.path && flow.loading !== flow.path && flowSteps().length) });
   }
 
   // "baris 12" / "baris 12–20" (versi Inggris: "line 12" / "lines 12–20") di jawaban AI → bisa diklik untuk menyorot baris itu.
@@ -4027,75 +3962,18 @@ import { consoleLines } from '../editor/functions/console.js';
     flashLines(a, b);
   }
 
-  function renderFlowPlayer() {
-    const bar = $('#flowPanel .flow-player');
-    const steps = flowSteps();
-    if (!bar || !steps.length) return;
-    const s = steps[flow.step];
-    bar.replaceChildren(
-      h('button', { type: 'button', class: 'icon-btn', title: 'Langkah sebelumnya (←)', disabled: flow.step === 0, onclick: () => { stopFlowPlay(); selectFlowStep(flow.step - 1); } }, '‹'),
-      h('div', { class: 'flow-player-label' },
-        h('strong', {}, `Langkah ${flow.step + 1} dari ${steps.length}`),
-        h('span', {}, s.title)),
-      h('button', { type: 'button', class: `flow-play${flow.playTimer ? ' on' : ''}`, title: flow.playTimer ? 'Berhenti' : 'Putar otomatis (pindah tiap 6 detik)', onclick: toggleFlowPlay },
-        flow.playTimer ? '❚❚' : '▶'),
-      h('button', { type: 'button', class: 'icon-btn', title: 'Langkah berikutnya (→)', disabled: flow.step === steps.length - 1, onclick: () => { stopFlowPlay(); selectFlowStep(flow.step + 1); } }, '›'),
-      h('div', { class: 'flow-progress' }, h('i', { style: `width:${((flow.step + 1) / steps.length) * 100}%` })),
-    );
-  }
-
-  function renderFlowSteps() {
-    const list = $('#flowPanel .flow-steps');
-    if (!list) return;
-    const steps = flowSteps();
-    const byId = new Map(steps.map((s) => [s.id, s]));
-    list.replaceChildren(...steps.map((s, i) => {
-      const on = i === flow.step;
-      const branches = s.next.filter((e) => e.label || e.to !== s.id + 1);
-      return h('li', { class: `flow-step kind-${s.kind}${on ? ' active' : ''}`, dataset: { i: String(i) } },
-        h('button', { type: 'button', class: 'flow-step-head', 'aria-expanded': String(on), onclick: () => { stopFlowPlay(); selectFlowStep(i); } },
-          h('span', { class: 'flow-num' }, String(s.id)),
-          h('span', { class: 'flow-step-title' }, s.title),
-          s.lines.length ? h('span', { class: 'flow-lines', title: 'Baris di file ini' }, `baris ${lineLabel(s.lines)}`) : null),
-        on ? h('div', { class: 'flow-step-body' },
-          h('span', { class: 'flow-kind' }, FLOW_KINDS[s.kind] ?? s.kind),
-          linkifyLines(renderMarkdown(s.explain || '')),
-          s.example ? h('div', { class: 'flow-example' }, h('b', {}, 'Contoh'), linkifyLines(renderMarkdown(s.example))) : null,
-          s.terms.length ? h('div', { class: 'flow-terms' }, s.terms.map((t) => h('details', { class: 'flow-term' },
-            h('summary', {}, t.term), h('p', {}, t.meaning)))) : null,
-          s.refs.length ? h('div', { class: 'flow-refs' }, h('span', { class: 'flow-sub' }, 'Terhubung ke'), s.refs.map((r) => flowRefChip(r))) : null,
-          branches.length ? h('div', { class: 'flow-next' }, h('span', { class: 'flow-sub' }, 'Lalu'),
-            branches.map((e) => {
-              const target = byId.get(e.to);
-              return target ? h('button', { type: 'button', class: 'flow-branch', onclick: () => { stopFlowPlay(); selectFlowStep(steps.indexOf(target)); } },
-                e.label ? h('em', {}, e.label) : null, `→ ${target.id}. ${target.title}`) : null;
-            })) : null) : null);
-    }));
-  }
-
-  function renderFlowAsk() {
-    const box = $('#flowPanel .flow-chat');
-    if (!box) return;
-    const chat = flow.chats.get(flow.path) ?? [];
-    box.replaceChildren(...chat.map((c) => h('div', { class: 'flow-qa' },
-      h('p', { class: 'flow-q' }, c.q),
-      c.a ? linkifyLines(renderMarkdown(c.a)) : h('div', { class: 'flow-muted' }, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), ' AI sedang menjawab…'))));
-    box.lastElementChild?.scrollIntoView({ block: 'nearest' });
-  }
-
   async function askFlow(input) {
     const question = input.value.trim();
     const path = flow.path;
     const model = state.models.get(path);
     if (!question || !model || flow.asking) return;
-    const chat = flow.chats.get(path) ?? [];
-    flow.chats.set(path, chat);
+    flow.chats[path] ??= [];
+    const chat = flow.chats[path];
     const history = chat.filter((c) => c.a).slice(-6);
-    const entry = { q: question, a: '' };
-    chat.push(entry);
+    chat.push({ q: question, a: '' });
+    const entry = chat.at(-1); // lewat state supaya jawabannya langsung tampil
     input.value = '';
     flow.asking = true;
-    renderFlowAsk();
     try {
       const out = await api('POST', '/api/ai/explain/ask', {
         path, content: model.getValue(), step: flowStale() ? 0 : flow.step + 1, question, history,
@@ -4108,119 +3986,7 @@ import { consoleLines } from '../editor/functions/console.js';
       toast(err.message, 'error');
     } finally {
       flow.asking = false;
-      if (flow.path === path) {
-        renderFlowAsk();
-        renderFlowQuota();
-      }
     }
-  }
-
-  function renderFlowQuota() {
-    const el = $('#flowPanel .flow-quota');
-    if (el && flow.limit) el.textContent = `Gratis · sisa ${flow.remaining} dari ${flow.limit} hari ini`;
-  }
-
-  function flowLoadingView(name) {
-    return h('div', { class: 'flow-empty' },
-      h('div', { class: 'flow-skeleton' }, [1, 2, 3, 4].map(() => h('i'))),
-      h('p', {}, h('span', { class: 'dots' }, h('i'), h('i'), h('i')), ` AI sedang membaca alur ${name}…`),
-      h('p', { class: 'flow-muted' }, 'Biasanya 20–60 detik. Kamu boleh lanjut membaca kode sambil menunggu.'));
-  }
-
-  function renderFlow() {
-    const panel = $('#flowPanel');
-    if (!flow.open) return;
-    stopFlowPlay();
-    const path = flow.path;
-    const ex = flow.saved?.explanation;
-    const back = flow.back.at(-1);
-    const head = h('div', { class: 'flow-head' },
-      h('span', { class: 'flow-title' }, svg(ICON.flow), 'Baca Alur Kode'),
-      h('span', { class: 'flow-file' }, path ? baseName(path) : ''),
-      ex ? h('button', { type: 'button', class: 'icon-btn', title: 'Jelaskan ulang dengan AI', disabled: Boolean(flow.loading), onclick: () => explainFlow(true) }, svg(ICON.refresh)) : null,
-      h('button', { type: 'button', class: 'icon-btn', title: 'Perlebar panel', onclick: () => panel.classList.toggle('wide') }, '⤢'),
-      h('button', { type: 'button', class: 'icon-btn', title: 'Tutup', onclick: () => toggleFlow(false) }, svg(ICON.close)));
-    const backBar = back ? h('button', { type: 'button', class: 'flow-back', onclick: flowGoBack }, `← Kembali ke ${baseName(back.path)} · langkah ${back.step + 1}`) : null;
-    // replaceChildren() bawaan browser menulis null sebagai teks "null" (backBar kosong), jadi disaring dulu.
-    const show = (...nodes) => panel.replaceChildren(...nodes.filter(Boolean));
-
-    if (!path) {
-      show(head, backBar, h('div', { class: 'flow-empty' },
-        h('p', {}, 'Buka file .html, .css, atau .js untuk membaca alurnya.')));
-      return applyFlowHighlight();
-    }
-    if (flow.loading === path) {
-      show(head, backBar, flowLoadingView(baseName(path)));
-      return applyFlowHighlight();
-    }
-    if (!ex) {
-      show(head, backBar, h('div', { class: 'flow-empty' },
-        h('div', { class: 'flow-hero' }, svg(ICON.flow)),
-        h('h3', {}, `Pahami alur ${baseName(path)}`),
-        h('p', {}, 'AI membaca file ini dan menjelaskannya langkah demi langkah, berurutan seperti kode berjalan: baris mana yang terlibat, contoh nilainya, istilah penting, dan hubungannya dengan file lain di project.'),
-        h('button', { type: 'button', class: 'flow-go', disabled: flow.remaining === 0, onclick: () => explainFlow() }, svg(ICON.flow), 'Baca alur file ini'),
-        h('p', { class: 'flow-quota flow-muted' })));
-      renderFlowQuota();
-      return applyFlowHighlight();
-    }
-
-    const steps = ex.steps;
-    const notes = ex.notes ?? [];
-    show(
-      head,
-      backBar,
-      h('div', { class: 'flow-scroll' },
-        flowStale() ? h('div', { class: 'flow-stale' },
-          h('span', {}, 'File sudah berubah sejak penjelasan ini dibuat — baris yang disorot bisa bergeser.'),
-          h('button', { type: 'button', onclick: () => explainFlow() }, 'Perbarui')) : null,
-        h('section', { class: 'flow-summary' }, linkifyLines(renderMarkdown(ex.summary || ''))),
-        h('div', { class: 'flow-player' }),
-        h('ol', { class: 'flow-steps' }),
-        h('details', {
-          class: 'flow-section', open: flow.showChart,
-          ontoggle: (e) => { flow.showChart = e.target.open; storage.set('rakit.flowChart', flow.showChart); if (flow.showChart) renderFlowChart(); },
-        }, h('summary', {}, 'Diagram alur'), h('div', { class: 'flow-chart-box' }), h('p', { class: 'flow-muted' }, 'Klik kotak di diagram untuk membuka langkahnya.')),
-        ex.related?.length ? h('details', { class: 'flow-section', open: true },
-          h('summary', {}, `Terhubung dengan file lain (${ex.related.length})`),
-          h('div', { class: 'flow-related' }, ex.related.map((r) => flowRefChip(r)))) : null,
-        ex.complexity ? h('details', { class: 'flow-section' },
-          h('summary', {}, 'Seberapa cepat kodenya?'), linkifyLines(renderMarkdown(ex.complexity))) : null,
-        notes.length ? h('details', { class: 'flow-section', open: notes.some((n) => n.level === 'bug' || n.level === 'warn') },
-          h('summary', {}, `Catatan (${notes.length})`),
-          h('ul', { class: 'flow-notes' }, notes.map((n) => {
-            const [icon, label] = FLOW_NOTE[n.level] ?? FLOW_NOTE.info;
-            return h('li', { class: `flow-note ${n.level}` },
-              h('span', { class: 'flow-note-icon', title: label }, icon),
-              h('div', {}, linkifyLines(renderMarkdown(n.text)),
-                n.line ? h('button', { type: 'button', class: 'flow-line-link', onclick: () => flashFlowLines(n.line, n.line) }, `baris ${n.line}`) : null,
-                n.level === 'bug' || n.level === 'warn' || n.level === 'tip'
-                  ? aiButton(n.level === 'tip' ? 'Terapkan dengan AI' : 'Perbaiki dengan AI',
-                    `Di file ${path}${n.line ? ` baris ${n.line}` : ''}: ${n.text}\n\n${n.level === 'tip' ? 'Terapkan saran ini' : 'Perbaiki masalah ini'} tanpa mengubah perilaku lain.`, { cls: 'flow-ai-fix' })
-                  : null));
-          }))) : null,
-        h('section', { class: 'flow-ask-wrap' },
-          h('span', { class: 'flow-sub' }, 'Masih bingung? Tanya AI'),
-          h('div', { class: 'flow-chat' })),
-        h('p', { class: 'flow-meta flow-muted' },
-          `Dibuat ${new Date(flow.saved.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })} · `,
-          h('span', { class: 'flow-quota' }))),
-      h('form', {
-        class: 'flow-ask',
-        onsubmit: (e) => { e.preventDefault(); askFlow(e.target.elements.q); },
-      },
-      h('textarea', {
-        name: 'q', rows: 1, maxlength: 1000, placeholder: `Tanya tentang langkah ${flow.step + 1}… (Enter kirim)`,
-        onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); askFlow(e.target); } },
-      }),
-      h('button', { type: 'submit', class: 'ai-send', title: 'Kirim' }, svg('M1 1.5 15 8 1 14.5l2-6.5 6-.5v-1l-6-.5z'))),
-    );
-    if (!steps.length) return;
-    renderFlowPlayer();
-    renderFlowSteps();
-    renderFlowAsk();
-    renderFlowQuota();
-    renderFlowChart();
-    applyFlowHighlight({ reveal: true });
   }
 
   function bindFlowEvents() {
@@ -4239,185 +4005,31 @@ import { consoleLines } from '../editor/functions/console.js';
   }
 
   // ---------- Console ----------
-  // Keluaran console fungsi serverless, diwarnai per level (sama dengan functions/ConsoleView.svelte).
-  const consoleView = (text) => h('pre', { class: 'fn-pre logs' }, consoleLines(text).map((l) =>
-    h('span', { class: `log-line ${l.level}` }, l.tag ? [h('b', { class: 'log-level' }, l.tag), l.text] : l.text)));
-
-  // Semua log di satu tempat, berlabel sumbernya: FE (console & error halaman di preview, diteruskan skrip
-  // yang disisipkan server — go/internal/sites/console.js), BE (eksekusi fungsi serverless dari log server),
-  // Jaringan (fetch/XHR dan file yang gagal dimuat), dan Sistem (halaman dimuat, catatan lain).
-  const CONSOLE_MAX = 1000;
-  const CONSOLE_SOURCES = [['all', 'Semua'], ['fe', 'FE'], ['be', 'BE'], ['net', 'Jaringan'], ['sys', 'Sistem']];
-  const CONSOLE_LABEL = { fe: 'FE', be: 'BE', net: 'NET', sys: 'SYS' };
-  const CONSOLE_TITLE = { fe: 'Frontend: halaman di preview', be: 'Backend: fungsi serverless', net: 'Jaringan: request & file', sys: 'Sistem' };
-  const devConsole = {
-    entries: [], source: 'all', errorsOnly: false, query: '',
-    unread: 0, beLastId: 0, beLoaded: false, poll: null, beTimer: null, list: null, counts: {},
-  };
-  const consoleCount = (src) => devConsole.entries.filter((e) => src === 'all' || e.source === src).length;
-  function updateConsoleCounts() {
-    for (const [src, el] of Object.entries(devConsole.counts)) el.textContent = String(consoleCount(src));
-  }
+  // Tab Console: assets-source/editor/console (log & saringan di state.svelte.js, tampilan Console.svelte). Log dari
+  // preview diterima sejak awal, jadi sambungannya disiapkan saat log pertama tiba.
+  let consoleConnected = false;
+  let consoleApp;
   const consoleActive = () => $('#editorArea').dataset.mode === 'console';
-  const consoleTime = (ms) => new Date(ms).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-  function consoleMatches(e) {
-    if (devConsole.source !== 'all' && e.source !== devConsole.source) return false;
-    if (devConsole.errorsOnly && e.level !== 'error') return false;
-    const q = devConsole.query.trim().toLowerCase();
-    return !q || `${e.text}\n${e.page ?? ''}\n${e.logs ?? ''}`.toLowerCase().includes(q);
+  function connectConsoleOnce() {
+    if (consoleConnected) return;
+    consoleConnected = true;
+    connectConsole(editorContext().get('editor'));
   }
-
-  // Permintaan perbaikan untuk satu baris error, beserta konteksnya.
-  function consoleFixPrompt(e) {
-    if (e.source === 'be') return fnFixPrompt(e.fn, { status: e.status, error: e.error, logs: e.logs, trigger: e.trigger });
-    if (e.source === 'net') return `Request dari halaman ${e.page || '/'} gagal:\n${clipText(e.text)}\n\nCari penyebabnya (kode yang memanggilnya, tabel database / akses publik, atau fungsi serverless yang dituju) dan perbaiki.`;
-    return `Ada error di console halaman ${e.page || '/'}:\n${clipText(e.text)}\n\nCari penyebabnya dan perbaiki kodenya.`;
-  }
-
-  function consoleRow(e) {
-    const fixable = e.level === 'error' && e.source !== 'sys';
-    e.countEl = h('span', { class: 'console-count', hidden: e.count < 2 }, String(e.count));
-    return h('div', { class: `console-row ${e.source} ${e.level}`, title: e.page ? `Halaman ${e.page}` : null },
-      h('span', { class: 'console-time' }, consoleTime(e.time)),
-      h('span', { class: `console-src ${e.source}`, title: CONSOLE_TITLE[e.source] }, CONSOLE_LABEL[e.source] ?? e.source),
-      h('div', { class: 'console-msg' },
-        e.countEl,
-        e.source === 'be' ? [h('span', {}, e.text), e.error ? h('pre', { class: 'console-be-error' }, e.error) : null, e.logs ? consoleView(e.logs) : null] : e.text),
-      fixable ? aiButton('Perbaiki', () => consoleFixPrompt(e), { cls: 'console-fix' }) : null);
-  }
-
-  function consoleNearBottom() {
-    const list = devConsole.list;
-    return !list || list.scrollHeight - list.scrollTop - list.clientHeight < 40;
-  }
-
   function devConsoleAdd(raw) {
-    const source = CONSOLE_LABEL[raw.source] ? raw.source : 'sys';
-    const level = ['error', 'warn', 'info', 'debug', 'log'].includes(raw.level) ? raw.level : 'log';
-    const entry = { ...raw, source, level, text: String(raw.text ?? ''), time: Number(raw.time) || Date.now(), count: 1 };
-    // Pesan sama berturut-turut digabung dengan penghitung, seperti console browser.
-    const last = devConsole.entries.at(-1);
-    if (last && source !== 'be' && last.source === source && last.level === level && last.text === entry.text && last.page === entry.page) {
-      last.count += 1;
-      last.time = entry.time;
-      if (last.countEl) { last.countEl.hidden = false; last.countEl.textContent = String(last.count); }
-    } else {
-      devConsole.entries.push(entry);
-      if (devConsole.entries.length > CONSOLE_MAX) devConsole.entries.splice(0, devConsole.entries.length - CONSOLE_MAX);
-      if (consoleActive() && devConsole.list && consoleMatches(entry)) {
-        const stick = consoleNearBottom();
-        devConsole.list.querySelector('.console-empty')?.remove();
-        devConsole.list.append(consoleRow(entry));
-        while (devConsole.list.childElementCount > CONSOLE_MAX) devConsole.list.firstElementChild.remove();
-        if (stick) devConsole.list.scrollTop = devConsole.list.scrollHeight;
-      }
-      if (consoleActive()) updateConsoleCounts();
-    }
-    if (!consoleActive() && level === 'error') {
-      devConsole.unread += 1;
-      renderConsoleBadge();
-    }
-    // Website memanggil fungsi serverless: ambil log eksekusinya (BE) sebentar lagi.
-    if (source === 'net' && /^\/api\/fn\//.test(raw.url ?? '')) {
-      clearTimeout(devConsole.beTimer);
-      devConsole.beTimer = setTimeout(devConsoleLoadBE, 600);
-    }
+    connectConsoleOnce();
+    addConsoleLog(raw);
   }
-
-  function renderConsoleBadge() {
-    const badge = $('#consoleBadge');
-    badge.hidden = !devConsole.unread;
-    badge.textContent = devConsole.unread > 99 ? '99+' : String(devConsole.unread);
-    badge.title = `${devConsole.unread} error baru`;
-  }
-
-  // Eksekusi fungsi serverless (BE) sejak yang terakhir diambil; pembukaan pertama mengambil 30 terakhir.
-  async function devConsoleLoadBE() {
-    let logs;
-    try {
-      logs = (await api('GET', `/api/functions/logs?limit=${devConsole.beLoaded ? 50 : 30}`)).logs;
-    } catch {
-      return; // mis. project tanpa fungsi atau sesi habis: Console tetap jalan untuk FE
-    }
-    const first = !devConsole.beLoaded;
-    devConsole.beLoaded = true;
-    const TRIGGER = { http: 'pengunjung', cron: 'jadwal', test: 'uji coba' };
-    const fresh = logs.filter((l) => l.id > devConsole.beLastId).reverse();
-    if (!fresh.length) return;
-    devConsole.beLastId = Math.max(devConsole.beLastId, ...fresh.map((l) => l.id));
-    for (const l of fresh) {
-      const level = l.error || l.status >= 500 ? 'error' : l.status >= 400 ? 'warn' : 'info';
-      const trigger = TRIGGER[l.trigger] ?? l.trigger;
-      const entry = {
-        source: 'be', level, time: l.createdAt, fn: l.name, status: l.status, trigger, error: l.error, logs: l.logs,
-        text: `functions/${l.name}.js → ${l.status} (${l.ms} ms) · ${trigger}${l.dev ? ' · dev' : ''}`,
-      };
-      if (first) {
-        devConsole.entries.push({ ...entry, count: 1 });
-      } else {
-        devConsoleAdd(entry);
-      }
-    }
-    if (first) {
-      // Riwayat eksekusi lama diselipkan sesuai waktunya di antara log yang sudah ada.
-      devConsole.entries.sort((a, b) => a.time - b.time);
-      if (consoleActive()) { renderConsoleList(); updateConsoleCounts(); }
-    }
-  }
-
   function devConsoleOpen() {
-    devConsole.unread = 0;
-    renderConsoleBadge();
-    renderConsole();
-    devConsoleLoadBE();
-    // Selama tab Console terbuka, eksekusi baru (mis. dari jadwal) diambil berkala.
-    clearInterval(devConsole.poll);
-    devConsole.poll = setInterval(() => {
-      if (!consoleActive()) return clearInterval(devConsole.poll);
-      if (document.visibilityState === 'visible') devConsoleLoadBE();
-    }, 5000);
+    connectConsoleOnce();
+    consoleApp ??= mount(ConsoleTab, { target: $('#consoleView'), context: editorContext() });
+    openConsole();
   }
-
-  function renderConsoleList() {
-    const list = devConsole.list;
-    if (!list) return;
-    const shown = devConsole.entries.filter(consoleMatches);
-    list.replaceChildren(...(shown.length
-      ? shown.map(consoleRow)
-      : [h('div', { class: 'console-empty' },
-        devConsole.entries.length
-          ? 'Tidak ada log yang cocok dengan saringan ini.'
-          : 'Belum ada log. Pakai websitemu di preview — console.log, error, request, dan log fungsi serverless akan muncul di sini.')]));
-    list.scrollTop = list.scrollHeight;
-  }
-
-  function renderConsole() {
-    devConsole.counts = {};
-    const search = h('input', {
-      type: 'search', class: 'console-search', placeholder: 'Cari log…', value: devConsole.query, spellcheck: 'false',
-      oninput: (e) => { devConsole.query = e.target.value; renderConsoleList(); },
-    });
-    devConsole.list = h('div', { class: 'console-list', role: 'log', 'aria-live': 'polite' });
-    $('#consoleView').replaceChildren(
-      h('div', { class: 'console-bar' },
-        h('div', { class: 'seg console-sources' }, CONSOLE_SOURCES.map(([value, label]) => h('button', {
-          type: 'button',
-          class: devConsole.source === value ? 'on owner' : '',
-          title: value === 'all' ? 'Semua sumber' : CONSOLE_TITLE[value],
-          onclick: () => { devConsole.source = value; renderConsole(); },
-        }, label, (devConsole.counts[value] = h('span', { class: 'console-n' }, String(consoleCount(value))))))),
-        h('label', { class: 'console-errors' },
-          h('input', { type: 'checkbox', checked: devConsole.errorsOnly, onchange: (e) => { devConsole.errorsOnly = e.target.checked; renderConsoleList(); } }),
-          'Hanya error'),
-        search,
-        h('button', { type: 'button', class: 'icon-btn', title: 'Muat ulang preview', onclick: reloadPreview }, svg(ICON.refresh)),
-        h('button', {
-          type: 'button', class: 'icon-btn', title: 'Bersihkan log',
-          onclick: () => { devConsole.entries = []; devConsole.unread = 0; renderConsoleBadge(); renderConsole(); },
-        }, svg(ICON.trash))),
-      devConsole.list);
-    renderConsoleList();
+  // Lencana jumlah error baru di tombol tab Console.
+  function renderConsoleBadge(unread) {
+    const badge = $('#consoleBadge');
+    badge.hidden = !unread;
+    badge.textContent = unread > 99 ? '99+' : String(unread);
+    badge.title = `${unread} error baru`;
   }
 
   // ---------- Fungsi serverless ----------
