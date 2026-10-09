@@ -57,6 +57,10 @@
   const within = (p, base) => p === base || p.startsWith(`${base}/`);
   const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'avif'];
   const isImage = (p) => IMAGE_EXT.includes(extOf(p));
+  // Bahasa antarmuka: /en/editor memuat versi Inggris skrip ini (dibuat scripts/i18n.mjs dari teks di sini).
+  const LANG = document.documentElement.lang === 'en' ? 'en' : 'id';
+  const HOME = LANG === 'en' ? '/en' : '/';
+  const EDITOR_PATH = LANG === 'en' ? '/en/editor' : '/editor';
   const formatBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
   // ---------- State ----------
@@ -91,7 +95,7 @@
       credentials: 'same-origin',
     });
     if (res.status === 401) {
-      location.href = '/';
+      location.href = HOME;
       throw new Error('Sesi berakhir');
     }
     const data = await res.json().catch(() => ({}));
@@ -769,7 +773,7 @@
   const pick = { on: false, page: null, blocks: [] };
   const AI_PLACEHOLDER = 'Minta AI membuat atau mengubah kode… (Enter kirim, Shift+Enter baris baru)';
   const siteOrigin = () => new URL(previewBase()).origin;
-  const toPicker = (message) => $('#previewFrame').contentWindow?.postMessage({ rakit: true, ...message }, siteOrigin());
+  const toPicker = (message) => $('#previewFrame').contentWindow?.postMessage({ rakit: true, lang: LANG, ...message }, siteOrigin());
   const blocksOn = (page) => pick.blocks.filter((b) => b.page === page);
   // Jatah di halaman yang sedang tampil = 5 dikurangi blok di halaman lain.
   const pageLimit = () => MAX_BLOCKS - pick.blocks.filter((b) => b.page !== pick.page).length;
@@ -1285,6 +1289,7 @@
       { label: 'Mode publikasi', hint: isManual() ? 'manual' : 'langsung', run: openPublishMode },
       { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
       { label: 'Pengaturan', run: openSettings },
+      { label: LANG === 'en' ? 'Bahasa Indonesia' : 'English', hint: LANG === 'en' ? 'ID' : 'EN', run: () => setLanguage(LANG === 'en' ? 'id' : 'en') },
       SHOW_ASSISTANT && { label: 'Asisten AI website', hint: 'baru', run: openAssistant },
       ai.credits?.topupEnabled && { label: 'Langganan & kredit AI', hint: ai.credits.plan?.name, run: () => openTopup('plans') },
       state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
@@ -1306,10 +1311,22 @@
     if (diagram.saved && $('#editorArea').dataset.mode === 'diagram') renderDiagram(); // warna Mermaid ikut tema
   }
 
+  // Ganti bahasa: server memasang cookie lang dari ?lang= lalu membuka halaman editor bahasa itu.
+  async function setLanguage(lang) {
+    if (lang === LANG) return;
+    await saveAll();
+    const params = new URLSearchParams(location.search);
+    params.set('lang', lang);
+    location.href = `${lang === 'en' ? '/en/editor' : '/editor'}?${params}`;
+  }
+
   function openSettings() {
     const { body, close } = openPanel('db-modal settings-modal');
     const complete = h('input', { type: 'checkbox', checked: settings.complete,
       onchange: () => { setAutocomplete(complete.checked); toast(complete.checked ? 'Prediksi kode aktif' : 'Prediksi kode dimatikan'); } });
+    const langBtn = (value, label) => h('button', {
+      type: 'button', role: 'radio', 'aria-checked': String(value === LANG), onclick: () => setLanguage(value),
+    }, label);
     const themeBtn = (value, label) => h('button', {
       type: 'button', role: 'radio', 'aria-checked': String((value === 'dark') === isDark()),
       onclick: (e) => {
@@ -1322,6 +1339,9 @@
       h('div', { class: 'settings-group' },
         h('h4', {}, 'Tampilan'),
         h('div', { class: 'theme-choice', role: 'radiogroup', 'aria-label': 'Tema' }, themeBtn('light', 'Terang'), themeBtn('dark', 'Gelap'))),
+      h('div', { class: 'settings-group' },
+        h('h4', {}, 'Bahasa · Language'),
+        h('div', { class: 'theme-choice', role: 'radiogroup', 'aria-label': 'Bahasa · Language' }, langBtn('id', 'Bahasa Indonesia'), langBtn('en', 'English'))),
       h('div', { class: 'settings-group' },
         h('h4', {}, 'Editor kode'),
         h('label', { class: 'switch asst-switch settings-row' }, complete, h('span', { class: 'track' }, h('span', { class: 'thumb' })),
@@ -1391,7 +1411,7 @@
   async function logout() {
     await saveAll();
     await api('POST', '/api/logout').catch(() => {});
-    location.href = '/';
+    location.href = HOME;
   }
 
   // ---------- Tampilan HP ----------
@@ -1445,7 +1465,7 @@
   // Setiap project punya subdomain, file, database, dan riwayat AI sendiri. Ganti project = muat ulang editor.
 
   function projectUrl(slug) {
-    return `/editor?project=${encodeURIComponent(slug)}`;
+    return `${EDITOR_PATH}?project=${encodeURIComponent(slug)}`;
   }
 
   async function switchProject(slug) {
@@ -2633,7 +2653,7 @@
       try {
         const res = await fetch(`/api/ai/jobs/${message.id}/events`, { credentials: 'same-origin', signal: ai.stream.signal });
         if (res.status === 401) {
-          location.href = '/';
+          location.href = HOME;
           return;
         }
         if (!res.ok) throw new Error(`Gagal (${res.status})`);
@@ -4163,7 +4183,7 @@
       credentials: 'same-origin',
     });
     if (res.status === 401) {
-      location.href = '/';
+      location.href = HOME;
       throw new Error('Sesi berakhir');
     }
     const fail = (data, status) => Object.assign(new Error(data.error || `Gagal (${status})`), { code: data.code });
@@ -4579,16 +4599,16 @@
     !compact && ref.note ? h('span', { class: 'flow-ref-note' }, ref.note) : null);
   }
 
-  // "baris 12" / "baris 12–20" di jawaban AI → bisa diklik untuk menyorot baris itu.
+  // "baris 12" / "baris 12–20" (versi Inggris: "line 12" / "lines 12–20") di jawaban AI → bisa diklik untuk menyorot baris itu.
   function linkifyLines(root) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
     for (const node of nodes) {
-      const parts = node.textContent.split(/(baris\s+\d+(?:\s*[-–]\s*\d+)?)/gi);
+      const parts = node.textContent.split(/((?:baris|lines?)\s+\d+(?:\s*[-–]\s*\d+)?)/gi);
       if (parts.length < 2) continue;
       node.replaceWith(...parts.map((part) => {
-        const m = part.match(/^baris\s+(\d+)(?:\s*[-–]\s*(\d+))?$/i);
+        const m = part.match(/^(?:baris|lines?)\s+(\d+)(?:\s*[-–]\s*(\d+))?$/i);
         if (!m) return part;
         return h('button', { type: 'button', class: 'flow-line-link', onclick: () => flashFlowLines(Number(m[1]), Number(m[2] || m[1])) }, part);
       }));

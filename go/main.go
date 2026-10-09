@@ -30,6 +30,7 @@ import (
 	"rakit.io/server/internal/fn"
 	"rakit.io/server/internal/google"
 	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/publish"
 	"rakit.io/server/internal/siteapi"
@@ -130,6 +131,7 @@ func main() {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := hostname(r)
 		if host == cfg.BaseDomain {
+			i18n.Mark(w, i18n.FromRequest(r)) // bahasa pesan error (httpx.Fail)
 			switch {
 			case under(strings.ToLower(r.URL.Path), "/api"):
 				appAPI.ServeHTTP(w, r)

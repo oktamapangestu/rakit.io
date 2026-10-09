@@ -266,7 +266,7 @@ func (h *Handler) diagrams(q *request) error {
 			return httpx.Errorf(400, "Jenis diagram tidak dikenal")
 		}
 		text := func(key string) string { v, _ := q.body[key].(string); return strings.TrimSpace(v) }
-		req := ai.DiagramRequest{Kind: kind, RenderError: text("renderError"), Instruction: text("instruction"), Code: text("code")}
+		req := ai.DiagramRequest{Kind: kind, RenderError: text("renderError"), Instruction: text("instruction"), Code: text("code"), Lang: q.lang()}
 		facts, err := h.diagramFacts(q.r.Context(), project)
 		if err != nil {
 			return err

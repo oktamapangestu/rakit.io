@@ -23,6 +23,7 @@ import (
 	"rakit.io/server/internal/auth"
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/store"
 )
 
@@ -66,7 +67,8 @@ func randomB64(n int) string {
 func encodeComponent(s string) string { return strings.ReplaceAll(url.QueryEscape(s), "+", "%20") }
 
 func fail(w http.ResponseWriter, r *http.Request, message string) {
-	http.Redirect(w, r, "/?error="+encodeComponent(message), http.StatusFound)
+	lang := i18n.FromRequest(r)
+	http.Redirect(w, r, i18n.Path(lang, "/")+"?error="+encodeComponent(i18n.T(lang, message)), http.StatusFound)
 }
 
 func (h *Handler) flowCookie(value string, maxAge int) *http.Cookie {
@@ -259,7 +261,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err == nil {
-			user, err = h.createUser(c, email)
+			user, err = h.createUser(c, email, i18n.FromRequest(r))
 		}
 	}
 	if err == nil {
@@ -269,10 +271,10 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	http.Redirect(w, r, "/editor", http.StatusFound)
+	http.Redirect(w, r, i18n.Path(i18n.FromRequest(r), "/editor"), http.StatusFound)
 }
 
-func (h *Handler) createUser(c *claims, email string) (*store.User, error) {
+func (h *Handler) createUser(c *claims, email, lang string) (*store.User, error) {
 	username, err := h.usernameFromEmail(email)
 	if err != nil {
 		return nil, err
@@ -290,6 +292,6 @@ func (h *Handler) createUser(c *claims, email string) (*store.User, error) {
 	if name == "" {
 		name = username
 	}
-	_, err = h.accounts.CreateProject(user, username, name)
+	_, err = h.accounts.CreateProject(user, username, name, lang)
 	return user, err
 }

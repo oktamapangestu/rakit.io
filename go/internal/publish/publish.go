@@ -25,6 +25,7 @@ import (
 
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/store"
 	"rakit.io/server/internal/userdb"
@@ -79,6 +80,13 @@ type Status struct {
 	Schema      []SchemaChange `json:"schema"`
 	Pending     bool           `json:"pending"`     // ada yang belum dipublikasikan
 	Destructive bool           `json:"destructive"` // publikasi akan menghapus data di versi publik
+}
+
+// Localize menerjemahkan keterangan perubahan tabel ke bahasa pengguna.
+func (st *Status) Localize(lang string) {
+	for i := range st.Schema {
+		st.Schema[i].Text = i18n.T(lang, st.Schema[i].Text)
+	}
 }
 
 func iso(ms int64) *string {

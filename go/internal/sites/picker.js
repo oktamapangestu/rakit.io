@@ -11,6 +11,15 @@
   let max = 5; // sisa jatah di halaman ini (editor mengurangi blok yang sudah dipilih di halaman lain)
   const BLOCK_TAGS = new Set(['header', 'nav', 'main', 'section', 'article', 'aside', 'footer', 'form', 'figure', 'table', 'ul', 'ol', 'blockquote']);
   const NAMES = { header: 'Header', nav: 'Navigasi', main: 'Konten utama', section: 'Bagian', article: 'Artikel', aside: 'Samping', footer: 'Footer', form: 'Form', figure: 'Gambar', table: 'Tabel', ul: 'Daftar', ol: 'Daftar', blockquote: 'Kutipan' };
+  // Bahasa label mengikuti editor (pesan dari editor membawa lang: 'id' | 'en').
+  let lang = 'id';
+  const EN = {
+    Navigasi: 'Navigation', 'Konten utama': 'Main content', Bagian: 'Section', Artikel: 'Article', Samping: 'Sidebar',
+    Gambar: 'Figure', Tabel: 'Table', Daftar: 'List', Kutipan: 'Quote', Blok: 'Block',
+    'Tidak bisa diubah di sini': "Can't be edited here", 'Enter: minta AI mengubah · Esc batal': 'Enter: ask AI to change · Esc cancel',
+    'Enter simpan · Esc batal': 'Enter save · Esc cancel', 'Klik untuk ganti gambar': 'Click to replace image', 'Klik untuk ubah teks': 'Click to edit text',
+  };
+  const T = (text) => (lang === 'en' && EN[text]) || text;
 
   let mode = null; // null (tidak aktif), 'pick' (pilih blok), atau 'text' (edit teks)
   let host = null;
@@ -175,7 +184,7 @@
     if (text) return text.length > 32 ? `${text.slice(0, 31)}…` : text;
     const tag = el.tagName.toLowerCase();
     const name = el.id || el.classList[0];
-    return name ? `${NAMES[tag] || 'Blok'} .${name}` : NAMES[tag] || `Blok <${tag}>`;
+    return name ? `${T(NAMES[tag] || 'Blok')} .${name}` : NAMES[tag] ? T(NAMES[tag]) : `${T('Blok')} <${tag}>`;
   }
 
   // ---------- Aturan CSS yang mengenai blok ----------
@@ -436,7 +445,7 @@
     const { el } = editing;
     finishEdit(false);
     el.blur();
-    notice = { el, text: 'Tidak bisa diubah di sini', until: Date.now() + 3500 };
+    notice = { el, text: T('Tidak bisa diubah di sini'), until: Date.now() + 3500 };
   }
 
   function onEditKey(e) {
@@ -514,10 +523,10 @@
     while (layer.children.length > (shown ? 1 : 0)) layer.lastChild.remove();
     if (shown) {
       layer.firstChild.className = editing ? 'box txt sel' : 'box txt sel no';
-      place(layer.firstChild, shown.el, editing ? (editing.ai ? 'Enter: minta AI mengubah · Esc batal' : 'Enter simpan · Esc batal') : notice.text);
+      place(layer.firstChild, shown.el, editing ? T(editing.ai ? 'Enter: minta AI mengubah · Esc batal' : 'Enter simpan · Esc batal') : notice.text);
     }
     hoverBox.classList.add('txt');
-    if (hovered) place(hoverBox, hovered, hovered.localName === 'img' ? 'Klik untuk ganti gambar' : 'Klik untuk ubah teks');
+    if (hovered) place(hoverBox, hovered, T(hovered.localName === 'img' ? 'Klik untuk ganti gambar' : 'Klik untuk ubah teks'));
     else hoverBox.style.display = 'none';
     frame = requestAnimationFrame(draw);
   }
@@ -546,6 +555,7 @@
   addEventListener('message', (e) => {
     const m = e.data;
     if (e.origin !== APP || e.source !== window.parent || !m || m.rakit !== true) return;
+    if (m.lang === 'en' || m.lang === 'id') lang = m.lang;
     if (m.type === 'pick' || m.type === 'textMode') {
       const kind = m.type === 'pick' ? 'pick' : 'text';
       // Mematikan satu mode tidak mematikan mode lain yang sedang aktif.

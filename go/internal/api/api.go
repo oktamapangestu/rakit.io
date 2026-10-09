@@ -25,6 +25,7 @@ import (
 	"rakit.io/server/internal/credits"
 	"rakit.io/server/internal/fn"
 	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/publish"
@@ -219,6 +220,9 @@ func (q *request) is(method string, rest ...string) bool {
 	}
 	return true
 }
+
+// lang: bahasa antarmuka pengguna (cookie lang).
+func (q *request) lang() string { return i18n.FromRequest(q.r) }
 
 func (q *request) json(status int, v any) error {
 	httpx.JSON(q.w, status, v)

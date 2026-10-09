@@ -19,6 +19,7 @@ import (
 	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/files"
 	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/store"
@@ -115,6 +116,7 @@ them. Only talk about the code you are given; if the question is about something
 
 // Explanation: hasil Baca Alur Kode satu file.
 type Explanation struct {
+	Lang       string        `json:"lang,omitempty"` // "en" untuk versi Inggris; kosong = Indonesia
 	Summary    string        `json:"summary"`
 	Steps      []ExplainStep `json:"steps"`
 	Related    []ExplainRef  `json:"related"`
@@ -343,6 +345,10 @@ var (
 // dan rujukan hanya ke file yang benar-benar ada di project. problem: jawaban bisa dipakai tapi kurang baik
 // (tanpa nomor baris, bukan bahasa Indonesia) — pemanggil boleh meminta perbaikan sekali.
 func parseExplanation(text string, total int, known map[string]int) (*Explanation, string, error) {
+	return parseExplanationIn(i18n.ID, text, total, known)
+}
+
+func parseExplanationIn(lang, text string, total int, known map[string]int) (*Explanation, string, error) {
 	raw := extractJSON(text)
 	var doc map[string]any
 	if raw == "" || json.Unmarshal([]byte(raw), &doc) != nil {
@@ -472,7 +478,10 @@ func parseExplanation(text string, total int, known map[string]int) (*Explanatio
 	for _, st := range ex.Steps {
 		sample += " " + st.Explain
 	}
-	if len(englishRE.FindAllString(sample, -1)) > 2*len(indonesianRE.FindAllString(sample, -1))+3 {
+	english, indonesian := len(englishRE.FindAllString(sample, -1)), len(indonesianRE.FindAllString(sample, -1))
+	if lang == i18n.EN && indonesian > 2*english+3 {
+		problems = append(problems, "the text is in Indonesian, but it must be in English")
+	} else if lang != i18n.EN && english > 2*indonesian+3 {
 		problems = append(problems, "the text is in English, but it must be in Indonesian")
 	}
 	return ex, strings.Join(problems, "; "), nil
@@ -484,6 +493,11 @@ type savedExplanation struct {
 	Explanation *Explanation `json:"explanation"`
 	Hash        string       `json:"hash"`
 	CreatedAt   int64        `json:"createdAt"`
+}
+
+// inLang: penjelasan ini ditulis dalam bahasa lang.
+func (e *savedExplanation) inLang(lang string) bool {
+	return e.Explanation != nil && (e.Explanation.Lang == i18n.EN) == (lang == i18n.EN)
 }
 
 func (s *Service) savedExplanation(projectID int64, rel string) (*savedExplanation, error) {
@@ -570,7 +584,7 @@ func explainInput(body map[string]any) (string, string, error) {
 // ---------- API ----------
 
 // SavedExplanation: penjelasan tersimpan untuk satu file (atau null) dan sisa kuota hari ini.
-func (s *Service) SavedExplanation(user *store.User, project *store.Project, rawPath string) (any, error) {
+func (s *Service) SavedExplanation(user *store.User, project *store.Project, rawPath, lang string) (any, error) {
 	rel, err := files.CleanPath(rawPath)
 	if err != nil {
 		return nil, err
@@ -579,12 +593,15 @@ func (s *Service) SavedExplanation(user *store.User, project *store.Project, raw
 	if err != nil {
 		return nil, err
 	}
+	if saved != nil && !saved.inLang(lang) {
+		saved = nil // penjelasan tersimpan berbahasa lain: buat ulang dalam bahasa ini
+	}
 	return map[string]any{"saved": saved, "remaining": s.explainRemaining(user), "limit": s.cfg.AI.ExplainDailyLimit}, nil
 }
 
 // Explain membuat penjelasan alur satu file. Bila isi file sama dengan penjelasan tersimpan dan tidak
 // diminta ulang (force), yang tersimpan dikembalikan tanpa bertanya ke AI.
-func (s *Service) Explain(ctx context.Context, user *store.User, project *store.Project, body map[string]any) (any, error) {
+func (s *Service) Explain(ctx context.Context, user *store.User, project *store.Project, body map[string]any, lang string) (any, error) {
 	rel, content, err := explainInput(body)
 	if err != nil {
 		return nil, err
@@ -593,7 +610,7 @@ func (s *Service) Explain(ctx context.Context, user *store.User, project *store.
 	force, _ := body["force"].(bool)
 	if saved, err := s.savedExplanation(project.ID, rel); err != nil {
 		return nil, err
-	} else if saved != nil && saved.Hash == hash && !force {
+	} else if saved != nil && saved.Hash == hash && saved.inLang(lang) && !force {
 		return map[string]any{"saved": saved, "cached": true, "remaining": s.explainRemaining(user), "limit": s.cfg.AI.ExplainDailyLimit}, nil
 	}
 	day, remaining, err := s.explainQuota(user)
@@ -648,11 +665,11 @@ func (s *Service) Explain(ctx context.Context, user *store.User, project *store.
 		sections = append(sections, fmt.Sprintf("<related path=\"%s\"%s>\n%s</related>", p, note, numbered(text)))
 	}
 	sections = append(sections, fmt.Sprintf("FILE TO EXPLAIN: %s (%d lines)\n<file path=\"%s\">\n%s</file>", rel, known[rel], rel, numbered(content)))
-	ask := strings.Join(sections, "\n\n") + "\n\n---\n\nExplain the flow of " + rel + " as described in the instructions.\n" + explainRules
+	ask := strings.Join(sections, "\n\n") + "\n\n---\n\nExplain the flow of " + rel + " as described in the instructions.\n" + inLanguage(lang, explainRules)
 
 	ctx, cancel := context.WithTimeout(ctx, explainTimeout)
 	defer cancel()
-	convo := []message{{"role": "system", "content": explainPrompt}, {"role": "user", "content": ask}}
+	convo := []message{{"role": "system", "content": inLanguage(lang, explainPrompt)}, {"role": "user", "content": ask}}
 	tokens := 0
 	var ex *Explanation
 	for attempt := 0; ; attempt++ {
@@ -668,7 +685,7 @@ func (s *Service) Explain(ctx context.Context, user *store.User, project *store.
 			log.Printf("----- AI baca alur %s (%s) -----\n%s", rel, r.FinishReason, r.Text)
 		}
 		var problem string
-		ex, problem, err = parseExplanation(r.Text, known[rel], known)
+		ex, problem, err = parseExplanationIn(lang, r.Text, known[rel], known)
 		// Bisa dipakai tapi kurang (mis. tanpa nomor baris): minta perbaikan sekali; percobaan kedua diterima apa adanya.
 		if err == nil && (problem == "" || attempt > 0) {
 			break
@@ -684,9 +701,12 @@ func (s *Service) Explain(ctx context.Context, user *store.User, project *store.
 		if problem == "" {
 			problem = "it was not valid JSON in the required shape"
 		}
-		convo = append(convo, message{"role": "assistant", "content": r.Text}, message{"role": "user", "content": "Your answer cannot be used: " + problem + ".\n" + explainRules})
+		convo = append(convo, message{"role": "assistant", "content": r.Text}, message{"role": "user", "content": "Your answer cannot be used: " + problem + ".\n" + inLanguage(lang, explainRules)})
 	}
 	s.countExplain(user, day, tokens)
+	if lang == i18n.EN {
+		ex.Lang = i18n.EN
+	}
 
 	raw, _ := json.Marshal(ex)
 	now := time.Now().UnixMilli()
@@ -719,7 +739,7 @@ func explainError(ctx context.Context, err error, rel string) error {
 }
 
 // AskExplain menjawab pertanyaan lanjutan tentang file (dan langkah yang sedang dibuka) di panel Baca Alur Kode.
-func (s *Service) AskExplain(ctx context.Context, user *store.User, project *store.Project, body map[string]any) (any, error) {
+func (s *Service) AskExplain(ctx context.Context, user *store.User, project *store.Project, body map[string]any, lang string) (any, error) {
 	rel, content, err := explainInput(body)
 	if err != nil {
 		return nil, err
@@ -747,7 +767,11 @@ func (s *Service) AskExplain(ctx context.Context, user *store.User, project *sto
 			parts = append(parts, fmt.Sprintf("The user is looking at step %d \"%s\" (lines %v): %s", st.ID, st.Title, st.Lines, st.Explain))
 		}
 	}
-	convo := []message{{"role": "system", "content": explainAskPrompt}, {"role": "user", "content": strings.Join(parts, "\n\n")}, {"role": "assistant", "content": "Baik, saya sudah membaca file dan penjelasannya."}}
+	ack := "Baik, saya sudah membaca file dan penjelasannya."
+	if lang == i18n.EN {
+		ack = "Okay, I have read the file and its explanation."
+	}
+	convo := []message{{"role": "system", "content": inLanguage(lang, explainAskPrompt)}, {"role": "user", "content": strings.Join(parts, "\n\n")}, {"role": "assistant", "content": ack}}
 	history := toList(body["history"])
 	if len(history) > maxExplainHistory {
 		history = history[len(history)-maxExplainHistory:]

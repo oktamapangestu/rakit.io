@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{username}}</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="script.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
+</head>
+<body>
+  <main class="card" x-data="counter">
+    <p class="host">{{host}}</p>
+    <h1>Hello, world! 👋</h1>
+    <p>
+      This is your first website. Change <code>index.html</code>, <code>style.css</code>,
+      and <code>script.js</code> in the editor, save, and see the result right away.
+    </p>
+    <button type="button" @click="clicks++">Click me</button>
+    <p class="count"><span x-show="clicks > 0" x-cloak>You've clicked <span x-text="clicks"></span> times 🎉</span></p>
+  </main>
+</body>
+</html>

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Minify aset frontend rakit.io.
 # Sumber asli: assets-source/js, assets-source/css
-# Hasil:       public/js, public/css  (nama file sama, isi diminify)
+# Hasil:       public/js, public/css  (nama file sama, isi diminify), plus versi Inggris di public/js/en
+#              dan public/en/editor.html (lihat scripts/i18n.mjs)
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -30,6 +31,10 @@ for f in assets-source/css/*.css; do
   pct=$(( (before - after) * 100 / before ))
   printf "  %-14s %7d -> %7d bytes  (-%d%%)\n" "$name" "$before" "$after" "$pct"
 done
+
+echo
+# Versi bahasa Inggris (public/js/en, public/en/editor.html) dari kamus assets-source/i18n/en.
+node scripts/i18n.mjs build
 
 echo
 echo "Selesai. Total public/js + public/css: $(du -sh public/js public/css | awk '{s+=$1} END{print s}' 2>/dev/null || du -ch public/js public/css | tail -1 | cut -f1)"

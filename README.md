@@ -63,6 +63,30 @@ Server menyisipkan `?v=<hash>` pada referensi aset di HTML dan mengirimnya denga
 berkas berubah tanpa perlu membersihkan cache.
 
 
+## Bahasa Indonesia & Inggris
+
+Aplikasi punya dua bahasa. Bahasa Indonesia di `/`, `/editor`, `/panduan`; bahasa Inggris di `/en`,
+`/en/editor`, `/en/panduan`. Pilihan bahasa disimpan di cookie `lang` (dipasang saat membuka halaman `/en/...` atau
+lewat tombol ID/EN, yaitu `?lang=id|en`). Bila cookie berisi `en`, alamat Indonesia dialihkan ke versi Inggrisnya.
+
+- **Landing & Panduan** Inggris ditulis tangan: `public/en/index.html`, `public/en/panduan.html`. Bila halaman
+  Indonesianya diubah, ubah juga versi Inggrisnya (id anchor harus tetap sama).
+- **Editor** tetap ditulis dalam bahasa Indonesia. `npm run build` membuat `public/js/en/*.js` dan
+  `public/en/editor.html` dari kamus `assets-source/i18n/en/<file>.json` (teks Indonesia → Inggris; lihat
+  `scripts/i18n.mjs`). Setelah menambah/mengubah teks di editor:
+  ```bash
+  npm run i18n:extract   # teks baru masuk ke kamus dengan nilai "" — isi terjemahannya
+  npm run build
+  npm run i18n:check     # gagal bila masih ada teks yang belum diterjemahkan
+  ```
+  Teks yang belum diterjemahkan tetap tampil dalam bahasa Indonesia (tidak merusak apa pun).
+- **Pesan dari server Go** (error API, chat AI, publikasi, login Google) diterjemahkan oleh `go/internal/i18n`
+  memakai kamus `en.go` (kunci = teks Indonesia atau format `fmt`-nya).
+- **AI**: Builder/Plan membalas dalam bahasa yang dipakai pengguna. Baca Alur Kode, Diagram, dan prediksi kode
+  mengikuti cookie `lang`; penjelasan Baca Alur Kode disimpan per bahasa.
+- Pendaftar dari versi Inggris mendapat file awal dari `templates/default-en`.
+- Dashboard pemilik (`/admin`) dan widget asisten di website pengguna hanya berbahasa Indonesia.
+
 ## Akun & project
 
 - **Akun** bisa dibuat dengan username + email + password, atau **Lanjutkan dengan Google**

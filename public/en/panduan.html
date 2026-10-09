@@ -1,0 +1,2080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guide — rakit.io</title>
+<meta name="description" content="The complete rakit.io guide: how to use the editor, AI Builder, database, serverless functions, diagrams, version history, publishing and credits, plus a cheat sheet for writing prompts.">
+<link rel="alternate" hreflang="id" href="{{origin}}/panduan">
+<link rel="alternate" hreflang="en" href="{{origin}}/en/panduan">
+<link rel="alternate" hreflang="x-default" href="{{origin}}/panduan">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  /* Tema "kertas" — sama dengan homepage (assets-source/css/landing.css). */
+  :root{
+    --ink:#1a1320; --muted:#5a5347; --faint:#8a8274; --line:#e6d9bc; --line-strong:#d6c59e;
+    --brand:#8a5a00; --accent:#ffca54; --accent-soft:rgba(255,202,84,.22);
+    --brand-soft:#fff3d1; --bg:#fff8e7; --bg-2:#fbefd2; --card:#fffdf7;
+    --ok:#2e7d4f; --ok-soft:#e7f3ea; --warn:#a15c07; --warn-soft:#fdf0d5;
+    --tip:#7b4fb0; --tip-soft:#f1eaf8;
+    --terminal:#1a1320; --terminal-ink:#f3ead3;
+    --font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;padding-top:64px;background:var(--bg);color:var(--ink);font:15px/1.65 var(--font);-webkit-font-smoothing:antialiased}
+  ::selection{background:var(--accent);color:var(--ink)}
+  .topnav{position:fixed;top:0;left:0;right:0;z-index:50;height:64px;display:flex;align-items:center;gap:16px;
+    padding:0 max(20px,calc((100vw - 1240px)/2 + 20px));background:rgba(255,248,231,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink)}
+  .brand img{width:30px;height:30px;display:block}
+  .brand b{font-size:19px;font-weight:800;letter-spacing:-.035em}
+  .brand b span{color:var(--faint);font-weight:600}
+  .wrap{min-width:0;max-width:880px;width:100%;padding:8px 44px 80px;outline:none}
+  header{padding:30px 0 8px}
+  .back{display:inline-flex;align-items:center;gap:6px;height:36px;flex-shrink:0;font-size:14px;font-weight:600;color:var(--ink);text-decoration:none;
+    padding:0 14px;border:1px solid var(--line-strong);border-radius:10px;background:var(--card)}
+  .back:hover{border-color:var(--ink)}
+  .back.lang-link{padding:0 11px;font-family:var(--mono);font-size:13px}
+  .logo{display:block;color:var(--muted);font:600 12px var(--mono);letter-spacing:.14em;text-transform:uppercase}
+  h1{font-size:clamp(30px,5vw,44px);font-weight:900;margin:10px 0 8px;letter-spacing:-.035em;line-height:1.05}
+  h1 em{font-style:normal;background:linear-gradient(transparent 58%,var(--accent) 58%);padding:0 .08em}
+  .sub{color:var(--muted);font-size:16px;margin:0}
+  h2{font-size:22px;margin:44px 0 6px;padding-top:20px;border-top:1px solid var(--line);letter-spacing:-.02em;scroll-margin-top:72px}
+  h2 .n{display:inline-grid;place-items:center;min-width:30px;height:30px;margin-right:10px;padding:0 6px;border-radius:8px;
+    background:var(--accent);color:var(--ink);font:700 14px var(--mono);vertical-align:2px}
+  .lead{color:var(--muted);margin:0 0 14px;font-size:14.5px}
+  h3{font-size:15.5px;margin:22px 0 8px;letter-spacing:-.01em;scroll-margin-top:84px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:12px 0}
+  .prompt{background:var(--terminal);color:var(--terminal-ink);border-radius:12px;padding:13px 15px;margin:8px 0;
+    font:13.5px/1.6 var(--mono);white-space:pre-wrap;position:relative;border:0;box-shadow:inset 3px 0 0 var(--accent)}
+  .prompt .lbl{display:block;color:#a99f8a;font-size:11px;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;font-family:inherit}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid>*,.grid3>*{min-width:0}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  @media(max-width:680px){.grid3{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px}
+  .t-desk{background:#e3f0f3;color:#2f6f80}
+  .t-mob{background:#f6e6ef;color:#a3326a}
+  .t-both{background:var(--ok-soft);color:var(--ok)}
+  .bp{font:12.5px var(--mono);background:var(--bg-2);border:1px solid var(--line);padding:2px 7px;border-radius:5px;white-space:nowrap}
+  ul{margin:8px 0;padding-left:20px}
+  li{margin:4px 0}
+  code{background:var(--bg-2);color:var(--ink);padding:1.5px 6px;border-radius:5px;font:12.5px var(--mono);border:1px solid var(--line)}
+  .prompt code{background:transparent;color:var(--accent);border:0;padding:0}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px;background:var(--card);border-radius:12px;overflow:hidden}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--bg-2);font-weight:600}
+  .badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px}
+  .b-ok{background:var(--ok-soft);color:var(--ok)}
+  .b-no{background:#fbe5e2;color:#b42318}
+  .b-warn{background:var(--warn-soft);color:var(--warn)}
+  .note{border-left:3px solid var(--accent);background:var(--brand-soft);padding:10px 14px;border-radius:8px;margin:12px 0;font-size:13.5px}
+  .tip{border-left:3px solid var(--tip);background:var(--tip-soft);padding:10px 14px;border-radius:8px;margin:12px 0;font-size:13.5px}
+  .warn{border-left:3px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:8px;margin:12px 0;font-size:13.5px}
+  .kw{color:var(--brand);font-weight:600}
+  footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);color:var(--faint);font:12px var(--mono);text-align:center}
+  .pill{font-size:11px;background:var(--tip-soft);color:var(--tip);padding:2px 7px;border-radius:5px;font-weight:600;margin-left:6px}
+  .part{margin:56px 0 4px;padding:22px 24px;border-radius:16px;background:var(--terminal);color:var(--terminal-ink)}
+  .part .k{display:block;font:600 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+  .part h2{margin:6px 0 6px;padding:0;border:0;color:var(--terminal-ink);font-size:26px}
+  .part p{margin:0;color:#d9cfb6;font-size:14.5px}
+  kbd{display:inline-block;font:600 11.5px/1.5 var(--mono);background:var(--card);color:var(--ink);border:1px solid var(--line-strong);
+    border-bottom-width:2px;border-radius:5px;padding:0 6px;white-space:nowrap}
+  ol.steps{list-style:none;padding-left:0;margin:10px 0;counter-reset:step}
+  ol.steps>li{counter-increment:step;position:relative;padding-left:36px;margin:9px 0}
+  ol.steps>li::before{content:counter(step);position:absolute;left:0;top:1px;width:25px;height:25px;display:grid;place-items:center;
+    border-radius:7px;background:var(--accent-soft);border:1px solid var(--line-strong);font:700 12px var(--mono)}
+  .ui{font-weight:600;color:var(--ink);background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:0 6px;white-space:nowrap}
+  .table-scroll{overflow-x:auto;margin:10px 0}
+  .table-scroll table{margin:0;min-width:520px}
+  @media(max-width:680px){.part{padding:18px}.part h2{font-size:22px}.card{padding:14px}}
+  /* ---------- Tata letak dokumentasi ---------- */
+  .skip{position:absolute;left:-999px;top:8px;z-index:100;background:var(--ink);color:#fff;padding:8px 12px;border-radius:8px}
+  .skip:focus{left:8px}
+  .menu-btn{display:none;width:38px;height:38px;place-items:center;flex-shrink:0;border:1px solid var(--line-strong);border-radius:10px;background:var(--card);color:var(--ink);cursor:pointer}
+  .menu-btn svg{width:18px;height:18px;fill:currentColor}
+  .docs-tag{margin-left:8px;font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:var(--ink);padding:3px 7px;border-radius:6px}
+  .search{flex:1;min-width:0;max-width:420px;margin-left:auto;display:flex;align-items:center;gap:8px;height:38px;padding:0 10px;
+    background:var(--card);border:1px solid var(--line-strong);border-radius:10px;color:var(--muted)}
+  .search:focus-within{border-color:var(--ink);box-shadow:0 0 0 3px var(--accent-soft)}
+  .search svg{width:15px;height:15px;fill:currentColor;flex-shrink:0}
+  .search input{flex:1;min-width:0;width:100%;border:0;background:none;outline:none;font:14px var(--font);color:var(--ink)}
+  .search input::placeholder{color:var(--faint)}
+  .layout{display:grid;grid-template-columns:272px minmax(0,1fr);max-width:1240px;margin:0 auto}
+  .sidebar{position:sticky;top:64px;height:calc(100vh - 64px);overflow-y:auto;padding:22px 14px 48px 20px;border-right:1px solid var(--line);overscroll-behavior:contain}
+  .nav-group{margin:18px 0 6px 10px;font:700 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .nav-group:first-child{margin-top:0}
+  .nav-list{list-style:none;margin:0;padding:0}
+  .nav-list>li{margin:1px 0}
+  .nav-link{display:flex;align-items:baseline;gap:9px;padding:5px 10px;border-radius:8px;font-size:13.5px;line-height:1.4;color:var(--muted);text-decoration:none}
+  .nav-link:hover{background:var(--bg-2);color:var(--ink)}
+  .nav-link.active{background:var(--brand-soft);color:var(--ink);font-weight:600;box-shadow:inset 3px 0 0 var(--accent)}
+  .nav-n{min-width:24px;font:600 11px var(--mono);color:var(--faint)}
+  .nav-link.active .nav-n{color:var(--brand)}
+  .nav-sub{list-style:none;margin:2px 0 8px 43px;padding:0 0 0 10px;border-left:1px solid var(--line-strong)}
+  .nav-sub a{display:block;padding:3px 6px;font-size:12.5px;line-height:1.4;color:var(--muted);text-decoration:none;border-radius:6px}
+  .nav-sub a:hover{color:var(--ink);background:var(--bg-2)}
+  .nav-empty{margin:12px 10px;color:var(--faint);font-size:13px}
+  .scrim{position:fixed;inset:64px 0 0;z-index:39;background:rgba(26,19,32,.35)}
+  .anchor{margin-left:8px;color:var(--faint);text-decoration:none;font-weight:500;opacity:0;transition:opacity .15s}
+  h2:hover .anchor,h3:hover .anchor,.anchor:focus{opacity:1}
+  .anchor:hover{color:var(--brand)}
+  .quick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:24px 0 4px}
+  .quick-card{display:flex;flex-direction:column;gap:3px;padding:13px 15px;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--ink);text-decoration:none}
+  .quick-card:hover{border-color:var(--ink);background:var(--bg-2)}
+  .quick-card b{font-size:14.5px}
+  .quick-card span{font-size:13px;color:var(--muted);line-height:1.45}
+  a{color:var(--brand)}
+  /* ---------- Blok kode ---------- */
+  figure.code{margin:12px 0;border-radius:12px;overflow:hidden;background:var(--terminal);border:1px solid #2c2433}
+  figure.code figcaption{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;padding:7px 10px 7px 14px;background:#241b2b;border-bottom:1px solid #362b40;font:12px var(--mono);color:#b3a991}
+  figure.code .file{color:var(--terminal-ink);font-weight:600}
+  figure.code .desc{flex:1;min-width:160px;font-family:var(--font);font-size:12.5px}
+  figure.code .lang{margin-left:auto;font-size:10.5px;letter-spacing:.1em;color:#b3a991}
+  figure.code pre{margin:0;padding:14px 16px;overflow-x:auto;font:13px/1.65 var(--mono);color:var(--terminal-ink);tab-size:2;font-variant-ligatures:none}
+  code,.prompt{font-variant-ligatures:none}
+  pre code{background:none;border:0;padding:0;color:inherit;font:inherit;border-radius:0}
+  .tk-c{color:#9d93a6;font-style:italic}.tk-s{color:#bfe39a}.tk-k{color:#ffca54}.tk-n{color:#f9a87a}.tk-f{color:#8fd0ff}.tk-t{color:#ff9fbc}.tk-a{color:#ffd88a}
+  .copy-btn{font:600 11.5px var(--mono);color:var(--terminal-ink);background:#30263a;border:1px solid #4a3d56;border-radius:6px;padding:3px 9px;cursor:pointer}
+  .copy-btn:hover{border-color:var(--accent)}
+  .copy-btn.done{color:var(--ink);background:var(--accent);border-color:var(--accent)}
+  .prompt{padding-right:72px}
+  .prompt .copy-btn{position:absolute;top:9px;right:9px}
+  @media(max-width:1100px){.wrap{padding:8px 28px 80px}.quick{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:960px){
+    .layout{display:block}
+    .menu-btn{display:grid}
+    .sidebar{position:fixed;top:64px;left:0;bottom:0;height:auto;width:min(300px,86vw);z-index:40;background:var(--bg);
+      transform:translateX(-102%);transition:transform .2s ease;box-shadow:8px 0 24px rgba(26,19,32,.12)}
+    .sidebar.open{transform:none}
+    .wrap{margin:0 auto;padding:4px 20px 80px}
+  }
+  @media(max-width:680px){
+    .topnav{gap:10px;padding:0 12px}
+    .brand b{font-size:17px}.brand .docs-tag,.back:not(.lang-link){display:none}
+    .search-key{display:none}
+    .wrap{padding:4px 16px 72px}
+    .quick{grid-template-columns:1fr}
+    figure.code .desc{order:3;flex-basis:100%;min-width:0}
+    h2{font-size:20px}
+  }
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.sidebar{transition:none}}
+</style>
+</head>
+<body>
+<a class="skip" href="#konten-utama">Skip to content</a>
+<nav class="topnav" aria-label="Navigation">
+  <button type="button" class="menu-btn" id="menuBtn" aria-controls="sidebar" aria-expanded="false" aria-label="Open table of contents">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12v1H2zm0 4h12v1H2zm0 4h12v1H2z"/></svg>
+  </button>
+  <a class="brand" href="/en"><img src="/logo.svg" alt=""><b>rakit<span>.io</span></b><span class="docs-tag">Docs</span></a>
+  <label class="search">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 0 1 4.38 8.83l3.9 3.9-.7.7-3.9-3.9A5.5 5.5 0 1 1 6.5 1m0 1a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9"/></svg>
+    <input id="docSearch" type="search" placeholder="Search the guide…" aria-label="Search the guide" autocomplete="off" spellcheck="false">
+    <kbd class="search-key">/</kbd>
+  </label>
+  <a class="back lang-link" href="/panduan?lang=id" hreflang="id" lang="id" title="Versi bahasa Indonesia">ID</a>
+  <a class="back" href="/en/editor">Open editor <span aria-hidden="true">→</span></a>
+</nav>
+<div class="layout">
+  <aside class="sidebar" id="sidebar" aria-label="Table of contents">
+    <p class="nav-group">Feature Guide</p>
+    <ul class="nav-list">
+      <li><a class="nav-link" href="#f-mulai"><span class="nav-n">F1</span><span class="nav-t">Getting Started &amp; the Editor</span></a></li>
+      <li><a class="nav-link" href="#f-project"><span class="nav-n">F2</span><span class="nav-t">Projects</span></a></li>
+      <li><a class="nav-link" href="#f-file"><span class="nav-n">F3</span><span class="nav-t">Files, Folders &amp; Images</span></a></li>
+      <li><a class="nav-link" href="#f-kode"><span class="nav-n">F4</span><span class="nav-t">Code Editor</span></a></li>
+      <li><a class="nav-link" href="#f-preview"><span class="nav-n">F5</span><span class="nav-t">Preview, Select Blocks &amp; Edit</span></a></li>
+      <li><a class="nav-link" href="#f-ai"><span class="nav-n">F6</span><span class="nav-t">AI Assistant (Builder &amp; Plan)</span></a></li>
+      <li><a class="nav-link" href="#f-data"><span class="nav-n">F7</span><span class="nav-t">Database (Data Tab)</span></a></li>
+      <li><a class="nav-link" href="#f-fungsi"><span class="nav-n">F8</span><span class="nav-t">Serverless Functions (Backend)</span></a></li>
+      <li><a class="nav-link" href="#f-provider"><span class="nav-n">F9</span><span class="nav-t">AI in Functions (AI Providers)</span></a></li>
+      <li><a class="nav-link" href="#f-diagram"><span class="nav-n">F10</span><span class="nav-t">AI-Drawn Diagrams</span></a></li>
+      <li><a class="nav-link" href="#f-riwayat"><span class="nav-n">F11</span><span class="nav-t">Version History</span></a></li>
+      <li><a class="nav-link" href="#f-console"><span class="nav-n">F12</span><span class="nav-t">Console</span></a></li>
+      <li><a class="nav-link" href="#f-publikasi"><span class="nav-n">F13</span><span class="nav-t">Publishing: Live or Dev/Prod</span></a></li>
+      <li><a class="nav-link" href="#f-kredit"><span class="nav-n">F14</span><span class="nav-t">AI Credits, Plans &amp; Payment</span></a></li>
+      <li><a class="nav-link" href="#f-pengaturan"><span class="nav-n">F15</span><span class="nav-t">Settings &amp; Keyboard Shortcuts</span></a></li>
+      <li><a class="nav-link" href="#f-masalah"><span class="nav-n">F16</span><span class="nav-t">Common Problems &amp; Fixes</span></a></li>
+    </ul>
+    <p class="nav-group">Prompt Cheat Sheet</p>
+    <ul class="nav-list">
+      <li><a class="nav-link" href="#dasar"><span class="nav-n">1</span><span class="nav-t">Basics</span></a></li>
+      <li><a class="nav-link" href="#struktur"><span class="nav-n">2</span><span class="nav-t">Structure &amp; Pages</span></a></li>
+      <li><a class="nav-link" href="#desain"><span class="nav-n">3</span><span class="nav-t">Design &amp; Visual Style</span></a></li>
+      <li><a class="nav-link" href="#responsive"><span class="nav-n">4</span><span class="nav-t">Responsive Design</span></a></li>
+      <li><a class="nav-link" href="#seo"><span class="nav-n">5</span><span class="nav-t">SEO &amp; Social Sharing</span></a></li>
+      <li><a class="nav-link" href="#aksesibilitas"><span class="nav-n">6</span><span class="nav-t">Accessibility</span></a></li>
+      <li><a class="nav-link" href="#form"><span class="nav-n">7</span><span class="nav-t">Forms &amp; Input Validation</span></a></li>
+      <li><a class="nav-link" href="#animasi"><span class="nav-n">8</span><span class="nav-t">Animation &amp; Advanced Interaction</span></a></li>
+      <li><a class="nav-link" href="#media"><span class="nav-n">9</span><span class="nav-t">Images, Media &amp; Icons</span></a></li>
+      <li><a class="nav-link" href="#navigasi"><span class="nav-n">10</span><span class="nav-t">Navigation &amp; Multiple Pages</span></a></li>
+      <li><a class="nav-link" href="#kinerja"><span class="nav-n">11</span><span class="nav-t">Performance &amp; Speed</span></a></li>
+      <li><a class="nav-link" href="#konten"><span class="nav-n">12</span><span class="nav-t">Content &amp; Writing</span></a></li>
+      <li><a class="nav-link" href="#keamanan"><span class="nav-n">13</span><span class="nav-t">Security &amp; Personal Data</span></a></li>
+      <li><a class="nav-link" href="#integrasi"><span class="nav-n">14</span><span class="nav-t">Third-Party Integrations (CDNs &amp; Services)</span></a></li>
+      <li><a class="nav-link" href="#dashboard"><span class="nav-n">15</span><span class="nav-t">Data Tables &amp; Dashboards</span></a></li>
+      <li><a class="nav-link" href="#pola-lanjutan"><span class="nav-n">16</span><span class="nav-t">Advanced Prompt Patterns</span></a></li>
+      <li><a class="nav-link" href="#database"><span class="nav-n">17</span><span class="nav-t">Database</span></a></li>
+      <li><a class="nav-link" href="#interaksi"><span class="nav-n">18</span><span class="nav-t">Interaction &amp; JavaScript Features</span></a></li>
+      <li><a class="nav-link" href="#contoh"><span class="nav-n">19</span><span class="nav-t">Complete Prompt Examples (Ready to Use)</span></a></li>
+      <li><a class="nav-link" href="#lanjutan"><span class="nav-n">20</span><span class="nav-t">Fixing &amp; Changing</span></a></li>
+      <li><a class="nav-link" href="#batasan"><span class="nav-n">21</span><span class="nav-t">Limits &amp; Technical Tips</span></a></li>
+      <li><a class="nav-link" href="#template"><span class="nav-n">★</span><span class="nav-t">Universal Prompt Template</span></a></li>
+    </ul>
+    <p class="nav-empty" id="navEmpty" hidden>No matching sections.</p>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+  <main class="wrap" id="konten-utama" tabindex="-1">
+
+<header>
+  <span class="logo">rakit.io Documentation</span>
+  <h1>The <em>Complete</em> Guide</h1>
+  <p class="sub">How to use every rakit.io feature — from the editor, AI Builder and database to serverless functions — plus a cheat sheet for writing instructions to the AI.</p>
+  <div class="quick">
+    <a class="quick-card" href="#f-mulai"><b>Just starting?</b><span>Sign up, get to know the editor &amp; your first project.</span></a>
+    <a class="quick-card" href="#f-ai"><b>Build with AI</b><span>Builder &amp; Plan modes, image attachments, Select blocks.</span></a>
+    <a class="quick-card" href="#f-data"><b>Save data</b><span>Tables, access, and the <code>/api/db</code> API.</span></a>
+    <a class="quick-card" href="#f-fungsi"><b>Backend code</b><span>Serverless functions, API reference &amp; code examples.</span></a>
+    <a class="quick-card" href="#dasar"><b>Writing prompts</b><span>The prompt formula &amp; ready-to-copy examples.</span></a>
+    <a class="quick-card" href="#f-masalah"><b>Having trouble?</b><span>Common causes &amp; how to fix them.</span></a>
+  </div>
+</header>
+
+<!-- ══════════════════════════ PART 1: FEATURE GUIDE ══════════════════════════ -->
+<div class="part">
+  <span class="k">Part 1</span>
+  <h2 style="margin-top:6px">Feature Guide</h2>
+  <p>Get to know every part of the rakit.io editor: where it is, what it's for, and how to use it step by step.
+  In the editor, the <b>ⓘ</b> button next to each feature also opens a short explanation.</p>
+</div>
+
+<!-- ══════════════ F1. GETTING STARTED ══════════════ -->
+<h2 id="f-mulai"><span class="n">F1</span>Getting Started &amp; the Editor</h2>
+<p class="lead">From signing up to knowing where every button on the screen is.</p>
+
+<h3>Sign up &amp; log in</h3>
+<ol class="steps">
+  <li>Open the rakit.io home page and click <span class="ui">Sign up</span>. Fill in a <b>username</b>, <b>email</b> and <b>password</b> — or choose <span class="ui">Continue with Google</span>.</li>
+  <li>Right after signing up, your first website is live at <code>yourname.rakit.io</code> and the editor opens automatically.</li>
+  <li>New accounts get a one-time <b>AI credit bonus</b>, plus <b>free credits every day</b> (see <a href="#f-kredit">Credits &amp; Plans</a>).</li>
+</ol>
+<div class="note">🔐 Accounts registered with email + password keep logging in with their password, even if the email matches your Google account. Accounts aren't merged automatically, for security.</div>
+
+<h3>Two editor layouts: Simple &amp; Coding</h3>
+<p style="margin:6px 0">Choose with the switch at the top center. Your choice is remembered in the browser.</p>
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">✦ Simple</h3>
+    <p style="margin:6px 0">Just the <b>AI chat</b> and the <b>preview</b>. Great when you'd rather describe things to the AI and see the result without touching code.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">&lt;/&gt; Coding</h3>
+    <p style="margin:6px 0">The full layout: file panel, code editor, database, functions, diagrams, history and console. Features that need this layout switch you to Coding automatically.</p>
+  </div>
+</div>
+
+<h3>Screen map (Coding layout)</h3>
+<table>
+  <tr><th>Area</th><th>What's there</th></tr>
+  <tr><td><b>Top bar, left</b></td><td>Logo, file panel button, the <b>website address chip</b> (folder button = switch/create project, site link, copy URL button).</td></tr>
+  <tr><td><b>Top bar, center</b></td><td>The <span class="ui">Simple</span> / <span class="ui">Coding</span> switch and the save status.</td></tr>
+  <tr><td><b>Top bar, right</b></td><td><span class="ui">Preview</span> (show/hide), <span class="ui">Guide</span>, <span class="ui">Publish</span> (only in manual publishing mode), <span class="ui">View site</span>, the plan badge, and your <b>avatar</b> (account menu).</td></tr>
+  <tr><td><b>Left panel</b></td><td>The project's files &amp; folders, new file/folder buttons, image upload, and quota usage.</td></tr>
+  <tr><td><b>Center area</b></td><td>Tabs <span class="ui">Code</span> · <span class="ui">AI</span> · <span class="ui">Data</span> · <span class="ui">Diagram</span> · <span class="ui">Functions</span> · <span class="ui">History</span> · <span class="ui">Console</span>. The <b>ⓘ</b> button explains the open tab.</td></tr>
+  <tr><td><b>Right panel</b></td><td>Website preview, screen size options, <span class="ui">Select blocks</span>, and <span class="ui">Edit</span> (text &amp; images).</td></tr>
+</table>
+
+<h3>Avatar menu (top right corner)</h3>
+<table>
+  <tr><th>Item</th><th>What it does</th></tr>
+  <tr><td>Open public website · Copy website URL</td><td>Opens or copies the address of the active project's website.</td></tr>
+  <tr><td>Publishing mode</td><td>Choose <b>live instantly</b> or <b>manual (dev/prod)</b> — see <a href="#f-publikasi">Publishing</a>.</td></tr>
+  <tr><td>Save all</td><td>Saves every open file that has unsaved changes.</td></tr>
+  <tr><td>Settings</td><td>Light/dark theme, language, and AI code prediction.</td></tr>
+  <tr><td>Bahasa Indonesia / English</td><td>Switch the interface language.</td></tr>
+  <tr><td>Subscription &amp; AI credits</td><td>See plans, buy credits, or subscribe.</td></tr>
+  <tr><td>Log out</td><td>Log out of your account in this browser.</td></tr>
+</table>
+
+<div class="tip">📱 <b>On a phone</b>, the editor uses bottom navigation: <span class="ui">File</span> · <span class="ui">Editor</span> (or <span class="ui">Chat AI</span> in the Simple layout) · <span class="ui">Preview</span>. The project menu is in the avatar menu.</div>
+
+<!-- ══════════════ F2. PROJECTS ══════════════ -->
+<h2 id="f-project"><span class="n">F2</span>Projects — Many Websites in One Account</h2>
+<p class="lead">Each project is a separate website with its own address, files, database, version history and AI conversations.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Creating a new project</h3>
+    <ol class="steps">
+      <li>Click the <b>folder button</b> in the website address chip (top left).</li>
+      <li>Choose <span class="ui">New project</span>.</li>
+      <li>Enter the <b>website address</b> (lowercase letters, digits, <code>-</code>), e.g. <code>bakery</code> → <code>bakery.rakit.io</code>.</li>
+      <li>Enter a <b>project name</b> (optional), then <span class="ui">Create project</span>.</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Switch, rename, delete</h3>
+    <ul>
+      <li><b>Switch project</b>: click the folder button and pick a project from the list.</li>
+      <li><span class="ui">Rename project…</span>: changes the display name (the address stays).</li>
+      <li><span class="ui">Delete this project…</span>: deletes its files, database and history. Your last project can't be deleted.</li>
+    </ul>
+  </div>
+</div>
+
+<table>
+  <tr><th>Item</th><th>Details</th></tr>
+  <tr><td>Number of projects</td><td>At most <b>5</b> per account.</td></tr>
+  <tr><td>AI credits</td><td>Belong to the <b>account</b> and are shared by all projects.</td></tr>
+  <tr><td>File &amp; database quota</td><td>Counted <b>per project</b> (size depends on your plan).</td></tr>
+  <tr><td>Running AI prompts</td><td>One prompt at a time per account, in any project.</td></tr>
+</table>
+
+<!-- ══════════════ F3. FILES & IMAGES ══════════════ -->
+<h2 id="f-file"><span class="n">F3</span>Files, Folders &amp; Images</h2>
+<p class="lead">Every part of your website is stored as a file in the left panel. <code>index.html</code> is the home page.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Creating &amp; managing files</h3>
+    <ul>
+      <li>The <b>New file</b> / <b>New folder</b> buttons above the file list. Type a full path to create inside a folder, e.g. <code>css/style.css</code>.</li>
+      <li><b>Right-click</b> (or the ⋯ button) on a file: Open, Preview this page, Copy public URL, Rename (<kbd>F2</kbd>), Delete (<kbd>Del</kbd>).</li>
+      <li>Right-click on a folder: New file, New folder, Upload images to that folder.</li>
+      <li>The <b>Reload</b> and <b>Collapse all folders</b> buttons are right next to them.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Uploading images</h3>
+    <ul>
+      <li>Click the <b>Upload images</b> button, right-click → <span class="ui">Upload images…</span>, or <b>drag files</b> straight into the file list.</li>
+      <li>Formats: <code>.png .jpg .jpeg .gif .webp .svg .ico .avif</code> — the file contents are checked, so other files with a renamed extension are rejected.</li>
+      <li>Names are tidied automatically (lowercase, spaces → <code>-</code>). If the name already exists: <span class="ui">Replace</span>, <span class="ui">Save as new</span>, or <span class="ui">Skip</span>.</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Using images on a page</h3>
+<p style="margin:6px 0">Click an image in the file panel to view it (pixel &amp; file size), then copy its <b>path</b>, the <code>&lt;img&gt;</code> tag, or the CSS <code>url()</code>.</p>
+<figure class="code" data-lang="html"><figcaption><span class="file">index.html</span></figcaption><pre><code>&lt;img src="/images/logo.png" alt="Bakery logo"&gt;</code></pre></figure>
+<figure class="code" data-lang="css"><figcaption><span class="file">style.css</span></figcaption><pre><code>.hero { background-image: url('/images/hero.jpg'); }</code></pre></figure>
+<div class="tip">💡 The AI knows the list of images in your project, so you can write: <i>“use /images/hero.jpg as the hero section background”</i>. The AI can't create or edit images — upload the images you need yourself.</div>
+
+<table>
+  <tr><th>Limit</th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>One code file</td><td colspan="3">512 KB (.html · .css · .js)</td></tr>
+  <tr><td>One image</td><td>1 MB</td><td>5 MB</td><td>10 MB</td></tr>
+  <tr><td>Total storage per project</td><td>20 MB</td><td>100 MB</td><td>250 MB</td></tr>
+  <tr><td>Files &amp; folders</td><td>500</td><td>2,000</td><td>5,000</td></tr>
+</table>
+
+<!-- ══════════════ F4. CODE EDITOR ══════════════ -->
+<h2 id="f-kode"><span class="n">F4</span>Code Editor</h2>
+<p class="lead">A VS Code-style editor for changing HTML, CSS and JavaScript directly.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Saving</h3>
+    <ul>
+      <li><b>Auto-save</b> (the switch below the editor): saves as you type, and the preview updates too.</li>
+      <li><kbd>Ctrl/⌘</kbd> <kbd>S</kbd> saves the active file · avatar menu → <span class="ui">Save all</span>.</li>
+      <li>When you close a tab with unsaved changes, you're asked: Save / Don't save / Cancel.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Code prediction (AI) — free</h3>
+    <ul>
+      <li>Pause typing for a moment → the AI suggests the continuation in <b>gray text</b>.</li>
+      <li><kbd>Tab</kbd> accepts · <kbd>Esc</kbd> or keep typing to ignore.</li>
+      <li>Uses no credits (there's a daily limit). Turn it off in <span class="ui">Settings</span>.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Right-click → ✦ AI</h3>
+    <ul>
+      <li>Select a few lines of code, then right-click:</li>
+      <li><span class="ui">✦ Ask AI to change this code</span> — puts that code in the AI box.</li>
+      <li><span class="ui">✦ Ask AI about this code</span> — for an explanation.</li>
+      <li>The request isn't sent right away; you can complete it first.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Search &amp; navigation</h3>
+    <ul>
+      <li><kbd>Ctrl/⌘</kbd> <kbd>F</kbd> finds in the file · <kbd>Ctrl/⌘</kbd> <kbd>B</kbd> shows/hides the file panel.</li>
+      <li>The breadcrumb above the editor shows where the file is.</li>
+      <li>The bottom bar: cursor position and the file's language.</li>
+    </ul>
+  </div>
+</div>
+
+<h3>📖 Code Walkthrough — the AI explains your code (free)</h3>
+<p style="margin:6px 0">The <span class="ui">Code Walkthrough</span> button above the editor (for .html, .css and .js files) opens an explanation panel next to the editor. The AI explains the code <b>in the order it runs</b>, not line by line.</p>
+<ol class="steps">
+  <li>Open a file and click <span class="ui">Code Walkthrough</span>. Wait while the AI puts the steps together.</li>
+  <li>Each step has a title, a kind (start, decision, loop, waiting for action, request…), the lines involved, an explanation, a real-value example, and key terms (click one to see its meaning).</li>
+  <li><b>Click a step</b> → its lines are highlighted in the editor. <b>Click a line</b> in the editor → its step opens. Use the ‹ › buttons, ▶ (autoplay), or the arrow keys.</li>
+  <li>Steps that refer to another file (a page, a CSS class, an <code>/api/fn/…</code> function) can be clicked to open it, then <span class="ui">← Back</span>.</li>
+  <li>Also see the <b>flow diagram</b>, <b>notes</b> (bugs, needs checking, suggestions) and <b>code speed</b>. Use <span class="ui">Ask the AI</span> to ask about the open step.</li>
+</ol>
+<div class="note">💾 Explanations are saved per file. Reopening the same file doesn't ask the AI again. When the file changes, the panel shows a notice and a <span class="ui">Refresh</span> button. Free, with a daily limit per account.</div>
+
+<!-- ══════════════ F5. PREVIEW ══════════════ -->
+<h2 id="f-preview"><span class="n">F5</span>Preview, Select Blocks &amp; Edit</h2>
+<p class="lead">See your website the way visitors do, at different screen sizes.</p>
+
+<table>
+  <tr><th>Control</th><th>What it does</th></tr>
+  <tr><td>Address field</td><td>Change the page path (e.g. <code>/about</code>) and press <kbd>Enter</kbd> to open another page. <kbd>Esc</kbd> cancels.</td></tr>
+  <tr><td>Desktop · Tablet · Phone</td><td>Changes the preview width: full, 768 px, or 390 px — to check the responsive layout.</td></tr>
+  <tr><td>↻ Reload</td><td>Reloads the preview.</td></tr>
+  <tr><td>↗ Open in a new tab</td><td>Opens the previewed page in a new browser tab.</td></tr>
+  <tr><td><b>DEV</b> badge</td><td>Shown in manual publishing mode: the preview shows the dev version, not the public website.</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>\</kbd></td><td>Show/hide the preview panel.</td></tr>
+</table>
+
+<h3>🎯 Select blocks — change only specific parts</h3>
+<p style="margin:6px 0">Instead of describing “the part below the second heading…”, point at it directly in the preview.</p>
+<ol class="steps">
+  <li>Click <span class="ui">Select blocks</span> above the preview.</li>
+  <li>Hover over the page, then <b>click the part</b> you want to change (max. <b>5 blocks</b>, across several pages if you like — change pages with the links in the preview).</li>
+  <li>Click <span class="ui">Write instruction</span>. The selected blocks appear above the AI box.</li>
+  <li>Write the change, e.g. <i>“make it 3 columns and add icons”</i>, then send. The AI focuses on those blocks and leaves the rest alone.</li>
+  <li>Click <span class="ui">Done</span> to leave selection mode.</li>
+</ol>
+
+<h3>✏️ Edit — change text &amp; images right in the preview</h3>
+<p style="margin:6px 0">For changing headings, paragraphs, button labels, list items or images without opening the code and without using AI credits.</p>
+<ol class="steps">
+  <li>Click <span class="ui">Edit</span> above the preview.</li>
+  <li>Hover over the page — editable text gets a blue box — then <b>click the text</b> and type.</li>
+  <li>Press <kbd>Enter</kbd> or click elsewhere to save. <kbd>Esc</kbd> cancels.</li>
+  <li>Click <span class="ui">Done</span> to leave edit mode.</li>
+</ol>
+<p style="margin:6px 0">The change is written to that page's HTML file (e.g. <code>index.html</code>) at exactly the same spot — formatting such as bold or links inside the text is kept. The file also opens in the Code tab, so you can undo with <kbd>Ctrl/⌘</kbd> <kbd>Z</kbd>. Text written by JavaScript (e.g. the message <code>'Password must be at least 6 characters.'</code> in <code>script.js</code>) can be changed too — the string is replaced in that JS file. Text assembled from data (e.g. <i>“You've clicked 3 times”</i>) can't: clicking it shows a red marker, so change it in the code or ask the AI. To change pages: <kbd>Alt</kbd>+click a link.</p>
+<p style="margin:6px 0"><b>Replacing images:</b> in <span class="ui">Edit</span> mode, click the image. Pick another image from the project, click <span class="ui">Upload a new image…</span>, or paste an image address (<code>https://…</code>). Also fill in the <b>alt text</b> — a short description of the image for screen readers and search engines — then <span class="ui">Save</span>. Only <code>&lt;img&gt;</code> images can be replaced here; CSS background images and <code>&lt;picture&gt;</code> images with several versions are changed in the code or with the AI.</p>
+
+<!-- ══════════════ F6. AI ASSISTANT ══════════════ -->
+<h2 id="f-ai"><span class="n">F6</span>AI Assistant (Builder &amp; Plan)</h2>
+<p class="lead">Open the <span class="ui">AI</span> tab or press <kbd>Ctrl/⌘</kbd> <kbd>I</kbd>. Prompt-writing techniques are in <a href="#dasar">Part 2</a>.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">🔨 Builder</h3>
+    <p style="margin:6px 0">The AI writes/changes/deletes files and creates database tables directly.</p>
+    <ol class="steps">
+      <li>Choose <span class="ui">Builder</span> below the prompt box.</li>
+      <li>Write your request and press <kbd>Enter</kbd> (<kbd>Shift</kbd>+<kbd>Enter</kbd> = new line).</li>
+      <li>Watch the progress &amp; the list of changed files. Click a file to see the differences.</li>
+      <li>Choose <span class="ui">Save</span> to accept or <span class="ui">Undo</span> to roll everything back.</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">🧭 Plan</h3>
+    <p style="margin:6px 0">The AI only discusses &amp; drafts a plan, without changing files.</p>
+    <ol class="steps">
+      <li>Choose <span class="ui">Plan</span> and describe your idea.</li>
+      <li>Go back and forth until the plan is right.</li>
+      <li>Press <span class="ui">Run this plan</span> — the AI switches to Builder and carries it out.</li>
+    </ol>
+  </div>
+</div>
+
+<h3>Prompt box features</h3>
+<table>
+  <tr><th>Feature</th><th>How to use it</th></tr>
+  <tr><td>📎 Attach images</td><td>The <span class="ui">Image</span> button, paste (<kbd>Ctrl/⌘</kbd> <kbd>V</kbd>), or drag files. Max. <b>3 images</b> (JPG/PNG/WEBP, max. 2 MB) — a design example, a sketch, or a screenshot of an error. Prompts with images use <b>2 credits</b>.</td></tr>
+  <tr><td>🎯 Selected blocks</td><td>From <a href="#f-preview">Select blocks</a>. Remove one with the × button on its chip.</td></tr>
+  <tr><td>⏹ Stop</td><td>Stops the AI midway. The credits are refunded.</td></tr>
+  <tr><td>Prompt length</td><td>Max. <b>20,000 characters</b>.</td></tr>
+</table>
+
+<h3>Conversations &amp; history</h3>
+<ul>
+  <li><b>🕘 Conversation history</b> (clock icon): open an old conversation to continue it.</li>
+  <li><b>↻ New conversation</b>: start a new topic. The AI doesn't carry over the previous chat, so it's cheaper and more focused.</li>
+  <li><b>🗑 Delete all history</b>: deletes every conversation in this project.</li>
+  <li>History is stored on the server (max. 50 conversations, deleted after 90 days of inactivity).</li>
+</ul>
+
+<div class="note">⚙️ <b>Prompts keep running even if you close the tab.</b> Every prompt is processed on the server. Refreshing or closing the tab doesn't cancel it; when you open the editor again, the progress reconnects and the Save/Undo buttons are still there. When the AI is busy, the panel shows your <b>position in the queue</b>.</div>
+<div class="tip">💰 <b>Your credits are safe.</b> Credits are deducted when a prompt is sent and <b>refunded</b> if the prompt fails, you stop it, or the queue is full. Before the AI changes files, a version is saved automatically in <a href="#f-riwayat">History</a>.</div>
+
+<h3>“✦ … with AI” buttons in other features</h3>
+<p style="margin:6px 0">Many features have a ✦ button that <b>fills the AI box</b> with a request plus its context (it isn't sent right away):</p>
+<table>
+  <tr><th>Where</th><th>Example buttons</th></tr>
+  <tr><td>Functions</td><td>Create with AI, Change, Fix with AI (from a failed log/test)</td></tr>
+  <tr><td>Database</td><td>Use the table on the website, Build a form with AI</td></tr>
+  <tr><td>Diagram</td><td>Fix findings with AI</td></tr>
+  <tr><td>Console</td><td>Fix with AI on an error line</td></tr>
+  <tr><td>Code editor</td><td>Right-click → change / ask about the selected code</td></tr>
+  <tr><td>Feature explanation (ⓘ)</td><td>Try it now — an example prompt for that feature</td></tr>
+</table>
+
+<!-- ══════════════ F7. DATABASE ══════════════ -->
+<h2 id="f-data"><span class="n">F7</span>Database (Data Tab)</h2>
+<p class="lead">Store visitor data &amp; content permanently — like a spreadsheet, ready to use from your web pages.</p>
+
+<h3>Creating a table</h3>
+<ol class="steps">
+  <li>Open the <span class="ui">Data</span> tab and click <span class="ui">+</span> (New table) or <span class="ui">+ Create table</span>.</li>
+  <li>Enter a table name (e.g. <code>messages</code>), then add columns: a name, a <b>type</b>, tick <b>Required</b> if it must be filled, and <b>Private</b> if visitors must not see it.</li>
+  <li>Click <span class="ui">Create table</span>. The <code>id</code> and <code>created_at</code> columns are created automatically.</li>
+</ol>
+<div class="tip">💡 Faster: ask the AI in Builder mode — <i>“build a guestbook with a name and message form”</i> — and the table and its page are created together.</div>
+
+<h3>Column types</h3>
+<table>
+  <tr><th>Type</th><th>For</th><th>Example value</th></tr>
+  <tr><td>Text</td><td>Names, messages, addresses (max. 10,000 characters)</td><td><code>Budi</code></td></tr>
+  <tr><td>Number</td><td>Prices, quantities, scores</td><td><code>150000</code></td></tr>
+  <tr><td>Yes/No</td><td>Attending, agreed, paid</td><td><code>true</code> / <code>false</code></td></tr>
+  <tr><td>Date</td><td>Birthdays, event schedules</td><td><code>2026-12-31</code> or <code>2026-12-31T19:00</code></td></tr>
+  <tr><td>Relation</td><td>Points to a row in another table (e.g. order → product)</td><td><code>12</code> (the target row's id)</td></tr>
+  <tr><td>Image</td><td>Product photos, avatars, payment receipts</td><td><code>/uploads/products/abc.jpg</code></td></tr>
+</table>
+<div class="warn">⚠️ <b>A column's type can't be changed</b> after it's created. Column &amp; table names can be changed (click the name, edit it, press <kbd>Enter</kbd>).</div>
+
+<h3>Access: who may do what</h3>
+<p style="margin:6px 0">Click <span class="ui">Settings</span> on a table. Each operation can be <b>Public</b> (every visitor) or <b>Only you</b> (the owner, through the editor). By default everything is <b>Only you</b>.</p>
+<table>
+  <tr><th>Operation</th><th>Meaning</th><th>Usual advice</th></tr>
+  <tr><td><code>list</code></td><td>Read a list of records</td><td>Public for guestbooks, catalogs, leaderboards</td></tr>
+  <tr><td><code>view</code></td><td>Read one record</td><td>Public for product detail pages</td></tr>
+  <tr><td><code>create</code></td><td>Add records</td><td>Public for contact forms, RSVPs, orders</td></tr>
+  <tr><td><code>update</code></td><td>Change records</td><td><b>Only you</b> (visitors are anonymous)</td></tr>
+  <tr><td><code>delete</code></td><td>Delete records</td><td><b>Only you</b></td></tr>
+</table>
+<p style="margin:6px 0;font-size:14px"><b>Private</b> columns are never sent to visitors even when <code>list</code> is public — good for emails, phone numbers and addresses.</p>
+
+<h3>Managing table contents</h3>
+<ul>
+  <li><span class="ui">+ Row</span> adds data by hand. <b>Double-click</b> a cell to edit it. The trash icon deletes a row.</li>
+  <li>Image columns show a thumbnail; double-click to upload, replace or clear it (you can also paste an <code>https://…</code> address).</li>
+  <li>Lots of data is split into pages — use the Previous / Next buttons.</li>
+  <li>The <span class="ui">Use on your website</span> section shows ready-to-copy example code (reading, adding, updating, deleting, handling errors) and flags access that isn't public yet.</li>
+  <li><span class="ui">Delete table</span> is in the table settings — click once more to confirm.</li>
+</ul>
+
+<h3>Using the database from your website code</h3>
+<div class="table-scroll"><table>
+  <tr><th>Request</th><th>What it does</th></tr>
+  <tr><td><code>GET /api/db/&lt;table&gt;?sort=-created_at&amp;limit=20&amp;offset=0</code></td><td>List rows → <code>{ rows, total }</code>. Add <code>&amp;column=value</code> to filter.</td></tr>
+  <tr><td><code>GET /api/db/&lt;table&gt;/&lt;id&gt;</code></td><td>One row</td></tr>
+  <tr><td><code>POST /api/db/&lt;table&gt;</code></td><td>Add a row (JSON body)</td></tr>
+  <tr><td><code>PATCH /api/db/&lt;table&gt;/&lt;id&gt;</code></td><td>Update a row</td></tr>
+  <tr><td><code>DELETE /api/db/&lt;table&gt;/&lt;id&gt;</code></td><td>Delete a row</td></tr>
+  <tr><td><code>POST /api/db/&lt;table&gt;/upload?column=&lt;column&gt;</code></td><td>Upload an image for an Image column → <code>{ url }</code></td></tr>
+  <tr><td><code>GET /api/db/&lt;table&gt;?expand=&lt;relation_column&gt;</code></td><td>Also fetch the data from the table a relation column points to</td></tr>
+</table></div>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">script.js</span><span class="desc">save &amp; show messages</span></figcaption><pre><code>// save
+const res = await fetch('/api/db/messages', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ name, message }),
+});
+if (!res.ok) alert((await res.json()).error);
+
+// show the 20 newest
+const { rows } = await (await fetch('/api/db/messages?sort=-created_at&amp;limit=20')).json();</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">script.js</span><span class="desc">upload a photo, then save its address</span></figcaption><pre><code>const up = await fetch('/api/db/products/upload?column=image', { method: 'POST', body: fileInput.files[0] });
+const { url } = await up.json();          // e.g. "/uploads/products/lx3k-9f2a.jpg"
+await fetch('/api/db/products', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ name, image: url }),
+});</code></pre></figure>
+
+<div class="warn">⚠️ <b>Don't store images as base64</b> in a text column — it will be rejected. Use an <b>Image</b> column and upload as in the example above. Visitors can only upload if the table's <code>create</code> or <code>update</code> access is public.</div>
+
+<table>
+  <tr><th>Database limits</th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>Size per project</td><td>10 MB</td><td>50 MB</td><td>100 MB</td></tr>
+  <tr><td>Tables · columns</td><td colspan="3">20 tables · 30 columns per table</td></tr>
+  <tr><td>Requests from visitors</td><td colspan="3">300 reads &amp; 60 writes per minute per visitor · max. 20 uploads / 10 minutes</td></tr>
+</table>
+
+<!-- ══════════════ F8. SERVERLESS FUNCTIONS ══════════════ -->
+<h2 id="f-fungsi"><span class="n">F8</span>Serverless Functions (Backend)</h2>
+<p class="lead">JavaScript code that runs on the <b>server</b>, not in the visitor's browser — for secret API keys, calculations that mustn't be tampered with, notifications, or calling other services.</p>
+
+<h3>Creating &amp; trying a function</h3>
+<ol class="steps">
+  <li>Open the <span class="ui">Functions</span> tab and click <span class="ui">+ New function</span>. Give it a name (lowercase letters, digits, <code>-</code> or <code>_</code>, max. 40), e.g. <code>send-message</code>.</li>
+  <li>The file <code>functions/send-message.js</code> is created with example code. Click <span class="ui">Open code</span> to change it.</li>
+  <li>Click <span class="ui">Try</span>: choose a method, fill in the query &amp; JSON body, then run it. The result, status, time and <code>console.log</code> output appear right away.</li>
+  <li>Call it from your web pages at <code>/api/fn/send-message</code>. <span class="ui">Copy URL</span> copies the full address.</li>
+</ol>
+<div class="tip">💡 Or click <span class="ui">✦ Create with AI</span> and describe the function, e.g. <i>“send a Telegram notification for every new message from the contact form”</i>.</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">What a function looks like</h3>
+    <figure class="code" data-lang="js"><figcaption><span class="file">functions/order.js</span></figcaption><pre><code>export default async function (req, { db, env, fetch, ai }) {
+  // req: { method, query, headers, body }
+  const row = await db.insert('orders', {
+    name: req.body.name, total: 150000,
+  });
+  return { ok: true, id: row.id }; // sent as JSON
+}</code></pre></figure>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Calling it from a page</h3>
+    <figure class="code" data-lang="js"><figcaption><span class="file">script.js</span></figcaption><pre><code>const res = await fetch('/api/fn/order', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ name: 'Ani' }),
+});
+const data = await res.json();</code></pre></figure>
+  </div>
+</div>
+
+<h3>What's available inside a function</h3>
+<table>
+  <tr><th>Object</th><th>Use</th></tr>
+  <tr><td><code>req</code></td><td><code>method</code>, <code>query</code>, <code>headers</code>, <code>body</code> (already parsed if JSON). For scheduled runs, <code>req.method</code> is <code>"CRON"</code>.</td></tr>
+  <tr><td><code>db</code></td><td>The project database <b>as the owner</b> (public access rules don't apply): <code>db.list(table, { sort, limit, offset, filter })</code>, <code>db.get</code>, <code>db.insert</code>, <code>db.update</code>, <code>db.delete</code>.</td></tr>
+  <tr><td><code>env</code></td><td>Secret values from <span class="ui">Secrets (env)</span>, e.g. <code>env.TELEGRAM_TOKEN</code>.</td></tr>
+  <tr><td><code>fetch</code></td><td>Calls external APIs (max. 10 per execution; can't call rakit.io websites — use <code>db</code>).</td></tr>
+  <tr><td><code>ai</code></td><td>Uses AI with your own API key — see <a href="#f-provider">AI in Functions</a>.</td></tr>
+  <tr><td>Response</td><td>Plain values are sent as JSON. For full control: <code>new Response(text, { status, headers })</code> or <code>Response.json(data, { status })</code>. A thrown error → status 500 <code>{ error }</code>.</td></tr>
+</table>
+<div class="note">🧩 Functions run in a <b>sandbox</b>, not Node.js: there's no <code>require</code>, no npm packages, and no file access. Code in the <code>functions/</code> folder can <b>never</b> be read by visitors.</div>
+
+<h3>Full reference</h3>
+<div class="table-scroll"><table>
+  <tr><th>API</th><th>Details</th></tr>
+  <tr><td><code>req.method</code></td><td><code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>… or <code>CRON</code> when run by a schedule.</td></tr>
+  <tr><td><code>req.path</code></td><td>The path that was called, e.g. <code>/api/fn/order</code>.</td></tr>
+  <tr><td><code>req.query</code></td><td>Object of URL parameters (values are text): <code>/api/fn/search?q=cake</code> → <code>req.query.q</code>.</td></tr>
+  <tr><td><code>req.headers</code></td><td>Request headers (lowercase names). <code>req.headers['x-client-ip']</code> = the visitor's IP. Cookies aren't forwarded.</td></tr>
+  <tr><td><code>req.body</code></td><td>An object when the request sends JSON (<code>Content-Type: application/json</code>), otherwise raw text. Max. 1 MB.</td></tr>
+  <tr><td><code>await req.text()</code> · <code>await req.json()</code></td><td>The body as text / parsed as JSON.</td></tr>
+  <tr><td><code>db.list(table, { sort, limit, offset, filter })</code></td><td>→ <code>{ rows, total }</code>. <code>sort: '-created_at'</code> (<code>-</code> = newest first), <code>limit</code> max. 100, <code>filter: { status: 'new' }</code> = column equals value.</td></tr>
+  <tr><td><code>db.get(table, id)</code></td><td>One row (error if it doesn't exist).</td></tr>
+  <tr><td><code>db.insert(table, data)</code></td><td>Adds a row → the new row with its <code>id</code> &amp; <code>created_at</code>.</td></tr>
+  <tr><td><code>db.update(table, id, data)</code></td><td>Changes only the columns you send → the updated row.</td></tr>
+  <tr><td><code>db.delete(table, id)</code></td><td>Deletes a row → <code>{ ok: true }</code>.</td></tr>
+  <tr><td><code>env.NAME</code></td><td>Project secrets (max. 30 secrets, UPPER_CASE names). Not set → <code>undefined</code>.</td></tr>
+  <tr><td><code>await fetch(url, { method, headers, body })</code></td><td>Calls an external service. An object <code>body</code> is sent as JSON automatically. Result: <code>ok</code>, <code>status</code>, <code>headers.get(name)</code>, <code>await text()</code>, <code>await json()</code>. Max. 10 calls, 8 seconds &amp; 2 MB response per call.</td></tr>
+  <tr><td><code>console.log/info/warn/error</code></td><td>Shown in Try, the Execution log, and the Console tab (BE). Objects are printed as JSON. <code>console.time/timeEnd</code>, <code>count</code>, <code>table</code> and <code>assert</code> are available too.</td></tr>
+  <tr><td><code>return value</code></td><td>Status 200 + JSON. <code>return</code> with no value → status 204 (empty).</td></tr>
+  <tr><td><code>Response.json(data, { status, headers })</code></td><td>JSON with your own status, e.g. 400 for bad input.</td></tr>
+  <tr><td><code>new Response(text, { status, headers })</code></td><td>A text/HTML/CSV response. Allowed headers: <code>content-type</code>, <code>cache-control</code>, <code>content-disposition</code>, <code>location</code>, <code>etag</code>, <code>access-control-*</code>, and <code>x-…</code>.</td></tr>
+  <tr><td><code>Response.redirect(url, 302)</code></td><td>Redirects the visitor to another address.</td></tr>
+  <tr><td><code>throw new Error('…')</code></td><td>Status 500. In the dev version &amp; tests the full message is shown; on the public website visitors only see “The function failed to run”, with details in the Log.</td></tr>
+</table></div>
+
+<h3>Ready-to-use code examples</h3>
+<p style="margin:6px 0">Copy into <code>functions/&lt;name&gt;.js</code>, adjust the table/column names, then test with the <span class="ui">Try</span> button.</p>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/contact.js</span><span class="desc">validate, save, send a Telegram notification</span></figcaption><pre><code>export default async function (req, { db, env, fetch }) {
+  if (req.method !== 'POST') return Response.json({ error: 'Use POST' }, { status: 405 });
+
+  const { name, email, message } = req.body || {};
+  if (!name || !message) return Response.json({ error: 'Name and message are required' }, { status: 400 });
+
+  // the "messages" table can stay "Only you": db in a function works as the owner
+  const row = await db.insert('messages', { name, email, message });
+
+  // secrets: TELEGRAM_TOKEN &amp; TELEGRAM_CHAT_ID (Functions tab → Secrets)
+  const tg = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: { chat_id: env.TELEGRAM_CHAT_ID, text: `New message from ${name}:\n${message}` },
+  });
+  if (!tg.ok) console.warn('Telegram failed', tg.status, await tg.text());
+
+  return { ok: true, id: row.id };
+}</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/checkout.js</span><span class="desc">calculate the total on the server (prices can't be tampered with)</span></figcaption><pre><code>export default async function (req, { db }) {
+  const { name, phone, items } = req.body || {};   // items: [{ id: 3, qty: 2 }, …]
+  if (!Array.isArray(items) || !items.length) {
+    return Response.json({ error: 'Your cart is empty' }, { status: 400 });
+  }
+
+  let total = 0;
+  const lines = [];
+  for (const it of items) {
+    const p = await db.get('products', it.id);         // the price comes from the database, not the browser
+    const qty = Math.max(1, Math.min(99, Number(it.qty) || 1));
+    if (p.stock &lt; qty) return Response.json({ error: `Not enough ${p.name} in stock` }, { status: 409 });
+    total += p.price * qty;
+    lines.push(`${p.name} x${qty}`);
+    await db.update('products', p.id, { stock: p.stock - qty });
+  }
+
+  const order = await db.insert('orders', { name, phone, items: lines.join(', '), total, status: 'new' });
+  return { ok: true, number: order.id, total };
+}</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/weather.js</span><span class="desc">call an external API without leaking the API key (GET)</span></figcaption><pre><code>export default async function (req, { env, fetch }) {
+  const city = req.query.city || 'Jakarta';
+  const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}`
+            + `&amp;units=metric&amp;lang=en&amp;appid=${env.OWM_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) return Response.json({ error: 'Weather data unavailable' }, { status: 502 });
+
+  const d = await res.json();
+  return Response.json(
+    { city: d.name, temp: d.main.temp, weather: d.weather[0].description },
+    { headers: { 'cache-control': 'public, max-age=600' } },   // cache for 10 minutes
+  );
+}
+// called from a page: fetch('/api/fn/weather?city=Bandung')</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/admin-orders.js</span><span class="desc">one function, several methods + a simple key</span></figcaption><pre><code>export default async function (req, { db, env }) {
+  // a simple key for a private admin page (secret ADMIN_KEY)
+  if (req.headers['x-admin-key'] !== env.ADMIN_KEY) {
+    return Response.json({ error: 'Not allowed' }, { status: 401 });
+  }
+
+  switch (req.method) {
+    case 'GET':
+      return db.list('orders', { sort: '-created_at', limit: 50, filter: req.query.status ? { status: req.query.status } : {} });
+    case 'PATCH':
+      return db.update('orders', req.query.id, { status: req.body.status });
+    case 'DELETE':
+      return db.delete('orders', req.query.id);
+    default:
+      return Response.json({ error: 'Method not supported' }, { status: 405 });
+  }
+}
+// from a page: fetch('/api/fn/admin-orders?status=new', { headers: { 'X-Admin-Key': key } })</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/daily-report.js</span><span class="desc">run by a schedule (Pro/Unlimited)</span></figcaption><pre><code>export default async function (req, { db, env, fetch }) {
+  if (req.method !== 'CRON') return Response.json({ error: 'Schedules only' }, { status: 403 });
+
+  const since = Date.now() - 24 * 3600e3;                      // the last 24 hours (created_at is in UTC)
+  const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);   // WIB date for the title
+  const { rows } = await db.list('orders', { sort: '-created_at', limit: 100 });
+  const fresh = rows.filter((r) =&gt; Date.parse(r.created_at) &gt;= since);
+  const revenue = fresh.reduce((n, r) =&gt; n + (r.total || 0), 0);
+
+  console.log(`Report ${today}: ${fresh.length} orders, Rp${revenue}`);
+  await fetch('https://api.resend.com/emails', {                 // send an email via Resend
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RESEND_KEY}`, 'Content-Type': 'application/json' },
+    body: { from: 'shop@yourdomain.com', to: env.MY_EMAIL, subject: `Report ${today}`,
+            html: `&lt;p&gt;${fresh.length} orders, total Rp${revenue}&lt;/p&gt;` },
+  });
+}
+// set it in the Functions tab → Schedule → "Every day at 21:00"</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/download-csv.js</span><span class="desc">file responses &amp; redirects</span></figcaption><pre><code>export default async function (req, { db, env }) {
+  if (req.query.key !== env.ADMIN_KEY) return Response.redirect('/', 302);   // not the owner → home page
+
+  const { rows } = await db.list('signups', { sort: 'id', limit: 100 });
+  const csv = ['id,name,email', ...rows.map((r) =&gt; `${r.id},"${r.name}","${r.email}"`)].join('\n');
+  return new Response(csv, {
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': 'attachment; filename="signups.csv"',
+    },
+  });
+}</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/support.js</span><span class="desc">a chatbot with history (needs an AI provider)</span></figcaption><pre><code>export default async function (req, { ai }) {
+  const history = (req.body?.messages || []).slice(-10);      // [{ role: 'user'|'assistant', content }]
+  const { text } = await ai.chat({
+    system: "You are the support agent for Sari's Bakery. Open 8 am–8 pm. Answer briefly &amp; kindly.",
+    messages: history,
+    maxTokens: 400,
+  });
+  return { reply: text };
+}</code></pre></figure>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">script.js</span><span class="desc">Calling a function &amp; handling errors on a page</span></figcaption><pre><code>async function send(data) {
+  const res = await fetch('/api/fn/contact', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await res.json().catch(() =&gt; ({}));
+  if (!res.ok) throw new Error(result.error || 'Sending failed');   // the message from Response.json({ error })
+  return result;
+}</code></pre></figure>
+
+<div class="tip">💡 <b>Good habits:</b> check input first and reply <code>400</code> with a clear message · never trust prices/totals from the browser · keep every key in Secrets · use <code>console.log</code> and check the output in <span class="ui">Try</span> or the Log · the time limit is 10 seconds, so avoid many sequential <code>fetch</code> calls.</div>
+
+<table>
+  <tr><th>Other limits</th><th>Value</th></tr>
+  <tr><td>Requests to one website</td><td>120 per minute (all visitors) · 60 per minute per visitor</td></tr>
+  <tr><td>Request body · <code>fetch</code> response</td><td>1 MB · 2 MB</td></tr>
+  <tr><td>Console output per execution</td><td>16 KB (the rest is cut off)</td></tr>
+  <tr><td>Dev version (manual publishing)</td><td>Dev functions are called at <code>yourname--dev.rakit.io/api/fn/…</code> and use the dev database</td></tr>
+</table>
+
+<h3>Secrets, schedules and logs</h3>
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">🔑 Secrets (env)</h3>
+    <p style="margin:6px 0">Enter a name (e.g. <code>TELEGRAM_TOKEN</code>) and its value, then click <span class="ui">Save</span>. Read it in code with <code>env.TELEGRAM_TOKEN</code>. The value isn't shown in the editor again.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">⏱ Schedules <span class="pill">Pro / Unlimited</span></h3>
+    <p style="margin:6px 0">Click <span class="ui">Schedule</span> on a function: every 5/15/30 minutes, every hour, every day at a set time, every week, or a custom cron (WIB time, UTC+7). Most frequent: Pro every 15 minutes, Unlimited every 5 minutes.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">📜 Execution log</h3>
+    <p style="margin:6px 0">The latest executions (triggered by visitors, tests or schedules) with status, duration, errors and console output. Failed executions have a <span class="ui">✦ Fix with AI</span> button.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">📊 Quota</h3>
+    <p style="margin:6px 0">The meter above the tab shows today's executions. Limits: <b>10 seconds</b> &amp; <b>64 MB</b> per execution.</p>
+  </div>
+</div>
+<table>
+  <tr><th>Executions per day (WIB)</th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>All functions in the account</td><td>1,000</td><td>20,000</td><td>100,000</td></tr>
+</table>
+<div class="warn">⚠️ <b>Never put API keys/tokens in a page's .html or .js files</b> — anyone can see them. Store them in Secrets (env) and use them through a function.</div>
+
+<!-- ══════════════ F9. AI IN FUNCTIONS ══════════════ -->
+<h2 id="f-provider"><span class="n">F9</span>AI in Functions (AI Providers)</h2>
+<p class="lead">Build AI features into your website — chatbots, summaries, data extraction, image checks — using your own API key.</p>
+
+<h3>Adding a provider</h3>
+<ol class="steps">
+  <li><span class="ui">Functions</span> tab → the <span class="ui">AI providers</span> section → add a provider.</li>
+  <li>Choose a type: <b>OpenAI</b>, <b>Anthropic Claude</b>, <b>Google Gemini</b>, or <b>OpenAI-compatible</b> (with quick buttons for DeepSeek, Groq, OpenRouter, Mistral and Together).</li>
+  <li>Fill in a name (used in your code), the API key, a chat model, and an embedding model (optional). Mark one as the <b>default</b>.</li>
+  <li>Click <span class="ui">Save &amp; test</span> to make sure the key and model work. Max. 10 providers per project.</li>
+</ol>
+
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/help.js</span></figcaption><pre><code>export default async function (req, { ai }) {
+  const { text } = await ai.chat(req.body.question, { system: 'You are a bakery support agent. Answer briefly.' });
+  const data = await ai.json('Extract the name &amp; phone from: ' + req.body.message, { name: 'string', phone: 'string' });
+  const check = await ai.chat('Is this a payment receipt?', { images: ['/uploads/receipts/abc.jpg'] });
+  const [a, b] = await ai.embed(['chocolate cake', 'brownies']);
+  return { text, data, check: check.text, similar: ai.similarity(a, b) };
+}</code></pre></figure>
+
+<table>
+  <tr><th>Call</th><th>Result</th></tr>
+  <tr><td><code>ai.chat(prompt, { system, images, provider, model, temperature, maxTokens })</code></td><td><code>{ text, model, provider, usage }</code></td></tr>
+  <tr><td><code>ai.json(prompt, shape)</code></td><td>An object in the requested shape</td></tr>
+  <tr><td><code>ai.embed(text | [text])</code></td><td>Vectors for meaning-based search (Anthropic has no embeddings)</td></tr>
+  <tr><td><code>ai.similarity(a, b)</code></td><td>How similar two vectors are (0–1)</td></tr>
+  <tr><td><code>ai.providers()</code></td><td>The installed providers (without keys)</td></tr>
+</table>
+<div class="note">🛡️ <b>Your API key is safe.</b> Keys are stored on the server, never sent to the browser or to function code (the editor only shows the last 4 characters), and are deleted when the provider is removed. The provider bills your account — rakit.io doesn't deduct credits. Set a <b>spending limit</b> in the provider's dashboard.</div>
+<p style="margin:6px 0;font-size:14px">Limits: max. <b>5</b> <code>ai.*</code> <b>calls</b> per execution, 60 seconds per call, max. 4 images (5 MB). Time spent waiting for the AI doesn't count toward the function's 10-second limit. Usage per provider is shown in the Functions tab.</p>
+
+<!-- ══════════════ F10. DIAGRAMS ══════════════ -->
+<h2 id="f-diagram"><span class="n">F10</span>AI-Drawn Diagrams</h2>
+<p class="lead">The AI draws your website's structure from its files &amp; database — to understand the big picture, for documentation, or for coursework.</p>
+
+<table>
+  <tr><th>Type</th><th>Shows</th></tr>
+  <tr><td>Use Case</td><td>The actors and what they can do on the website</td></tr>
+  <tr><td>Activity</td><td>A visitor's main process flow, with decision branches</td></tr>
+  <tr><td>Sequence</td><td>The order of interactions Visitor → Page → API → database/external service</td></tr>
+  <tr><td>Class</td><td>Tables and JavaScript modules with their attributes, methods and relationships</td></tr>
+  <tr><td>State</td><td>How an important object's status changes (e.g. an order)</td></tr>
+  <tr><td>ERD</td><td>Tables, columns, types, required/private, and relationships</td></tr>
+  <tr><td>Site map</td><td>Pages, links between pages, CSS/JS files — broken links &amp; missing files are marked</td></tr>
+  <tr><td>Data flow</td><td>Which pages/scripts/functions use which tables — requests that will be rejected are marked</td></tr>
+</table>
+
+<ol class="steps">
+  <li>Open the <span class="ui">Diagram</span> tab and choose a type.</li>
+  <li>Click <span class="ui">Update diagram</span> — the AI draws it from the current state (uses <b>1 credit</b>, refunded on failure). The diagram is saved and <b>doesn't change by itself</b>.</li>
+  <li>Read the <span class="ui">Findings</span> panel: the AI's notes, such as tables anyone can delete or broken links.</li>
+  <li>If the drawing fails to display, click <span class="ui">Fix with AI</span> (free, max. 2 times per diagram).</li>
+  <li>Copy the Mermaid code or download it as SVG. The ⓘ button explains how to read the open diagram type.</li>
+</ol>
+
+<h3>Zoom &amp; pan</h3>
+<table>
+  <tr><th></th><th>Zoom</th><th>Pan</th></tr>
+  <tr><td>Mouse</td><td>Scroll wheel; double-click (<kbd>Shift</kbd> = zoom out)</td><td>Drag; <kbd>Shift</kbd> + scroll = horizontal</td></tr>
+  <tr><td>Touchpad</td><td>Pinch, or <kbd>Ctrl/⌘</kbd> + scroll</td><td>Two-finger swipe</td></tr>
+  <tr><td>Touchscreen</td><td>Two-finger pinch</td><td>One-finger drag</td></tr>
+  <tr><td>Keyboard</td><td><kbd>+</kbd> / <kbd>−</kbd>, <kbd>0</kbd> fit to screen, <kbd>1</kbd> actual size</td><td>Arrow keys</td></tr>
+</table>
+
+<!-- ══════════════ F11. HISTORY ══════════════ -->
+<h2 id="f-riwayat"><span class="n">F11</span>Version History</h2>
+<p class="lead">A “save point” for all your project files. Experiment without fear of breaking things.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">When versions are saved</h3>
+    <ul>
+      <li><b>Automatically</b> when you start editing (at most every 10 minutes).</li>
+      <li><b>Automatically</b> before the AI changes files.</li>
+      <li><b>Automatically</b> before restoring a version (so even a restore can be undone).</li>
+      <li><b>Manually</b>: the <span class="ui">Save version now</span> button, with your own name, e.g. “before redesign”.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Restoring</h3>
+    <ol class="steps">
+      <li>Open the <span class="ui">History</span> tab and choose a version.</li>
+      <li>Look at the files labeled <b>Changed</b>, <b>Deleted</b>, or <b>New file</b>. Click <span class="ui">View differences</span>.</li>
+      <li><span class="ui">Restore this file</span> for one file, or <span class="ui">Restore this version</span> for the whole project.</li>
+    </ol>
+  </div>
+</div>
+<div class="warn">⚠️ <b>The database isn't included</b> in saves/restores, so data submitted by visitors isn't lost. Restoring the whole project also deletes files created after that version.</div>
+<table>
+  <tr><th>History limits per project</th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>Kept for</td><td>7 days</td><td>30 days</td><td>90 days</td></tr>
+  <tr><td>Number of versions</td><td>20</td><td>200</td><td>2,000</td></tr>
+</table>
+<p style="margin:6px 0;font-size:14px">History doesn't count toward your storage quota.</p>
+
+<!-- ══════════════ F12. CONSOLE ══════════════ -->
+<h2 id="f-console"><span class="n">F12</span>Console — Finding the Cause of Errors</h2>
+<p class="lead">Every message from your website in one place. A red number on the tab means new errors.</p>
+
+<table>
+  <tr><th>Source</th><th>What's in it</th></tr>
+  <tr><td><b>FE</b> (frontend)</td><td><code>console.log</code> output and errors from pages in the preview</td></tr>
+  <tr><td><b>BE</b> (backend)</td><td>Logs and errors from serverless functions</td></tr>
+  <tr><td><b>Network</b></td><td>Requests from pages to the server (e.g. <code>fetch('/api/db/products')</code>) with their status</td></tr>
+  <tr><td><b>System</b></td><td>Notes such as pages being loaded</td></tr>
+</table>
+<ul>
+  <li>Filter by source, tick <span class="ui">Errors only</span>, or type in <span class="ui">Search logs…</span>.</li>
+  <li>The ↻ button reloads the preview, 🗑 clears the log.</li>
+  <li>On an error line, click <span class="ui">✦ Fix with AI</span> — the error message is sent along as context.</li>
+</ul>
+<table>
+  <tr><th>Status</th><th>Meaning</th></tr>
+  <tr><td><span class="badge b-ok">2xx</span></td><td>Success</td></tr>
+  <tr><td><span class="badge b-warn">4xx</span></td><td>Request rejected — e.g. 403 table access isn't public yet, 404 table/page doesn't exist, 400 invalid data</td></tr>
+  <tr><td><span class="badge b-no">5xx</span></td><td>An error on the server/in a function</td></tr>
+</table>
+
+<!-- ══════════════ F13. PUBLISHING ══════════════ -->
+<h2 id="f-publikasi"><span class="n">F13</span>Publishing: Live or Dev/Prod</h2>
+<p class="lead">Control when visitors see your changes. Open the avatar menu → <span class="ui">Publishing mode</span>.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">⚡ Live instantly <span class="pill">default</span></h3>
+    <p style="margin:6px 0">Every change appears on <code>yourname.rakit.io</code> right away. Great for learning and experimenting.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">🚀 Manual publishing (dev/prod)</h3>
+    <p style="margin:6px 0">You edit the <b>dev version</b> at <code>yourname--dev.rakit.io</code> (you can share it to get feedback). The public website only changes when you press <span class="ui">Publish</span>. The dev database is separate, for testing.</p>
+  </div>
+</div>
+
+<h3>Publishing changes</h3>
+<ol class="steps">
+  <li>A dot on the <span class="ui">Publish</span> button (top right) means there are changes that aren't live yet.</li>
+  <li>Click the button — you'll see the list of <b>new</b>, <b>changed</b> and <b>deleted</b> files, plus database structure changes.</li>
+  <li>Click <span class="ui">Publish</span>. Data &amp; images submitted by visitors on the public website stay safe; dev test data isn't copied.</li>
+  <li>If a table/column will be deleted, tick the confirmation first — its data will be removed from the public website.</li>
+</ol>
+<div class="warn">⚠️ Switching from manual back to <b>live instantly</b> makes unpublished changes go live right away, and the test data in dev is replaced by the real data from the public website.</div>
+
+<!-- ══════════════ F14. CREDITS & PLANS ══════════════ -->
+<h2 id="f-kredit"><span class="n">F14</span>AI Credits, Plans &amp; Payment</h2>
+<p class="lead">The credit badge in the AI panel shows your remaining credits. Click it, or open the avatar menu → <span class="ui">Subscription &amp; AI credits</span>.</p>
+
+<h3>What does each feature cost?</h3>
+<table>
+  <tr><th>Feature</th><th>Cost</th></tr>
+  <tr><td>AI prompt (Builder / Plan)</td><td><b>1 credit</b></td></tr>
+  <tr><td>Prompt with images</td><td><b>2 credits</b></td></tr>
+  <tr><td>Update diagram</td><td><b>1 credit</b></td></tr>
+  <tr><td>Code prediction, Code Walkthrough, diagram fixes</td><td><span class="badge b-ok">Free</span> (with a daily limit)</td></tr>
+  <tr><td>AI in functions (<code>ai.*</code>)</td><td>Billed by the provider to your API key, not rakit.io credits</td></tr>
+  <tr><td>Failed / stopped prompts / full queue</td><td>Credits are <b>refunded</b></td></tr>
+</table>
+
+<h3>Where credits come from (used in this order)</h3>
+<ol class="steps">
+  <li><b>Subscription quota</b> — if you subscribe to Pro/Unlimited.</li>
+  <li>The <b>welcome bonus</b> for new accounts (one-time), then <b>daily free credits</b> — reset at 00:00 WIB (UTC+7); leftovers don't accumulate.</li>
+  <li><b>Purchased credits</b> — never expire.</li>
+</ol>
+
+<h3>Plans</h3>
+<div class="table-scroll"><table>
+  <tr><th></th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
+  <tr><td>AI</td><td>Daily free credits</td><td>A credit quota every 30 days</td><td>No monthly quota, with a daily prompt limit</td></tr>
+  <tr><td>File storage / project</td><td>20 MB</td><td>100 MB</td><td>250 MB</td></tr>
+  <tr><td>Database / project</td><td>10 MB</td><td>50 MB</td><td>100 MB</td></tr>
+  <tr><td>Files &amp; folders</td><td>500</td><td>2,000</td><td>5,000</td></tr>
+  <tr><td>Image size</td><td>1 MB</td><td>5 MB</td><td>10 MB</td></tr>
+  <tr><td>Version history</td><td>7 days / 20</td><td>30 days / 200</td><td>90 days / 2,000</td></tr>
+  <tr><td>Function executions / day</td><td>1,000</td><td>20,000</td><td>100,000</td></tr>
+  <tr><td>Function schedules</td><td><span class="badge b-no">—</span></td><td>min. 15 minutes</td><td>min. 5 minutes</td></tr>
+</table></div>
+<p style="margin:6px 0;font-size:14px">Current prices and AI quotas are shown in the <span class="ui">Subscription &amp; AI credits</span> menu.</p>
+
+<h3>Paying with QRIS</h3>
+<ol class="steps">
+  <li>Choose a credit package or a subscription, then click pay.</li>
+  <li>Scan the QRIS code with any Indonesian banking or e-wallet app that supports QRIS.</li>
+  <li>Keep the payment window open — the credits/plan activate automatically as soon as the payment is received.</li>
+</ol>
+<ul>
+  <li><b>30-day subscriptions</b>, paid once with no automatic billing.</li>
+  <li><b>Renewing</b> the same plan adds 30 days from its end date.</li>
+  <li><b>Upgrading</b> Pro → Unlimited: active immediately; the remaining Pro days are converted by price.</li>
+  <li>When a subscription ends, limits go back to Free. Files aren't deleted, but new/larger files are rejected until usage is below the limits.</li>
+</ul>
+
+<!-- ══════════════ F15. SETTINGS & SHORTCUTS ══════════════ -->
+<h2 id="f-pengaturan"><span class="n">F15</span>Settings &amp; Keyboard Shortcuts</h2>
+<p class="lead">Avatar menu → <span class="ui">Settings</span>. Settings are saved in the browser you're using.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Appearance &amp; language</h3>
+    <p style="margin:6px 0"><b>Light</b> (cream paper) or <b>Dark</b> theme. The code editor and diagram colors follow along. Choose <b>Bahasa Indonesia</b> or <b>English</b> for the interface — the AI's explanations, diagrams and messages follow that language too.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Code editor</h3>
+    <p style="margin:6px 0"><b>Automatic code prediction (AI)</b> — turn the gray code suggestions on or off.</p>
+  </div>
+</div>
+
+<table>
+  <tr><th>Shortcut</th><th>Action</th></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>S</kbd></td><td>Save file</td></tr>
+  <tr><td><kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>S</kbd></td><td>Save all</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>F</kbd></td><td>Find in file</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>B</kbd></td><td>Show/hide the file panel</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>\</kbd></td><td>Show/hide the preview</td></tr>
+  <tr><td><kbd>Ctrl/⌘</kbd> <kbd>I</kbd></td><td>Open the AI Assistant</td></tr>
+  <tr><td><kbd>Enter</kbd> · <kbd>Shift</kbd> <kbd>Enter</kbd></td><td>Send prompt · new line</td></tr>
+  <tr><td><kbd>Tab</kbd> · <kbd>Esc</kbd></td><td>Accept · ignore a code prediction</td></tr>
+  <tr><td><kbd>F2</kbd> · <kbd>Del</kbd></td><td>Rename · delete the selected file</td></tr>
+  <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Move between steps in Code Walkthrough</td></tr>
+</table>
+
+<!-- ══════════════ F16. COMMON PROBLEMS ══════════════ -->
+<h2 id="f-masalah"><span class="n">F16</span>Common Problems &amp; Fixes</h2>
+<p class="lead">Check here first before getting stuck.</p>
+
+<table>
+  <tr><th>Problem</th><th>Cause &amp; fix</th></tr>
+  <tr><td>A form doesn't save and the Console shows <b>403</b></td><td>The table's <code>create</code> access is still “Only you”. Open the Data tab → <span class="ui">Settings</span> → make it Public.</td></tr>
+  <tr><td>Data doesn't show up, status <b>404</b></td><td>The table name in the code differs from the one in the Data tab (watch letters &amp; underscores).</td></tr>
+  <tr><td>The email column doesn't show on the page</td><td>Columns marked <b>Private</b> are never sent to visitors. View them in the Data tab.</td></tr>
+  <tr><td>An image doesn't show</td><td>Wrong path (upper/lowercase matters). Click the image in the file panel → copy its path.</td></tr>
+  <tr><td>Changes don't appear on the public website</td><td>Manual publishing mode is on — press <span class="ui">Publish</span>. Or the file hasn't been saved.</td></tr>
+  <tr><td>The AI's result isn't what you wanted</td><td>Press <span class="ui">Undo</span>, then rewrite your request more specifically, or use <span class="ui">Select blocks</span>. You can also go back via the History tab.</td></tr>
+  <tr><td>“The AI is at capacity”</td><td>The queue is busy; your credits are refunded. Try again shortly.</td></tr>
+  <tr><td>Out of credits</td><td>Wait for the 00:00 WIB (UTC+7) reset, buy credits, or subscribe.</td></tr>
+  <tr><td>A file/image is rejected because of the quota</td><td>Delete unused files, shrink images, or upgrade your plan.</td></tr>
+  <tr><td>A function errors / times out</td><td>Check the Execution log in the Functions tab, then <span class="ui">✦ Fix with AI</span>. Make sure the secrets (env) it uses are set.</td></tr>
+  <tr><td>A button does nothing when clicked</td><td>Open the Console tab → filter FE → read the red error → <span class="ui">✦ Fix with AI</span>.</td></tr>
+</table>
+
+<!-- ══════════════════════════ PART 2: PROMPT CHEAT SHEET ══════════════════════════ -->
+<div class="part">
+  <span class="k">Part 2</span>
+  <h2 style="margin-top:6px">Prompt Cheat Sheet</h2>
+  <p>How to write instructions for the AI Builder so the result is right on the first try — with ready-to-copy examples.</p>
+</div>
+
+<!-- ══════════════ 1. BASICS ══════════════ -->
+<h2 id="dasar"><span class="n">1</span>Basics — How the AI Works</h2>
+<p class="lead">Understand the two modes &amp; three golden rules to get it right on the first try.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">🧭 <span class="pill">Plan</span> mode</h3>
+    <p style="margin:6px 0">The AI <b>only drafts a plan</b> — it doesn't touch files. Great for new projects or fuzzy ideas. Finish by pressing <b>“Run this plan”</b>.</p>
+    <div class="prompt"><span class="lbl">Plan mode</span>Plan a photography portfolio website
+for a wedding photographer.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">🔨 <span class="pill">Builder</span> mode</h3>
+    <p style="margin:6px 0">The AI <b>creates/changes files</b> and database tables directly. Great for building, changing or fixing.</p>
+    <div class="prompt"><span class="lbl">Builder mode</span>Build a wedding photography portfolio
+website with a gallery, an about page,
+and a contact form.</div>
+  </div>
+</div>
+
+<h3>Three golden rules</h3>
+<div class="card">
+  <ul>
+    <li><b>State the goal, not just the name.</b> “A website for <i>a home bakery that takes orders online</i>” is far better than “a bakery website”.</li>
+    <li><b>List the parts one by one.</b> Which pages, what goes in each section, what data to save.</li>
+    <li><b>One prompt = one big change.</b> For different things, send separate prompts so they're easy to fix and save credits.</li>
+  </ul>
+</div>
+
+<div class="note">
+  💡 <b>A good prompt formula:</b> <code>[Type of site] for [who/what for], with [sections], in a [color/mood] style, and [data to save]</code>
+</div>
+
+<!-- ══════════════ 2. STRUCTURE ══════════════ -->
+<h2 id="struktur"><span class="n">2</span>Structure &amp; Pages</h2>
+<p class="lead">Deciding the files, pages and navigation.</p>
+
+<div class="prompt"><span class="lbl">Full set of pages</span>Build a company profile website with these pages:
+- index.html — hero, services, strengths, testimonials
+- about.html — history, vision &amp; mission, team
+- services.html — the full list of services
+- contact.html — form + map + info
+Use the same navigation menu on every page.</div>
+
+<div class="prompt"><span class="lbl">Folder structure</span>Move the CSS into css/style.css
+and the JavaScript into js/app.js.
+Use separate files, not inline code.</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Layout from scratch</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Create a grid layout: a sticky header,
+responsive 3-column content, and a footer
+with 4 columns of links.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Adding a page</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Add a gallery.html page with
+the title "Gallery", a masonry photo
+grid, and link it in the menu.</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>Responsiveness &amp; accessibility</b> are built into the AI's defaults. To be sure, write: <i>“make sure it's responsive on phones and every image has alt text”</i>.</div>
+
+<!-- ══════════════ 3. DESIGN ══════════════ -->
+<h2 id="desain"><span class="n">3</span>Design &amp; Visual Style</h2>
+<p class="lead">How to describe colors, fonts and mood effectively.</p>
+
+<div class="prompt"><span class="lbl">Visual style</span>Use a modern minimalist design:
+- Main color dark green (#14532d), yellow accent (#facc15)
+- Poppins from Google Fonts for headings, Inter for body text
+- Rounded corners, soft shadows, plenty of white space
+- Light theme (light mode)</div>
+
+<table>
+  <tr><th>What you want</th><th>How to write the prompt</th></tr>
+  <tr><td>Specific colors</td><td><code>main color #2563eb, cream background #fef9f3</code></td></tr>
+  <tr><td>Overall style</td><td><code>clean &amp; professional corporate style</code> / <code>playful &amp; cheerful</code></td></tr>
+  <tr><td>Font</td><td><code>the "Plus Jakarta Sans" font from Google Fonts</code></td></tr>
+  <tr><td>Dark theme</td><td><code>dark mode with a theme toggle button</code></td></tr>
+  <tr><td>Animation</td><td><code>fade-in animation as the page scrolls</code></td></tr>
+  <tr><td>Icons</td><td><code>icons from Lucide (via CDN)</code></td></tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Icons &amp; illustrations</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Use Lucide icons from a CDN
+for the service features.
+Use placeholder images from
+picsum.photos for now.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Dark theme</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Add a light/dark theme toggle
+in the top right corner.
+Save the choice in localStorage
+and remember it on the next visit.</div>
+  </div>
+</div>
+
+<div class="warn">⚠️ <b>There's no build step / npm.</b> External libraries (Bootstrap, the Tailwind CDN, Chart.js, etc.) can only be loaded from a <b>CDN</b> with <code>&lt;script&gt;</code> or <code>&lt;link&gt;</code>. Say so clearly, e.g. <i>“use Bootstrap 5 from a CDN”</i>.</div>
+
+<!-- ══════════════ 4. RESPONSIVE ══════════════ -->
+<h2 id="responsive"><span class="n">4</span>Responsive Design — Desktop / Mobile</h2>
+<p class="lead">How to ask for different layouts on phones and desktops, or lock to one of them.</p>
+
+<div class="note">
+  📐 <b>The AI is responsive by default.</b> If you don't say otherwise, the AI makes a layout that <b>adapts by itself</b>
+  (desktop &amp; mobile). This section is for when you need <b>special behavior</b> — say, a page that should only
+  be used on desktop, or a mobile layout that's very different.
+</div>
+
+<h3>Choose a direction</h3>
+<div class="grid3">
+  <div class="card" style="margin:0">
+    <div class="tag t-both">Default</div>
+    <p style="margin:8px 0 6px;font-weight:600">Responsive (both)</p>
+    <p style="margin:0;font-size:13px;color:var(--muted)">The layout adapts to the screen. No need to ask — this is the default.</p>
+  </div>
+  <div class="card" style="margin:0">
+    <div class="tag t-desk">Desktop</div>
+    <p style="margin:8px 0 6px;font-weight:600">Desktop-only</p>
+    <p style="margin:0;font-size:13px;color:var(--muted)">The page is designed for wide screens (e.g. dashboards, data tables).</p>
+  </div>
+  <div class="card" style="margin:0">
+    <div class="tag t-mob">Mobile</div>
+    <p style="margin:8px 0 6px;font-weight:600">Mobile-only</p>
+    <p style="margin:0;font-size:13px;color:var(--muted)">Designed specifically for phone screens (e.g. an attendance app, a calculator).</p>
+  </div>
+</div>
+
+<h3>Desktop-only</h3>
+<p style="margin:6px 0;font-size:14px">The page is made for wide screens. Phone visitors see an “open on desktop” message.</p>
+<div class="prompt"><span class="lbl">Builder</span>This dashboard page is desktop-only.
+When opened on a narrow screen (a phone),
+hide its content and show the message:
+"This page works best on a computer.
+Please open it on a larger screen."</div>
+
+<div class="prompt"><span class="lbl">Builder</span>Create a desktop-only layout with a minimum
+width of 1200px, a fixed left sidebar,
+and a wide content area.
+Lock it so it doesn't "break" on small screens.</div>
+
+<h3>Mobile-only</h3>
+<p style="margin:6px 0;font-size:14px">Designed for phones: big buttons, one column, bottom navigation.</p>
+<div class="prompt"><span class="lbl">Builder</span>Make this page specifically for phones:
+- One column, big &amp; easy-to-tap buttons
+- A navigation bar fixed to the bottom of the screen
+- Max width 480px, centered when opened on desktop
+- Text big enough to read while standing</div>
+
+<div class="prompt"><span class="lbl">Builder</span>Optimize specifically for phone screens:
+hide elements that are only useful on desktop,
+use a "hamburger" menu, and prioritize
+speed and touch targets ≥ 44px.</div>
+
+<h3>Different behavior per screen size</h3>
+<p style="margin:6px 0;font-size:14px">If you want elements to appear/disappear or change shape at certain sizes:</p>
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Hide on phones</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Hide the sidebar and wide tables
+on phones, but keep them fully
+visible on desktop.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Change shape</h3>
+    <div class="prompt"><span class="lbl">Builder</span>On desktop the menu sits horizontally at the top.
+On phones, turn it into a hamburger button
+that opens a panel sliding in from the side.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Adaptive columns</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Show the catalog in 4 columns on desktop,
+2 columns on tablets, 1 column on phones.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Tables become cards</h3>
+    <div class="prompt"><span class="lbl">Builder</span>A data table on desktop that turns
+into a stack of cards on phones
+so nobody has to scroll sideways.</div>
+  </div>
+</div>
+
+<h3>Screen sizes (common breakpoints)</h3>
+<p style="margin:6px 0;font-size:14px">If you want to give exact numbers, use these as a reference:</p>
+<table>
+  <tr><th>Device</th><th>Screen width</th><th>Say in your prompt</th></tr>
+  <tr><td>📱 Phone</td><td><span class="bp">&lt; 640px</span></td><td><code>on phones (below 640px)</code></td></tr>
+  <tr><td>📱 Large phone / small tablet</td><td><span class="bp">640–767px</span></td><td><code>on medium screens</code></td></tr>
+  <tr><td>💻 Tablet</td><td><span class="bp">768–1023px</span></td><td><code>on tablets (768–1023px)</code></td></tr>
+  <tr><td>🖥️ Desktop</td><td><span class="bp">≥ 1024px</span></td><td><code>on desktop (1024px and up)</code></td></tr>
+  <tr><td>🖥️ Wide desktop</td><td><span class="bp">≥ 1280px</span></td><td><code>on wide screens</code></td></tr>
+</table>
+
+<table>
+  <tr><th>Need</th><th>How to write the prompt</th></tr>
+  <tr><td>Lock to desktop</td><td><code>this page is desktop-only, show an "open on a computer" message on phones</code></td></tr>
+  <tr><td>Lock to mobile</td><td><code>make it phone-only, max width 480px, centered on desktop</code></td></tr>
+  <tr><td>Specific elements</td><td><code>hide the statistics section on phones</code></td></tr>
+  <tr><td>Menu</td><td><code>horizontal menu on desktop, hamburger on phones</code></td></tr>
+  <tr><td>Catalog grid</td><td><code>4 columns desktop, 2 tablet, 1 phone</code></td></tr>
+  <tr><td>Images</td><td><code>images scale to the width and never overflow the screen</code></td></tr>
+  <tr><td>Font</td><td><code>smaller headings on phones (24px), larger on desktop (40px)</code></td></tr>
+  <tr><td>Orientation</td><td><code>place them side by side when the screen is horizontal (landscape)</code></td></tr>
+  <tr><td>Testing on phones</td><td><code>make sure nothing overflows the screen or needs sideways scrolling</code></td></tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Example: desktop-only dashboard</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build a desktop-only admin dashboard:
+- Fixed left sidebar + wide content
+- A full data table
+- If the screen is narrower than 1024px, replace
+  the content with a message to open it on a computer
+- Hide all controls on small screens</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Example: mobile-only app</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build a phone-only attendance app:
+- Max width 480px, centered
+- Tab navigation fixed to the bottom
+- Big "Clock in / Clock out" buttons
+- A big clock at the top
+- Save the history to the database</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>How to test:</b> open your site on a phone, or on desktop press <b>F12</b> and turn on device mode (the phone icon) to see the mobile layout without a real phone.</div>
+
+<div class="warn">⚠️ <b>Important:</b> mobile-only / desktop-only means visitors on other devices <b>can't use</b> the site. Only do it on purpose (e.g. an internal tool for the owner). If everyone should have access, plain <b>responsive</b> is enough (write: <i>“make sure it looks tidy on both phones and desktop”</i>).</div>
+
+
+<!-- ══════════════ 5. SEO & SHARING ══════════════ -->
+<h2 id="seo"><span class="n">5</span>SEO &amp; Social Sharing</h2>
+<p class="lead">So your site shows up on Google and looks great when its link is shared on WhatsApp/social media.</p>
+
+<div class="note">
+  🔎 The AI <b>doesn't add SEO information automatically</b>. Ask for it explicitly so your site is
+  easy to find and its links look tidy when shared.
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Title &amp; description (Google)</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Add SEO information to every page:
+- A clear tab title (max 60 characters)
+- A description for Google (max 160 characters)
+- The brand name at the end of the title
+Example: "Nusantara Coffee — Hand-Picked Coffee Beans"</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Share previews (Open Graph)</h3>
+    <div class="prompt"><span class="lbl">Builder</span>When the link is shared on WhatsApp/Facebook/
+Twitter, show a preview with:
+- A title &amp; short description
+- A preview image (1200×630)
+- The site name
+Add the Open Graph tags for that.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Tab &amp; device icons</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Add a favicon (the icon in the browser tab)
+and an icon for phone home screens,
+then add them to every page.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Language &amp; search engines</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Set the page language to English
+(lang="en"), add a simple sitemap,
+and allow Google to index the site.</div>
+  </div>
+</div>
+
+<h3>A complete SEO request</h3>
+<div class="prompt"><span class="lbl">Builder</span>Optimize the SEO of the coffee shop website "Nusantara Coffee":
+- Title: "Nusantara Coffee — Hand-Picked Coffee Beans"
+- Description: "Buy fresh coffee beans from local farmers.
+  The best arabica &amp; robusta, shipped nationwide."
+- Preview image: the shop logo on a brown background
+- Favicon: a coffee bean
+- Language: English
+Add it to the product and about pages as well.</div>
+
+<table>
+  <tr><th>Need</th><th>How to write the prompt</th></tr>
+  <tr><td>Show up on Google</td><td><code>optimize SEO so it appears in Google search, add page titles and descriptions</code></td></tr>
+  <tr><td>Tidy links on WhatsApp</td><td><code>make a nice preview when the link is shared on WhatsApp and social media</code></td></tr>
+  <tr><td>Favicon</td><td><code>add my logo as the favicon in the browser tab</code></td></tr>
+  <tr><td>Keywords</td><td><code>naturally include "jakarta bakery" and "order cakes online"</code></td></tr>
+  <tr><td>Google Maps</td><td><code>add the shop location in a way Google can read (address, opening hours)</code></td></tr>
+  <tr><td>Multiple pages</td><td><code>make sure every page has its own title &amp; description</code></td></tr>
+</table>
+
+<div class="tip">💡 <b>The title &amp; description matter most.</b> If you only ask for one thing, ask for those — they're what shows up in Google results and when the link is shared.</div>
+
+<!-- ══════════════ 6. ACCESSIBILITY ══════════════ -->
+<h2 id="aksesibilitas"><span class="n">6</span>Accessibility — Easy for Everyone to Use</h2>
+<p class="lead">Making your site comfortable for anyone, including screen reader users and people with visual impairments.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Images &amp; alt text</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Make sure every image has alternative text
+(alt) describing it, for screen readers.
+Decorative images just get an empty alt.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Contrast &amp; readability</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Make sure text and background have enough
+contrast (dark text on a light background), fonts
+are at least 16px, and line spacing is comfortable.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Usable without a mouse</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Make sure every button and link can be
+reached with the Tab key on the keyboard,
+with a clear marker when it's focused.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Clear forms</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Give every form field a clear label
+(write "Name", not just an empty box),
+and make error messages easy to understand.</div>
+  </div>
+</div>
+
+<div class="prompt"><span class="lbl">All-in-one request</span>Tidy up the site's accessibility:
+- Every image has alt text
+- Enough color contrast
+- Can be navigated with the keyboard (Tab)
+- Forms have labels
+- Headings in order (H1 then H2, no skipping)
+- Buttons have big enough touch targets on phones</div>
+
+<div class="tip">💡 <b>Why does it matter?</b> Accessible sites are friendlier for everyone — including people using a phone on the go, a slow connection, or reading in bright sunlight. Bonus: Google rates them better too.</div>
+
+<!-- ══════════════ 7. FORMS & VALIDATION ══════════════ -->
+<h2 id="form"><span class="n">7</span>Forms &amp; Input Validation</h2>
+<p class="lead">A good form saves data neatly and tells visitors when something's wrong.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">A complete form</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build an order form with:
+- Name (required), Email (required, email format)
+- Phone number (required, digits only)
+- Address (required), Notes (optional)
+- Validation on submit: mark wrong fields
+  with a clear message
+- On success: show "Thank you,
+  your order is in" and clear the form</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Choice &amp; date fields</h3>
+    <div class="prompt"><span class="lbl">Builder</span>An event registration form:
+- Name, email
+- Package choice (dropdown: Regular/VIP)
+- Visit date (date picker)
+- Number of people (1-10)
+- A tick box "I agree to the terms &amp; conditions"
+Save to the database once it's valid.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Uploading files &amp; images</h3>
+    <div class="prompt"><span class="lbl">Builder</span>A form with an image input:
+- Choose a photo and show a preview before sending
+- Limit the size to 2 MB
+- Save it to an image-type column in the database
+- After sending, show the image in a gallery</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Showing incoming data</h3>
+    <div class="prompt"><span class="lbl">Builder</span>A contact form + a list of incoming messages,
+showing the 10 newest with their time.
+Only I (the owner) can see the list.</div>
+  </div>
+</div>
+
+<div class="warn">⚠️ <b>Data from visitor forms must not be saved only in the browser.</b> Ask the AI to save it to the <b>database</b> (see the Database section) so it isn't lost when the visitor closes the page.</div>
+
+<!-- ══════════════ 8. ANIMATION & ADVANCED INTERACTION ══════════════ -->
+<h2 id="animasi"><span class="n">8</span>Animation &amp; Advanced Interaction</h2>
+<p class="lead">Dynamic touches that make your site feel alive — without getting in the way.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Scroll animations</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Make elements appear smoothly (fade + rise)
+as you scroll down, staggered between
+cards. Don't get in the way of reading.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Hover effects</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Buttons grow slightly &amp; cards lift
+when the cursor is over them, with smooth transitions.
+Keep the effect sensible on touchscreens (phones).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Gallery &amp; lightbox</h3>
+    <div class="prompt"><span class="lbl">Builder</span>When a gallery image is clicked, open a large
+view (lightbox) with a dark background, a close
+button, and arrows for the next image.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Tabs &amp; accordions</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build an FAQ accordion: click a question to
+open its answer, the arrow rotates, and only one
+is open at a time.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Notifications &amp; toasts</h3>
+    <div class="prompt"><span class="lbl">Builder</span>After the form is saved, show a small
+notification in the top corner ("Sent") that
+disappears by itself after 3 seconds.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Dark/light mode</h3>
+    <div class="prompt"><span class="lbl">Builder</span>A light/dark theme toggle that
+remembers the visitor's choice and follows their
+phone's setting automatically on the first visit.</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>Sweet, but don't overdo it.</b> Animation is great for guiding attention. Too much makes a site feel slow and confusing. Say: <i>"subtle animation, not overdone"</i>.</div>
+
+<!-- ══════════════ 9. IMAGES, MEDIA & ICONS ══════════════ -->
+<h2 id="media"><span class="n">9</span>Images, Media &amp; Icons</h2>
+<p class="lead">How to ask for images, illustrations, maps, videos and icons without your own files.</p>
+
+<div class="note">
+  🖼️ Have your own photos? <b>Upload</b> them in the File panel (see <a href="#f-file">Files &amp; Images</a>), then mention
+  the path in your prompt, e.g. <i>“use /images/hero.jpg as the hero background”</i>. The AI can't create images,
+  so in the meantime you can use <b>image links from the internet</b>. Images submitted by visitors are saved
+  in an <b>Image</b> column in the database.
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Temporary images (placeholders)</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Use sample images from picsum.photos
+for all temporary photos, at suitable
+sizes. I'll replace them with real photos later.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Icons</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Use icons from Lucide (CDN) for
+the service features: delivery truck, security,
+24-hour support, and warranty.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Illustrations</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Add illustrations from unDraw to
+the "how it works" section (3 steps), in a style
+that matches the site's colors.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Location map</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Embed a Google Maps map of the shop's
+location (123 Example St., Jakarta) on
+the contact page and in the footer.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">YouTube video</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Embed a YouTube video (link:
+youtube.com/watch?v=XXXX) responsively
+in the company profile section.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Keep it fast</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Load images progressively (lazy load)
+and show a gray placeholder until
+each image has finished loading.</div>
+  </div>
+</div>
+
+<!-- ══════════════ 10. NAVIGATION & MULTIPLE PAGES ══════════════ -->
+<h2 id="navigasi"><span class="n">10</span>Navigation &amp; Multiple Pages</h2>
+<p class="lead">Organizing many pages and the links between them neatly.</p>
+
+<div class="note">
+  🔗 Clean URLs are automatic: the file <code>about.html</code> can be opened at <code>/about</code>.
+  A custom <code>404.html</code> page is also used automatically when a page isn't found.
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Navigation menu</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build a navigation menu with the logo on the left,
+page links in the middle, and a contact button
+on the right. The menu sticks to the top on scroll
+and becomes a hamburger on phones.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Your own 404 page</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Create a friendly 404.html page:
+a funny message, an illustration, and a
+"Back to home" button.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Bottom navigation (phones)</h3>
+    <div class="prompt"><span class="lbl">Builder</span>For a phone app, create a navigation bar
+fixed to the bottom with home,
+history, and profile icons.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">In-page links</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Create a menu that scrolls to sections
+within the page (About, Services, Contact),
+landing just below the header.</div>
+  </div>
+</div>
+
+<!-- ══════════════ 11. PERFORMANCE & SPEED ══════════════ -->
+<h2 id="kinerja"><span class="n">11</span>Performance &amp; Speed</h2>
+<p class="lead">A fast site is more pleasant to use and better liked by search engines.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Light &amp; fast</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Make the site as light as possible: avoid
+big libraries unless needed,
+load images progressively, and use
+efficient CSS.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Fast fonts</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Load only 2 font weights (regular &amp; bold),
+and show text in a fallback font
+until the real font is ready (so it's never blank).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Lean images</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Use reasonably sized images (max
+1600px wide), modern formats, and set
+dimensions so the layout doesn't shift.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Loading indicators</h3>
+    <div class="prompt"><span class="lbl">Builder</span>While data is being fetched from the database,
+show a loading indicator (spinner), and a
+clear message if it fails.</div>
+  </div>
+</div>
+
+<div class="tip">💡 Every rakit.io asset is already compressed (gzip) &amp; cached, so your site is fast from the start. Focus on <b>image size</b> — the most common cause of slow sites.</div>
+
+<!-- ══════════════ 12. CONTENT & COPYWRITING ══════════════ -->
+<h2 id="konten"><span class="n">12</span>Content &amp; Writing</h2>
+<p class="lead">The AI can write the text too — tell it who's reading.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Tone of voice</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Write all the text in a friendly,
+warm and simple tone (no jargon),
+as if talking to a friend.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Target readers</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Write for stay-at-home parents aged 30-50
+who are just starting an online business. Avoid
+technical terms and highlight how easy it is.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Key parts</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Write a catchy main headline,
+an explanatory subheading, and call-to-action
+buttons ("Order Now", "Contact Us").</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Sample content</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Fill it with believable sample text
+for a home food business in Bandung:
+6 menu items, 3 testimonials, and contact info.</div>
+  </div>
+</div>
+
+<div class="tip">💡 The more specific you are (who's reading, what business, where), the better the writing. Replace "a business website" with "a website for a home catering business in Yogyakarta for family events".</div>
+
+<!-- ══════════════ 13. SECURITY & PERSONAL DATA ══════════════ -->
+<h2 id="keamanan"><span class="n">13</span>Security &amp; Personal Data</h2>
+<p class="lead">Protecting visitors' data and keeping it from being misused.</p>
+
+<table>
+  <tr><th>Need</th><th>How to write the prompt</th></tr>
+  <tr><td>Sensitive data</td><td><code>mark email, phone number and address as private data — only I can see them</code></td></tr>
+  <tr><td>Public forms</td><td><code>visitors may only submit; they can't see other people's submissions</code></td></tr>
+  <tr><td>Anti-spam</td><td><code>add a "type the answer to 3+2" field to stop bots from submitting the form</code></td></tr>
+  <tr><td>Don't lose data</td><td><code>save all visitor data to the database, not just in the browser</code></td></tr>
+  <tr><td>Passwords</td><td><code>if there's a private area, don't store passwords on the site — keep it owner-only</code></td></tr>
+  <tr><td>API keys / tokens</td><td><code>keep the Telegram token in a serverless function, read it from env.TELEGRAM_TOKEN — never write it in a page</code></td></tr>
+  <tr><td>Prices can't be tampered with</td><td><code>calculate the order total in a serverless function, not in the browser</code></td></tr>
+</table>
+
+<div class="warn">⚠️ <b>The safe rule:</b> for personal visitor data (email, phone, address), always make it <b>owner-only</b>. You view &amp; manage it in the <b>Database</b> tab of the editor.</div>
+
+<!-- ══════════════ 14. THIRD-PARTY INTEGRATIONS ══════════════ -->
+<h2 id="integrasi"><span class="n">14</span>Third-Party Integrations (CDNs &amp; Services)</h2>
+<p class="lead">Adding popular services through a CDN/link — no server of your own needed.</p>
+
+<div class="note">
+  🔌 Add libraries or services through a link (CDN). Name them &amp; their source clearly,
+  e.g. <i>"use Chart.js from a CDN"</i>.
+</div>
+
+<table>
+  <tr><th>Need</th><th>Prompt</th></tr>
+  <tr><td>Charts &amp; statistics</td><td><code>show a monthly sales chart with Chart.js from a CDN</code></td></tr>
+  <tr><td>Maps</td><td><code>embed Google Maps for the location 10 Merdeka St.</code></td></tr>
+  <tr><td>WhatsApp</td><td><code>add a floating WhatsApp button to the number +62812xxxx</code></td></tr>
+  <tr><td>Instagram/social</td><td><code>add links to Instagram @myshop and Facebook</code></td></tr>
+  <tr><td>Video</td><td><code>embed the YouTube video youtube.com/watch?v=xxxx responsively</code></td></tr>
+  <tr><td>UI framework</td><td><code>use Bootstrap 5 from a CDN for the layout</code></td></tr>
+  <tr><td>Dates</td><td><code>use a tidy date picker that's easy to use on phones</code></td></tr>
+  <tr><td>Event calendar</td><td><code>show a monthly calendar for picking a visit date</code></td></tr>
+  <tr><td>Telegram notifications</td><td><code>create a serverless function that sends a Telegram message for every new order (token in env.TELEGRAM_TOKEN)</code></td></tr>
+  <tr><td>Other services' APIs</td><td><code>create a function that fetches exchange rates from an external API, keep the API key in secrets</code></td></tr>
+  <tr><td>Your own AI features</td><td><code>create a function that summarizes customer reviews with ai.chat (my default provider)</code></td></tr>
+  <tr><td>Automatic reports</td><td><code>create a daily sales report function; I'll schedule it for 07:00 every day</code></td></tr>
+</table>
+<div class="tip">💡 Need secret keys or server logic? See <a href="#f-fungsi">Serverless Functions</a>. After the AI creates the function, fill in the secrets yourself in the Functions tab → <b>Secrets (env)</b>.</div>
+
+<!-- ══════════════ 15. DATA TABLES & DASHBOARDS ══════════════ -->
+<h2 id="dashboard"><span class="n">15</span>Data Tables &amp; Dashboards</h2>
+<p class="lead">Showing lots of data neatly, plus number summaries and charts.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Tables with sorting &amp; search</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build an inventory table with the columns
+Name, Category, Quantity, Price.
+It can be sorted by column, searched, and
+paginated (10 rows per page).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Number summaries</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Above the table, show summary cards:
+total items, total value (rupiah),
+and the number of items with low stock.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Charts</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build a bar chart of sales over the last 6 months
+and a pie chart of the best-selling
+product categories (with Chart.js).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Add/edit/delete</h3>
+    <div class="prompt"><span class="lbl">Builder</span>An add-data form, plus edit and delete buttons
+on each row with a confirmation before
+deleting. The table updates right away.</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>Dashboard = desktop.</b> Wide tables work best on big screens. Ask for: <i>"a table layout on desktop that becomes stacked cards on phones"</i> (see the Responsive section).</div>
+
+<!-- ══════════════ 16. ADVANCED PROMPT PATTERNS ══════════════ -->
+<h2 id="pola-lanjutan"><span class="n">16</span>Advanced Prompt Patterns</h2>
+<p class="lead">Techniques for more precise results, especially on complex sites.</p>
+
+<h3>Step-by-step iteration (from plan to result)</h3>
+<div class="prompt"><span class="lbl">The best flow</span>1. Plan mode: "Plan a point-of-sale app for a corner shop."
+2. Read &amp; adjust the plan.
+3. "Run this plan." (Builder mode)
+4. "Now add a receipt printing feature."
+5. "Fix: stock should go down automatically after a sale."</div>
+
+<h3>Context + request</h3>
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Give an example</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Make product cards in a marketplace style,
+for example this layout:
+image on top, name, bold price, and a
+full-width "Buy" button at the bottom.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Say what you don't want</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build a minimalist site. DON'T use
+loud colors, excessive animation,
+or a busy layout.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Point to a specific part</h3>
+    <div class="prompt"><span class="lbl">Builder</span>On index.html, in the hero section:
+make the heading bigger and add a second button
+"See Menu" next to the "Order" button.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Ask for targeted fixes</h3>
+    <div class="prompt"><span class="lbl">Builder</span>The "Send" button doesn't work.
+Find out why and fix it so the form
+saves to the database.</div>
+  </div>
+</div>
+
+<h3>When the result isn't quite right</h3>
+<table>
+  <tr><th>Problem</th><th>Fix-up prompt</th></tr>
+  <tr><td>Messy layout</td><td><code>tidy up the services section: align the icons, titles and descriptions neatly</code></td></tr>
+  <tr><td>Colors don't fit</td><td><code>change the yellow accent to light blue, keep everything else</code></td></tr>
+  <tr><td>Too crowded</td><td><code>simplify: add space between sections, remove some elements</code></td></tr>
+  <tr><td>A feature errors</td><td><code>nothing happens when the button is clicked. Check and fix it</code></td></tr>
+  <tr><td>Not responsive yet</td><td><code>the layout breaks on phones. Fix it so it's tidy on small screens</code></td></tr>
+  <tr><td>Want variations</td><td><code>make 3 hero style options, I'll pick one</code></td></tr>
+</table>
+
+<div class="tip">💡 <b>One message, one goal.</b> Short &amp; specific feedback ("the button is too small", "the heading isn't bold enough") works far better than repeating the whole request.</div>
+
+<!-- ══════════════ 17. DATABASE ══════════════ -->
+<h2 id="database"><span class="n">17</span>Database — Save &amp; Show Data</h2>
+<p class="lead">rakit's main strength: your site can save data <b>without a server of your own</b>. The AI creates the tables automatically.</p>
+
+<div class="note">
+  🗄️ Every project has a built-in database. Your site's JavaScript reaches the data with
+  <code>fetch('/api/db/table_name')</code> — no API key, no CORS.
+  <b>Don't use localStorage</b> for data visitors submit, because localStorage only exists in one person's browser.
+</div>
+
+<h3>Common patterns: pick the one you need</h3>
+<table>
+  <tr><th>Type of site / feature</th><th>Prompt</th><th>Table access</th></tr>
+  <tr>
+    <td>Guestbook / comments</td>
+    <td><code>Build a guestbook: a name &amp; message form with the latest messages listed below it.</code></td>
+    <td><span class="badge b-ok">public: list, create</span></td>
+  </tr>
+  <tr>
+    <td>Contact / sign-up form</td>
+    <td><code>Build a contact form (name, email, message). Only the owner may read the submissions.</code></td>
+    <td><span class="badge b-ok">public: create</span> + private email</td>
+  </tr>
+  <tr>
+    <td>Event registration / RSVP</td>
+    <td><code>A seminar registration form: name, email, organization, number of attendees.</code></td>
+    <td><span class="badge b-ok">public: create</span></td>
+  </tr>
+  <tr>
+    <td>Product catalog</td>
+    <td><code>Build a product catalog (name, price, description, image) shown on the page for everyone to see.</code></td>
+    <td><span class="badge b-ok">public: list</span></td>
+  </tr>
+  <tr>
+    <td>Poll / voting</td>
+    <td><code>Build a poll: save each visitor's choice and show the results as percentages.</code></td>
+    <td><span class="badge b-ok">public: list, create</span></td>
+  </tr>
+  <tr>
+    <td>Scoreboard / leaderboard</td>
+    <td><code>Save player scores (name, score) and show the top rankings.</code></td>
+    <td><span class="badge b-ok">public: list, create</span></td>
+  </tr>
+  <tr>
+    <td>Orders</td>
+    <td><code>An order form: name, phone, address, items, total. Only the owner may see the list of orders.</code></td>
+    <td><span class="badge b-ok">public: create</span> + private data</td>
+  </tr>
+  <tr>
+    <td>Product reviews / ratings</td>
+    <td><code>Build reviews with a name, a 1–5 star rating, and a comment.</code></td>
+    <td><span class="badge b-ok">public: list, create</span></td>
+  </tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Name the column types</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Save registrations with the columns:
+name (text, required),
+email (text, required, private),
+phone (text, private),
+birth_date (date),
+party_size (number),
+agreed_terms (yes/no),
+photo (image).
+Show a confirmation after submitting.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Want to see the data yourself?</h3>
+    <p style="margin:6px 0">Visitors are <b>anonymous</b> (they have no account). So keep
+    <code>update</code>/<code>delete</code> <b>owner-only</b> — you view &amp;
+    manage the data in the <b>Database</b> tab of the editor.</p>
+    <div class="prompt"><span class="lbl">Builder</span>Save the incoming data, and set it up
+so only I (the owner) can
+view, edit and delete it.</div>
+  </div>
+</div>
+
+<div class="tip">💡 <b>A rich combined example:</b> <i>“Build a simple online store: a product catalog from the database (name, price, image, stock), a cart on the page, and a checkout form that sends the order (name, phone, address, items) — only I can see the orders.”</i></div>
+
+<!-- ══════════════ 18. INTERACTION ══════════════ -->
+<h2 id="interaksi"><span class="n">18</span>Interaction &amp; JavaScript Features</h2>
+<p class="lead">Dynamic behavior: filters, search, carts, calculators and more.</p>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">Search &amp; filters</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Add a search box and a
+category filter above the catalog.
+Results filter instantly while
+typing (no reload).</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Shopping cart</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build a cart: an
+"Add to cart" button on each product,
+a cart page where quantities can change
+with a total price, then a checkout button.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Calculator</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build a price calculator: choose a package,
+the number of pages, and extra options,
+then show the total live.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Slider / carousel</h3>
+    <div class="prompt"><span class="lbl">Builder</span>Build an image slider that changes
+automatically every 5 seconds, with
+arrow buttons and navigation dots.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Modal / popup</h3>
+    <div class="prompt"><span class="lbl">Builder</span>When a product card is clicked,
+open a modal with the full details
+and a close button.</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Upload &amp; show images</h3>
+    <div class="prompt"><span class="lbl">Builder</span>A form with an image file input,
+show a preview before sending,
+then upload it to an image column in the database.</div>
+  </div>
+</div>
+
+<div class="note">💡 <b>Describe the behavior, not the technique.</b> “When the button is clicked, the total updates right away” works better than “use addEventListener”. Let the AI choose the technique.</div>
+
+<!-- ══════════════ 19. COMPLETE EXAMPLES ══════════════ -->
+<h2 id="contoh"><span class="n">19</span>Complete Prompt Examples (Ready to Use)</h2>
+<p class="lead">Just copy, adjust the names &amp; details, and send it in Builder mode.</p>
+
+<div class="prompt"><span class="lbl">A · Wedding invitation</span>Build a digital wedding invitation website for Rina &amp; Dimas:
+- A cover with their names, the date, and a photo
+- A countdown to the big day
+- Event details: ceremony &amp; reception (date, time, location + map)
+- A guestbook: a name &amp; message form, with the latest wishes listed
+- RSVP (name, number of guests, attending/not)
+An elegant style in sage green &amp; cream, with the serif font "Playfair Display".</div>
+
+<div class="prompt"><span class="lbl">B · Simple online store</span>Build an online store for "Nusantara Coffee":
+- Product catalog: name, price, description, image (from the database, visible to everyone)
+- A product detail page with a quantity picker
+- A shopping cart with the total price
+- An order form (name, phone, address, notes) → only I can see the orders
+- A contact page with opening hours
+Coffee brown &amp; cream colors, responsive.</div>
+
+<div class="prompt"><span class="lbl">C · Company profile</span>Build a company profile website for Maju Jaya Ltd.:
+- Home: hero, key numbers, featured services, clients
+- About: a short history, vision &amp; mission, team structure
+- Services: 6 services with icons and descriptions
+- Portfolio: a project gallery with category filters
+- A simple blog: a list of articles from the database
+- Contact: a form (name, email, message), a map, info
+A corporate navy &amp; white style, Inter font.</div>
+
+<div class="prompt"><span class="lbl">D · Event &amp; registration</span>Build a website for the seminar "Digital Marketing 2026":
+- A hero with the title, date, location, and a register button
+- The event agenda (hour-by-hour rundown)
+- Speakers: photo, name, title, bio
+- Registration: name, email, organization, number of attendees → only I can see it
+- FAQ (accordion)
+- A countdown to the event day
+A modern purple &amp; white style.</div>
+
+<div class="prompt"><span class="lbl">E · Inventory system (table)</span>Build a simple inventory app:
+- An items table: name, category, quantity, price, location
+- An add-item form
+- Search and filter by category
+- Summary: total items, total value
+- Show a warning when stock is below 5
+(for internal use — only I can manage the table)</div>
+
+<div class="prompt"><span class="lbl">F · Interactive quiz</span>Build a multiple-choice general knowledge quiz:
+- 10 questions, each with 4 options
+- A running score, with right/wrong feedback
+- A results page with the final score
+- Save the best scores to the database and show the top 5
+A cheerful, colorful style with subtle animation.</div>
+
+<!-- ══════════════ 20. FIXES ══════════════ -->
+<h2 id="lanjutan"><span class="n">20</span>Fixing &amp; Changing</h2>
+<p class="lead">How to correct a result without starting from scratch.</p>
+
+<table>
+  <tr><th>Situation</th><th>Prompt</th></tr>
+  <tr><td>Result not quite right</td><td><code>Fix the hero section: the text is too small and the button doesn't stand out. Make them bigger and higher-contrast.</code></td></tr>
+  <tr><td>Change colors</td><td><code>Change every green to navy blue, keep the rest.</code></td></tr>
+  <tr><td>Change content</td><td><code>Change the heading to "Welcome to Our Shop" and make the text friendlier.</code></td></tr>
+  <tr><td>Rearrange</td><td><code>Move the testimonials section below the pricing section.</code></td></tr>
+  <tr><td>Add a feature</td><td><code>Add a floating WhatsApp button in the bottom right corner.</code></td></tr>
+  <tr><td>Fix an error</td><td><code>The form doesn't save when submitted. Check and fix it so the data goes into the database.</code></td></tr>
+  <tr><td>Tone it down</td><td><code>It's too busy. Simplify: fewer colors, more white space.</code></td></tr>
+</table>
+
+<div class="tip">💡 <b>Fixes get more precise when you name the part.</b> Name the page/section (“in the footer”, “on the contact page”) so the AI changes the right thing, not the whole site.</div>
+
+<div class="note">🔄 <b>Every change can be undone.</b> In Builder mode, changes are shown with <b>Save / Undo</b> buttons before they're applied. There's also the conversation history — reopen it to continue — and the <a href="#f-riwayat">History</a> tab to go back to any version.</div>
+
+<!-- ══════════════ 21. LIMITS ══════════════ -->
+<h2 id="batasan"><span class="n">21</span>Limits &amp; Technical Tips</h2>
+<p class="lead">What to know so you don't hit a wall.</p>
+
+<table>
+  <tr><th>Aspect</th><th>Limit</th></tr>
+  <tr><td>File types</td><td><span class="badge b-ok">.html · .css · .js</span> + uploaded images</td></tr>
+  <tr><td>Size per code file</td><td>Max <b>512 KB</b></td></tr>
+  <tr><td>Total per project</td><td><b>20 MB</b> &amp; 500 files/folders (more on the Pro/Unlimited plans)</td></tr>
+  <tr><td>Length of one prompt</td><td>Max <b>20,000 characters</b>, max. 3 attached images</td></tr>
+  <tr><td>Server code</td><td><span class="badge b-warn">serverless functions</span> in JavaScript in <code>functions/</code> — not PHP/Node.js, no npm</td></tr>
+  <tr><td>Build step / npm</td><td><span class="badge b-no">None</span> — use CDNs for libraries</td></tr>
+  <tr><td>Visitor accounts</td><td><span class="badge b-no">Not yet</span> — visitors are anonymous</td></tr>
+  <tr><td>Database operations</td><td><span class="badge b-ok">list · view · create · update · delete</span></td></tr>
+  <tr><td>Database column types</td><td><span class="badge b-ok">text · number · yes/no · date · relation · image</span></td></tr>
+  <tr><td>Responsive</td><td><span class="badge b-ok">responsive by default</span> · can be locked to mobile/desktop only</td></tr>
+  <tr><td>SEO &amp; share previews</td><td><span class="badge b-warn">must be requested</span> — the AI doesn't add them automatically</td></tr>
+  <tr><td>Images/media</td><td><span class="badge b-ok">image uploads</span> · the AI can't create images · video through YouTube</td></tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-top:0">✅ Do</h3>
+    <ul>
+      <li>State the site's <b>goal &amp; users</b></li>
+      <li>Detail it <b>section by section</b></li>
+      <li>Name the <b>data that needs saving</b></li>
+      <li><b>One big change per prompt</b></li>
+      <li>Use <b>Plan mode</b> for half-formed ideas</li>
+      <li>Name specific <b>colors &amp; fonts</b></li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">🚫 Avoid</h3>
+    <ul>
+      <li>Ultra-short prompts: “make a website”</li>
+      <li>Mixing 5 different changes into one prompt</li>
+      <li>Asking for PHP / Node.js / npm (use serverless functions)</li>
+      <li>Writing API keys in page files</li>
+      <li>Saving important data in <code>localStorage</code></li>
+      <li>Assuming visitors have accounts</li>
+      <li>Switching styles without saying which part</li>
+    </ul>
+  </div>
+</div>
+
+<div class="warn">⚠️ <b>Save your AI credits.</b> Each prompt uses credits (prompts with images use 2; new accounts get a one-time <b>welcome bonus</b>, then <b>free credits every day</b>, plus subscriptions &amp; top-ups — see <a href="#f-kredit">Credits &amp; Plans</a>). Plan first with Plan mode, then run it — so you don't go back and forth fixing things.</div>
+
+<!-- ══════════════ TEMPLATE ══════════════ -->
+<h2 id="template"><span class="n">★</span>Universal Prompt Template</h2>
+<p class="lead">Copy it, fill in the parts inside <code>[ ]</code>, then send.</p>
+
+<div class="prompt">Build a [type] website for [who &amp; what for].
+
+Pages:
+- index.html — [section 1], [section 2], [section 3]
+- [other page] — [its content]
+
+Data to save: [table name + columns + who may view/save].
+
+Style: [main] &amp; [accent] colors, [font name] font,
+[modern/minimalist/elegant/cheerful].
+
+Make sure it's responsive on phones and easy to use.</div>
+
+<footer>
+  <p><b>The rakit.io Guide</b><br>
+  Based on how the editor &amp; AI Builder actually behave: Plan &amp; Builder modes,
+  the built-in database (<code>/api/db/&lt;table&gt;</code>), serverless functions (<code>/api/fn/&lt;name&gt;</code>),
+  and the platform limits (512 KB/code file, 20,000 characters/prompt).</p>
+</footer>
+
+  </main>
+</div>
+<script src="/js/en/panduan.js" defer></script>
+</body>
+</html>

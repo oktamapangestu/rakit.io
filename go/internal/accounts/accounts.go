@@ -3,12 +3,14 @@
 package accounts
 
 import (
+	"os"
 	"regexp"
 	"strings"
 
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/files"
 	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/store"
 )
@@ -70,8 +72,8 @@ func (s *Service) SlugTaken(slug string) (bool, error) {
 	return u != nil, err
 }
 
-// CreateProject membuat project baru beserta file awalnya.
-func (s *Service) CreateProject(user *store.User, rawSlug, name string) (*store.Project, error) {
+// CreateProject membuat project baru beserta file awalnya (berbahasa lang).
+func (s *Service) CreateProject(user *store.User, rawSlug, name, lang string) (*store.Project, error) {
 	slug := strings.ToLower(strings.TrimSpace(rawSlug))
 	if msg := SlugError(slug); msg != "" {
 		return nil, httpx.Errorf(400, "%s", msg)
@@ -105,8 +107,19 @@ func (s *Service) CreateProject(user *store.User, rawSlug, name string) (*store.
 		}
 		return nil, err
 	}
-	if err := files.SeedTemplate(s.cfg.SiteRoot(slug), s.cfg.TemplateDir, slug, s.cfg.SiteHost(slug)); err != nil {
+	if err := files.SeedTemplate(s.cfg.SiteRoot(slug), s.templateDir(lang), slug, s.cfg.SiteHost(slug)); err != nil {
 		return nil, err
 	}
 	return s.db.ProjectBySlug(slug)
+}
+
+// templateDir: file awal project. Pengguna versi Inggris mendapat <TEMPLATE_DIR>-en (mis. templates/default-en)
+// bila foldernya ada.
+func (s *Service) templateDir(lang string) string {
+	if lang == i18n.EN {
+		if info, err := os.Stat(s.cfg.TemplateDir + "-en"); err == nil && info.IsDir() {
+			return s.cfg.TemplateDir + "-en"
+		}
+	}
+	return s.cfg.TemplateDir
 }

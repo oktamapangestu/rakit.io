@@ -76,7 +76,7 @@ func (h *Handler) register(q *request) error {
 		return err
 	}
 	user := &store.User{ID: id, Username: username, Email: email}
-	if _, err := h.accounts().CreateProject(user, username, username); err != nil {
+	if _, err := h.accounts().CreateProject(user, username, username, q.lang()); err != nil {
 		return err
 	}
 	if err := h.auth.Login(q.w, id); err != nil {
@@ -186,7 +186,7 @@ func (h *Handler) projects(q *request) error {
 		if err := q.load(); err != nil {
 			return err
 		}
-		project, err := h.accounts().CreateProject(q.user, q.text("slug"), q.text("name"))
+		project, err := h.accounts().CreateProject(q.user, q.text("slug"), q.text("name"), q.lang())
 		if err != nil {
 			return err
 		}

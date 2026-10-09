@@ -1,0 +1,5 @@
+{
+  "Gagal (${res.status})": "Failed (${res.status})",
+  "namamu": "yourname",
+  "/editor": "/en/editor"
+}

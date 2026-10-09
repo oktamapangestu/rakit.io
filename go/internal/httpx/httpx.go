@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"rakit.io/server/internal/i18n"
 )
 
 // Error adalah kesalahan yang pesannya boleh ditampilkan ke pengguna (padanan HttpError di Node).
@@ -43,11 +45,12 @@ func JSON(w http.ResponseWriter, status int, v any) {
 	w.Write(bytes.TrimRight(buf.Bytes(), "\n"))
 }
 
-// Fail menjawab dengan { "error": pesan }. Kesalahan yang bukan *Error dicatat dan dijawab 500.
+// Fail menjawab dengan { "error": pesan }, diterjemahkan ke bahasa pengguna (lihat i18n.Mark). Kesalahan yang
+// bukan *Error dicatat dan dijawab 500.
 func Fail(w http.ResponseWriter, err error) {
 	var he *Error
 	if errors.As(err, &he) {
-		body := map[string]string{"error": he.Message}
+		body := map[string]string{"error": i18n.T(i18n.Of(w), he.Message)}
 		if he.Code != "" {
 			body["code"] = he.Code
 		}
@@ -55,7 +58,7 @@ func Fail(w http.ResponseWriter, err error) {
 		return
 	}
 	log.Printf("error: %v", err)
-	JSON(w, http.StatusInternalServerError, map[string]string{"error": "Terjadi kesalahan di server"})
+	JSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(i18n.Of(w), "Terjadi kesalahan di server")})
 }
 
 // ClientIP: IP pengunjung. Proxy di loopback (Nginx di mesin yang sama) dipercaya, jadi alamat
@@ -131,6 +134,6 @@ func (l *RateLimiter) Allow(w http.ResponseWriter, key string) bool {
 		return true
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(wait.Seconds()))))
-	JSON(w, http.StatusTooManyRequests, map[string]string{"error": l.message})
+	JSON(w, http.StatusTooManyRequests, map[string]string{"error": i18n.T(i18n.Of(w), l.message)})
 	return false
 }

@@ -13,6 +13,7 @@ import (
 	"rakit.io/server/internal/blocks"
 	"rakit.io/server/internal/files"
 	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/store"
 )
@@ -325,8 +326,9 @@ func (s *Service) Events(w http.ResponseWriter, r *http.Request, user *store.Use
 	h.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	flusher, _ := w.(http.Flusher)
+	lang := i18n.FromRequest(r)
 	write := func(ev event) {
-		raw, _ := marshal(ev)
+		raw, _ := marshal(Localize(lang, ev))
 		w.Write(append(raw, '\n'))
 		if flusher != nil {
 			flusher.Flush()

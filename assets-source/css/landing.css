@@ -79,6 +79,7 @@ h1 em, h2 em { font-style: normal; background: linear-gradient(transparent 58%, 
   white-space: nowrap;
 }
 .nav-link:hover { color: var(--ink); background: var(--paper-2); }
+.nav-link.lang { font-weight: 600; }
 .nav-btn {
   display: inline-flex;
   align-items: center;

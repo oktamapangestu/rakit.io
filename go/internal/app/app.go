@@ -1,5 +1,5 @@
-// Package app menyajikan halaman aplikasi (/, /editor, /admin, /panduan) dan aset statis di domain
-// utama. Padanan bagian halaman di src/server.js.
+// Package app menyajikan halaman aplikasi (/, /editor, /admin, /panduan, dan versi Inggrisnya di /en/...) dan
+// aset statis di domain utama. Padanan bagian halaman di src/server.js.
 package app
 
 import (
@@ -20,6 +20,7 @@ import (
 
 	"rakit.io/server/internal/auth"
 	"rakit.io/server/internal/config"
+	"rakit.io/server/internal/i18n"
 )
 
 type Handler struct {
@@ -146,7 +147,8 @@ func (h *Handler) sendHTML(w http.ResponseWriter, r *http.Request, file, cacheCo
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
-	html := h.withAssetVersions(raw)
+	// {{origin}}: alamat lengkap aplikasi (untuk <link rel="alternate" hreflang>).
+	html := bytes.ReplaceAll(h.withAssetVersions(raw), []byte("{{origin}}"), []byte(h.cfg.AppOrigin))
 	sum := sha1.Sum(html)
 	etag := `W/"` + hex.EncodeToString(sum[:])[:27] + `"`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -225,6 +227,9 @@ func (h *Handler) NotFound(w http.ResponseWriter) {
 	http.Error(w, "Not found", http.StatusNotFound)
 }
 
+// Halaman yang punya versi bahasa Inggris di /en/... (berkasnya di public/en/).
+var localized = map[string]bool{"/": true, "/editor": true, "/panduan": true}
+
 // Serve menangani halaman & aset di domain utama. false = tidak ada halaman/aset untuk request ini.
 func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -235,20 +240,62 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) bool {
 	if len(route) > 1 {
 		route = strings.TrimSuffix(route, "/")
 	}
-	switch route {
+	// Bahasa halaman ditentukan alamatnya: /en/... = Inggris, selain itu Indonesia.
+	lang, base := i18n.ID, route
+	if route == "/en" {
+		lang, base = i18n.EN, "/"
+	} else if rest, ok := strings.CutPrefix(route, "/en/"); ok && localized["/"+rest] {
+		lang, base = i18n.EN, "/"+rest
+	}
+	if localized[base] {
+		saved := i18n.FromRequest(r)
+		query := r.URL.Query()
+		// ?lang=id|en dari tombol ganti bahasa: simpan pilihannya lalu buka halaman bahasa itu.
+		if want := query.Get("lang"); want == i18n.ID || want == i18n.EN {
+			securityHeaders(w)
+			i18n.SetCookie(w, want, h.cfg.SecureCookies)
+			query.Del("lang")
+			to := i18n.Path(want, base)
+			if len(query) > 0 {
+				to += "?" + query.Encode()
+			}
+			redirect(w, r, to)
+			return true
+		}
+		switch {
+		case lang == i18n.ID && saved == i18n.EN:
+			// Pengguna memilih bahasa Inggris: alamat Indonesia dialihkan ke versi Inggrisnya.
+			securityHeaders(w)
+			to := i18n.Path(i18n.EN, base)
+			if r.URL.RawQuery != "" {
+				to += "?" + r.URL.RawQuery
+			}
+			redirect(w, r, to)
+			return true
+		case lang == i18n.EN && saved != i18n.EN:
+			i18n.SetCookie(w, i18n.EN, h.cfg.SecureCookies)
+		}
+	}
+	page := func(file string) string {
+		if lang == i18n.EN {
+			return "en/" + file
+		}
+		return file
+	}
+	switch base {
 	case "/":
 		securityHeaders(w)
 		if h.auth.User(r) != nil {
-			redirect(w, r, "/editor")
+			redirect(w, r, i18n.Path(lang, "/editor"))
 		} else {
-			h.sendHTML(w, r, "index.html", "no-cache")
+			h.sendHTML(w, r, page("index.html"), "no-cache")
 		}
 	case "/editor":
 		securityHeaders(w)
 		if h.auth.User(r) == nil {
-			redirect(w, r, "/")
+			redirect(w, r, i18n.Path(lang, "/"))
 		} else {
-			h.sendHTML(w, r, "editor.html", "no-store")
+			h.sendHTML(w, r, page("editor.html"), "no-store")
 		}
 	case "/admin":
 		securityHeaders(w)
@@ -264,7 +311,7 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) bool {
 	case "/panduan":
 		// Panduan publik: dokumentasi fitur & cheat sheet prompt untuk AI Builder (tanpa perlu login).
 		securityHeaders(w)
-		h.sendHTML(w, r, "panduan.html", "public, max-age=3600")
+		h.sendHTML(w, r, page("panduan.html"), "public, max-age=3600")
 	default:
 		return h.serveStatic(w, r)
 	}

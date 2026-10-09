@@ -17,6 +17,7 @@ import (
 	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/credits"
 	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/store"
 )
@@ -257,6 +258,7 @@ type DiagramRequest struct {
 	RenderError string // perbaiki diagram tersimpan yang gagal digambar Mermaid (gratis, terbatas)
 	Instruction string // ubah diagram sesuai permintaan pemilik
 	Code        string // dasar yang diubah Instruction (kode di editor, mungkin belum disimpan); kosong = yang tersimpan
+	Lang        string // bahasa label & catatan diagram (i18n.ID / i18n.EN)
 }
 
 // GenerateDiagram membuat, memperbaiki, atau mengubah (lihat DiagramRequest) diagram satu jenis lalu
@@ -347,7 +349,7 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 			"- [info] Satu produk bisa dipesan berkali-kali.\n- [warn] Siapa pun bisa menghapus data di tabel pesanan.\nNo heading, no other text. "+
 			"Use warn only for real problems; a form that lets visitors add data (public create) and private columns are correct and need no warning.",
 			projectContext, jsconv.Slice(string(rawFacts), maxDiagramFacts), spec.ask, spec.header[0])
-		convo := []message{{"role": "system", "content": diagramPrompt}, {"role": "user", "content": ask}}
+		convo := []message{{"role": "system", "content": inLanguage(req.Lang, diagramPrompt)}, {"role": "user", "content": inLanguage(req.Lang, ask)}}
 		if fixing {
 			convo = append(convo,
 				message{"role": "assistant", "content": "```mermaid\n" + previous.Code + "\n```"},
@@ -483,7 +485,7 @@ func (s *Service) StreamDiagram(w http.ResponseWriter, ctx context.Context, user
 		if !started {
 			return err
 		}
-		ev := event{"type": "error", "error": err.Error(), "status": 500}
+		ev := event{"type": "error", "error": i18n.T(i18n.Of(w), err.Error()), "status": 500}
 		var he *httpx.Error
 		if errors.As(err, &he) {
 			ev["status"] = he.Status

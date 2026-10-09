@@ -49,7 +49,7 @@ function sendHtml(req, res, file, headers = {}) {
   const abs = path.join(PUBLIC_DIR, file);
   let html;
   try {
-    html = withAssetVersions(fs.readFileSync(abs, 'utf8'));
+    html = withAssetVersions(fs.readFileSync(abs, 'utf8')).replaceAll('{{origin}}', config.appOrigin);
   } catch {
     return res.status(404).send('Not found');
   }
@@ -114,6 +114,19 @@ app.get('/admin', (req, res) => {
 // Panduan publik: cheat sheet prompt untuk AI Builder (tanpa perlu login).
 app.get('/panduan', (req, res) => {
   sendHtml(req, res, 'panduan.html', { 'Cache-Control': 'public, max-age=3600' });
+});
+
+// Versi bahasa Inggris (public/en). Cookie bahasa & terjemahan pesan error hanya ada di server Go.
+app.get('/en', (req, res) => {
+  if (req.user) return res.redirect('/en/editor');
+  sendHtml(req, res, 'en/index.html', { 'Cache-Control': 'no-cache' });
+});
+app.get('/en/editor', (req, res) => {
+  if (!req.user) return res.redirect('/en');
+  sendHtml(req, res, 'en/editor.html', { 'Cache-Control': 'no-store' });
+});
+app.get('/en/panduan', (req, res) => {
+  sendHtml(req, res, 'en/panduan.html', { 'Cache-Control': 'public, max-age=3600' });
 });
 
 // Aset statis (/js, /css, /logo.svg ...). Karena nama berkas BER-VERSI (?v=hash) dari

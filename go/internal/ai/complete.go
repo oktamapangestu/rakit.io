@@ -9,6 +9,7 @@ import (
 
 	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/httpx"
+	"rakit.io/server/internal/i18n"
 	"rakit.io/server/internal/jsconv"
 	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/store"
@@ -69,7 +70,7 @@ func cleanCompletion(text, prefix, suffix string) string {
 }
 
 // Complete: prediksi teks untuk disisipkan di posisi kursor.
-func (s *Service) Complete(ctx context.Context, user *store.User, body map[string]any) (any, error) {
+func (s *Service) Complete(ctx context.Context, user *store.User, body map[string]any, lang string) (any, error) {
 	limit := s.cfg.AI.CompleteDailyLimit
 	if !s.models.Enabled() || limit == 0 {
 		return nil, httpx.Errorf(503, "Prediksi kode belum tersedia di server ini")
@@ -112,9 +113,13 @@ func (s *Service) Complete(ctx context.Context, user *store.User, body map[strin
 	ctx, cancel := context.WithTimeout(ctx, completeTimeout)
 	defer cancel()
 	temperature := 0.2
+	system := completePrompt
+	if lang == i18n.EN {
+		system = strings.Replace(system, "User-facing text in Indonesian.", "User-facing text in English.", 1)
+	}
 	ask := "File: " + jsconv.Slice(path, 200) + "\n\n" + prefix + "<CURSOR>" + suffix + "\n\nReply with <insert>...</insert> only."
 	req := request{
-		messages:    []message{{"role": "system", "content": completePrompt}, {"role": "user", "content": ask}},
+		messages:    []message{{"role": "system", "content": system}, {"role": "user", "content": ask}},
 		maxTokens:   completeMaxTokens,
 		temperature: &temperature,
 	}

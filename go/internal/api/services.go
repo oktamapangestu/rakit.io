@@ -4,9 +4,11 @@ import (
 	"strconv"
 	"strings"
 
+	"rakit.io/server/internal/ai"
 	"rakit.io/server/internal/fn"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/publish"
 )
 
 // ---------- /api/ai ----------
@@ -45,13 +47,13 @@ func (h *Handler) ai(q *request) error {
 		if err != nil {
 			return err
 		}
-		return q.json(status, out)
+		return q.json(status, ai.Localize(q.lang(), out))
 
 	case q.is("POST", "complete"):
 		if err := q.load(); err != nil {
 			return err
 		}
-		out, err := svc.Complete(q.r.Context(), q.user, q.body)
+		out, err := svc.Complete(q.r.Context(), q.user, q.body, q.lang())
 		if err != nil {
 			return err
 		}
@@ -67,15 +69,15 @@ func (h *Handler) ai(q *request) error {
 		switch {
 		case q.is("GET", "explain"):
 			p, _ := q.param("path")
-			out, err = svc.SavedExplanation(q.user, project, p)
+			out, err = svc.SavedExplanation(q.user, project, p, q.lang())
 		default:
 			if err = q.load(); err != nil {
 				return err
 			}
 			if q.is("POST", "explain") {
-				out, err = svc.Explain(q.r.Context(), q.user, project, q.body)
+				out, err = svc.Explain(q.r.Context(), q.user, project, q.body, q.lang())
 			} else {
-				out, err = svc.AskExplain(q.r.Context(), q.user, project, q.body)
+				out, err = svc.AskExplain(q.r.Context(), q.user, project, q.body, q.lang())
 			}
 		}
 		if err != nil {
@@ -97,14 +99,14 @@ func (h *Handler) ai(q *request) error {
 		if err != nil {
 			return err
 		}
-		return q.json(200, out)
+		return q.json(200, ai.Localize(q.lang(), out))
 
 	case q.is("POST", "messages", ":", "revert"):
 		out, err := svc.Revert(q.r.Context(), q.user, q.rest[1])
 		if err != nil {
 			return err
 		}
-		return q.json(200, out)
+		return q.json(200, ai.Localize(q.lang(), out))
 	}
 	return errNotFound
 }
@@ -293,6 +295,9 @@ func (h *Handler) publish(q *request) error {
 	}
 	if err != nil {
 		return err
+	}
+	if st, ok := out.(*publish.Status); ok && st != nil {
+		st.Localize(q.lang())
 	}
 	return q.json(200, map[string]any{"publish": out, "project": h.public(project)})
 }
