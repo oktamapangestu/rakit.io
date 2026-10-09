@@ -287,54 +287,7 @@
           <section class="db-main" id="dbMain"></section>
         </div>
 
-        <div class="diagram-view" id="diagramView" hidden>
-          <div class="diagram-bar">
-            <div class="seg diagram-tabs" role="tablist" aria-label="Diagram type">
-              <button type="button" role="tab" data-diagram="usecase" title="Actors and the features they can use">Use Case</button>
-              <button type="button" role="tab" data-diagram="activity" title="The flow of a process/activity">Activity</button>
-              <button type="button" role="tab" data-diagram="sequence" title="The order of interactions between actors/objects">Sequence</button>
-              <button type="button" role="tab" data-diagram="class" title="Classes, attributes, methods, and their relationships">Class</button>
-              <button type="button" role="tab" data-diagram="state" title="How an object's state changes">State</button>
-              <button type="button" role="tab" data-diagram="erd" title="The structure of database tables">ERD</button>
-              <button type="button" role="tab" data-diagram="site" title="Pages, links, and CSS/JS files">Site map</button>
-              <button type="button" role="tab" data-diagram="flow" title="Which pages/scripts use which tables">Data flow</button>
-            </div>
-            <div class="diagram-tools">
-              <button type="button" class="icon-btn" id="diagramInfo" title="About this diagram" aria-label="About this diagram">
-                <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1m0 1a6 6 0 1 0 0 12A6 6 0 0 0 8 2m.5 5v5h-1V7zM8 4.25a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5"/></svg>
-              </button>
-              <span class="tool-sep"></span>
-              <span class="diagram-updated" id="diagramUpdated"></span>
-              <button type="button" class="diagram-edit" id="diagramEdit" aria-pressed="false" disabled title="Edit diagram: change the code, click text in the diagram, or ask the AI">
-                <svg viewBox="0 0 16 16"><path d="M11.1 1.6a1.6 1.6 0 0 1 2.3 0l1 1a1.6 1.6 0 0 1 0 2.3L5.3 14H2v-3.3zm1.6.7a.6.6 0 0 0-.9 0l-1 1 1.9 1.9 1-1a.6.6 0 0 0 0-.9zM11.9 5.9 10 4 3 11v2h2z"/></svg>
-                Edit
-              </button>
-              <button type="button" class="diagram-update" id="diagramUpdate" disabled>
-                <svg viewBox="0 0 16 16"><path d="M13.45 5.17A6 6 0 1 0 14 8h-1a5 5 0 1 1-.8-2.73l-1.7.23.14 1 3.4-.5-.5-3.4-1 .14z"/></svg>
-                Update diagram
-              </button>
-              <span class="tool-sep"></span>
-              <button type="button" class="icon-btn" id="diagramZoomOut" title="Zoom out (−)">−</button>
-              <button type="button" class="zoom-label" id="diagramZoomFit" title="Fit to screen (key 0) · actual size: key 1">100%</button>
-              <button type="button" class="icon-btn" id="diagramZoomIn" title="Zoom in (+)">+</button>
-              <span class="tool-sep"></span>
-              <button type="button" class="icon-btn" id="diagramCopy" title="Copy Mermaid code">
-                <svg viewBox="0 0 16 16"><path d="M4 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1z"/></svg>
-              </button>
-              <button type="button" class="icon-btn" id="diagramDownload" title="Download SVG">
-                <svg viewBox="0 0 16 16"><path d="M7.5 1h1v8.3l2.6-2.6.7.7L8 11.2 4.2 7.4l.7-.7 2.6 2.6zM2 13h12v1H2z"/></svg>
-              </button>
-              <span class="tool-sep"></span>
-              <button type="button" class="findings-toggle" id="diagramFindingsToggle" aria-pressed="true" title="Findings">
-                Findings <span class="count">0</span>
-              </button>
-            </div>
-          </div>
-          <div class="diagram-body">
-            <div class="diagram-canvas" id="diagramCanvas" tabindex="0" aria-label="Diagram canvas. Scroll or pinch to zoom, drag to pan."></div>
-            <aside class="diagram-findings" id="diagramFindings" aria-label="Findings"></aside>
-          </div>
-        </div>
+        <div class="diagram-view" id="diagramView" hidden></div>
 
         <div class="console-view" id="consoleView" hidden></div>
 

@@ -67,7 +67,8 @@ di `assets-source/editor/` dan dipasang dari `editor.js` dengan `mount()`. Bagia
 tab Data / editor database (`database/`), tab Riwayat versi (`history/`), pengaturan Asisten AI website
 (`assistant/`, masih disembunyikan lewat `SHOW_ASSISTANT`), dialog Pengaturan (`settings/`), dialog Publikasikan &
 Mode publikasi (`publish/`), tab Console (`console/`), panel Baca Alur Kode (`flow/`; sorotan baris & sinkron dengan
-Monaco tetap di `editor.js`).
+Monaco tetap di `editor.js`), tab Diagram (`diagram/`; gestur zoom/geser di `diagram/panzoom.js`, Mermaid di
+`mermaid.js`).
 - Keadaan yang juga dipakai kode vanilla disimpan di modul rune `<nama>.svelte.js` (mis.
   `database/state.svelte.js`), bukan di dalam komponen.
 - Komponen memakai sambungan ke editor (api, toast, dialog konfirmasi, kotak AI, buka file, …) lewat
