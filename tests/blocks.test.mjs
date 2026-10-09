@@ -44,8 +44,11 @@ test('skrip pemilih hanya disisipkan ke halaman HTML yang dimuat di iframe', { s
   const framed = await stack.site('toko-pilih', '/', { headers: { 'Sec-Fetch-Dest': 'iframe' } });
   assert.equal(framed.status, 200);
   assert.ok(framed.body.includes(`<script data-app="${stack.origin}">`));
-  // Disisipkan tepat sebelum </body>; sisanya tidak berubah.
-  assert.ok(framed.body.startsWith(PAGE.slice(0, PAGE.lastIndexOf('</body>'))));
+  // Skrip Console dipasang paling awal di <head> (log sejak awal halaman), skrip pemilih tepat sebelum </body>;
+  // sisanya tidak berubah.
+  const consoleTag = framed.body.match(/<head><script src="\/api\/_console\.js\?v=\w+" data-app="[^"]+"><\/script>/)?.[0];
+  assert.ok(consoleTag, 'skrip Console di awal <head>');
+  assert.ok(framed.body.replace(consoleTag, '<head>').startsWith(PAGE.slice(0, PAGE.lastIndexOf('</body>'))));
   assert.ok(framed.body.endsWith('</script></body>\n</html>'));
   assert.equal(Number(framed.headers['content-length']), Buffer.byteLength(framed.body));
   assert.notEqual(framed.headers.etag, plain.headers.etag);

@@ -293,8 +293,10 @@ test('upload: hanya bila Tambah/Ubah dibuka untuk publik; ukuran mengikuti paket
   stack.db().prepare('INSERT INTO subscriptions (user_id, plan, started_at, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)')
     .run(site.owner.userId, 'pro', Date.now(), Date.now() + 30 * DAY_MS, Date.now());
   assert.equal((await upload(big)).status, 201);
+  // Di atas batas server (lebih dari batas paket mana pun): ditolak sebelum dibaca seluruhnya.
   const huge = await upload(Buffer.concat([PNG, Buffer.alloc(12 * 1024 * 1024)]));
-  assert.deepEqual([huge.status, huge.body], [413, { error: 'Request terlalu besar' }]);
+  assert.equal(huge.status, 413);
+  assert.match(huge.body.error, /^File terlalu besar \(maks\. \d+ MB\)$/);
 });
 
 test('perubahan dari editor database langsung terlihat di API publik', async () => {

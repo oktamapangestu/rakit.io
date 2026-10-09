@@ -2,6 +2,9 @@
 <script>
   let { activity } = $props();
   const a = $derived(activity.state);
+  // Event toggle <details> dikirim browser belakangan, bisa setelah bagian ini sudah dibuang; jadi nilainya ditulis
+  // lewat prop (bukan derived a, yang sudah tidak berlaku lagi saat itu).
+  const toggled = (key) => (e) => activity.setOpen(key, e.currentTarget.open);
 
   let el = $state();
   const near = (box) => box.scrollHeight - box.scrollTop - box.clientHeight < 40;
@@ -19,11 +22,11 @@
 </script>
 
 {#if !a.removed}
-  <details class="ai-activity" bind:open={a.open} bind:this={el}>
+  <details class="ai-activity" open={a.open} ontoggle={toggled('open')} bind:this={el}>
     <summary>{a.summary}</summary>
     {#each a.parts as p (p.key)}
       {#if p.kind === 'thinking'}
-        <details class="ai-thinking" bind:open={a.thinkingOpen}><summary>Proses berpikir</summary><div class="ai-thinking-text">{a.thinking}</div></details>
+        <details class="ai-thinking" open={a.thinkingOpen} ontoggle={toggled('thinkingOpen')}><summary>Proses berpikir</summary><div class="ai-thinking-text">{a.thinking}</div></details>
       {:else if p.kind === 'say'}
         <div class="ai-say">{p.raw.replace(/<\/?message>/g, '').trim()}</div>
       {:else}

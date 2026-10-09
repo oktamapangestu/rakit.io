@@ -2106,7 +2106,16 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
 
   // loader.js (AMD) disisipkan dari sini, bukan lewat <script> di HTML, supaya editor.js tidak menunggunya.
   // Filenya sudah mulai diunduh sejak awal lewat <link rel="preload"> di editor.html.
+  // Skrip Monaco dari CDN dimuat dengan crossorigin (CDN-nya mengizinkan CORS): tanpa itu Chrome menyembunyikan
+  // galatnya dari halaman (event unhandledrejection tidak terkirim), jadi pembatalan biasa Monaco tidak bisa
+  // disaring di setupEditor. Loader Monaco tidak punya opsinya, jadi atributnya dipasang saat skrip disisipkan.
   function loadMonaco() {
+    const head = document.head;
+    const append = head.appendChild;
+    head.appendChild = function appendChild(node) {
+      if (node.tagName === 'SCRIPT' && node.src?.startsWith(window.MONACO_BASE)) node.crossOrigin = 'anonymous';
+      return append.call(this, node);
+    };
     return new Promise((resolve, reject) => {
       const start = () => {
         window.require.config({ paths: { vs: `${window.MONACO_BASE}/vs` } });
@@ -2114,6 +2123,7 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
       };
       if (window.require?.config) return start();
       const script = document.createElement('script');
+      script.crossOrigin = 'anonymous';
       script.src = `${window.MONACO_BASE}/vs/loader.js`;
       script.onload = start;
       script.onerror = () => reject(new Error('Gagal memuat Monaco'));
@@ -2122,6 +2132,11 @@ import { connect as connectConsole, add as addConsoleLog, open as openConsole } 
   }
 
   async function setupEditor() {
+    // Monaco membatalkan pekerjaan latarnya (sorotan kata, tautan, dsb.) saat model berganti; pembatalan itu
+    // muncul sebagai "Uncaught (in promise) Canceled" di konsol padahal tidak ada yang salah.
+    window.addEventListener('unhandledrejection', (e) => {
+      if (e.reason?.name === 'Canceled' && e.reason?.message === 'Canceled') e.preventDefault();
+    });
     monaco = await loadMonaco();
     defineTheme();
     editor = monaco.editor.create($('#editor'), {

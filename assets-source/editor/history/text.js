@@ -18,6 +18,22 @@ export function aiPrompt(v) {
   return `${prompt[0].toUpperCase()}${prompt.slice(1)}${v.label.length >= VERSION_LABEL_MAX ? '…' : ''}`;
 }
 
+// Waktu versi tujuan dari label versi "restore" buatan server: "Sebelum dikembalikan ke versi 9 Okt, 20.55" (WIB,
+// tanpa tahun; lihat describe() di versions.go). Ditulis ulang dengan format tanggal antarmuka supaya ikut bahasa.
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const WIB = 7 * 3_600_000;
+function restoreTarget(v) {
+  const m = v.label?.match(/versi (\d{1,2}) ([A-Za-z]{3}), (\d{2})\.(\d{2})$/);
+  const month = m ? MONTHS.indexOf(m[2]) : -1;
+  if (month < 0) return null;
+  const at = (year) => Date.UTC(year, month, Number(m[1]), Number(m[3]), Number(m[4])) - WIB;
+  // Versi tujuan selalu lebih lama dari versi ini; tanpa tahun di label, versi Desember yang dikembalikan di bulan
+  // Januari berarti tahun lalu.
+  const year = new Date(v.createdAt + WIB).getUTCFullYear();
+  return at(year) <= v.createdAt ? at(year) : at(year - 1);
+}
+const shortTime = (ms) => new Date(ms).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
 // Judul & keterangan tiap versi.
 export function versionText(v) {
   if (v.kind === 'manual') return { title: v.label || 'Versi yang kamu simpan', sub: 'Disimpan olehmu' };
@@ -26,7 +42,13 @@ export function versionText(v) {
     const prompt = aiPrompt(v);
     return prompt ? { title: prompt, sub: 'Sebelum AI mengubah file' } : { title: 'Sebelum AI mengubah', sub: '' };
   }
-  if (v.kind === 'restore') return { title: 'Sebelum dikembalikan', sub: v.label.replace(/^Sebelum dikembalikan ke\s*/, 'Lalu dikembalikan ke ') };
+  if (v.kind === 'restore') {
+    const target = restoreTarget(v);
+    return {
+      title: 'Sebelum dikembalikan',
+      sub: target ? `Lalu dikembalikan ke versi ${shortTime(target)}` : v.label.replace(/^Sebelum dikembalikan ke\s*/, 'Lalu dikembalikan ke '),
+    };
+  }
   return { title: 'Simpanan otomatis', sub: 'Disimpan sendiri sebelum kamu lanjut mengedit' };
 }
 

@@ -147,6 +147,33 @@ function mapPlaceholders(raw, fn) {
   return out + src.slice(last, src.length - 1);
 }
 
+// Bentuk jamak versi Inggris: "{credit|credits}" di terjemahan memilih kata menurut angka placeholder tepat sebelumnya,
+// mis. "${n} {credit|credits}" → "1 credit" / "2 credits" (bahasa Indonesia tidak membedakannya).
+const PLURAL = /\{([^{}|$\n]+)\|([^{}|\n]+)\}/g;
+function expandPlurals(raw) {
+  const src = `\`${raw}\``;
+  let out = '';
+  let i = 1;
+  let last = 1;
+  let prev = null;
+  const lit = (text) => text.replace(PLURAL, (_, one, many) => {
+    if (prev == null) throw new Error(`bentuk jamak tanpa angka sebelumnya: ${JSON.stringify(raw)}`);
+    return `\${Number(${prev}) === 1 ? ${quote(one, "'")} : ${quote(many, "'")}}`;
+  });
+  while (i < src.length - 1) {
+    if (src[i] === '\\') { i += 2; continue; }
+    if (src[i] === '$' && src[i + 1] === '{') {
+      const inner = tokenize(src, i + 2, src.length, true);
+      out += lit(src.slice(last, i)) + src.slice(i, inner.end + 1);
+      prev = src.slice(i + 2, inner.end);
+      i = last = inner.end + 1;
+      continue;
+    }
+    i++;
+  }
+  return out + lit(src.slice(last, src.length - 1));
+}
+
 function placeholders(raw) {
   const found = [];
   mapPlaceholders(raw, (code) => { found.push(code); return code; });
@@ -192,7 +219,8 @@ export function translateJS(src, dict, report) {
             report.errors.push(`placeholder tidak cocok: ${JSON.stringify(key)} -> ${JSON.stringify(en)}`);
           } else {
             // Teks di dalam ${...} ikut diterjemahkan.
-            edits.push({ start: tok.start, end: tok.end, text: `\`${mapPlaceholders(en, (code) => translateJS(code, dict, report))}\`` });
+            const out = mapPlaceholders(expandPlurals(en), (code) => translateJS(code, dict, report));
+            edits.push({ start: tok.start, end: tok.end, text: `\`${out}\`` });
           }
         }
         report.used.add(key);

@@ -89,5 +89,10 @@ export function createActivity(scroller) {
     for (const step of steps.values()) step.open = false;
   }
 
-  return { state: a, scroller, reset, handle, finish };
+  // Dibuka/ditutup pengguna (key: 'open' = seluruh proses, 'thinkingOpen' = proses berpikir).
+  function setOpen(key, open) {
+    a[key] = open;
+  }
+
+  return { state: a, scroller, reset, handle, finish, setOpen };
 }

@@ -115,6 +115,8 @@ lewat tombol ID/EN, yaitu `?lang=id|en`). Bila cookie berisi `en`, alamat Indone
   npm run i18n:check     # gagal bila masih ada teks yang belum diterjemahkan
   ```
   Teks yang belum diterjemahkan tetap tampil dalam bahasa Indonesia (tidak merusak apa pun).
+  Bentuk jamak bahasa Inggris ditulis `{tunggal|jamak}` di terjemahan; pilihannya mengikuti angka di placeholder
+  tepat sebelumnya, mis. `"${n} kredit": "${n} {credit|credits}"` → "1 credit" / "3 credits".
 - **Pesan dari server Go** (error API, chat AI, publikasi, login Google) diterjemahkan oleh `go/internal/i18n`
   memakai kamus `en.go` (kunci = teks Indonesia atau format `fmt`-nya).
 - **AI**: Builder/Plan membalas dalam bahasa yang dipakai pengguna. Baca Alur Kode, Diagram, dan prediksi kode
