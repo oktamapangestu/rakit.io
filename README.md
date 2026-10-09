@@ -62,9 +62,13 @@ Tiap skrip di `assets-source/js/` dibundel jadi satu file (`scripts/bundle.mjs`,
 beserta modul & komponen yang diimpornya.
 
 **Antarmuka editor ditulis dengan [Svelte 5](https://svelte.dev)** (runes; dipindah bertahap dari JS tanpa framework).
-Komponennya ada di `assets-source/editor/`. `editor.js` memasang satu komponen akar, `shell/App.svelte`, yang menyusun semua bagian
-editor; `editor.js` sendiri tidak lagi membuat elemen atau memasang event per tombol, tinggal logika (Monaco, simpan
-file, preview & iframe, API) yang diberikan ke App lewat prop `actions` dan ke komponen lain lewat context.
+Komponennya ada di `assets-source/editor/`. `assets-source/js/editor.js` memasang satu komponen akar,
+`shell/App.svelte`, yang menyusun semua bagian editor, lalu memuat akun & project. Logikanya (tanpa membuat elemen
+sendiri) dibagi per bagian di `assets-source/editor/app/`: `files.js` (pohon, tab, simpan, operasi file, upload),
+`monaco.js` (editor kode, tema, prediksi kode), `preview.js` (preview, pilih blok, edit teks & gambar), `flow.js`
+(Baca Alur Kode), `shell.js` (mode/tab, panel, dialog tanya), `project.js` (akun, project, publikasi, langganan),
+`context.js` (context `editor` & `openDialog`), `api.js`, `util.js`. Aksinya diberikan ke App lewat prop `actions`
+dan ke komponen lain lewat context.
 Bagian-bagiannya: Langganan & isi ulang kredit (`Topup.svelte`), tab Fungsi (`functions/`),
 tab Data / editor database (`database/`), tab Riwayat versi (`history/`), pengaturan Asisten AI website
 (`assistant/`, masih disembunyikan lewat `SHOW_ASSISTANT`), dialog Pengaturan (`settings/`), dialog Publikasikan &
