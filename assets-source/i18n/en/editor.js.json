@@ -1060,5 +1060,7 @@
   "${plan?.name ?? payment.plan} aktif": "${plan?.name ?? payment.plan} active",
   "langsung": "live",
   "folder": "folder",
-  "otomatis": "auto"
+  "otomatis": "auto",
+  "← Semua versi": "← All versions",
+  "Daftar versi": "Version list"
 }
