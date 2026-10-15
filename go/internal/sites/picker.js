@@ -387,6 +387,7 @@
       el.contentEditable = 'true'; // browser lama tanpa plaintext-only
     }
     el.addEventListener('keydown', onEditKey);
+    el.addEventListener('beforeinput', onBeforeInput);
     el.addEventListener('paste', onPaste);
     el.addEventListener('drop', stop);
     el.addEventListener('blur', onEditBlur);
@@ -404,6 +405,7 @@
     const { el, nodes, before, html, db } = editing;
     editing = null;
     el.removeEventListener('keydown', onEditKey);
+    el.removeEventListener('beforeinput', onBeforeInput);
     el.removeEventListener('paste', onPaste);
     el.removeEventListener('drop', stop);
     el.removeEventListener('blur', onEditBlur);
@@ -459,10 +461,35 @@
       finishEdit(false);
     }
   }
+  // Ketikan disisipkan sendiri ke text node tempat kursor berada. Bila dibiarkan ke browser, ketikan di ujung
+  // tautan (dan di tepi elemen inline lain) jatuh ke text node baru di luarnya — Chrome tidak memperpanjang
+  // tautan — sehingga struktur elemen dianggap berubah dan perubahannya ditolak.
+  function insertText(text) {
+    const sel = getSelection();
+    if (!editing || !sel.rangeCount) return false;
+    const r = sel.getRangeAt(0);
+    const node = r.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE || r.endContainer !== node || !editing.nodes.includes(node)) return false;
+    const start = r.startOffset;
+    const rest = node.data.slice(r.endOffset);
+    const prev = node.data.slice(0, start);
+    // Spasi di ujung text node atau di sebelah spasi lain tidak terlihat (diciutkan): pakai &nbsp; seperti
+    // browser; finishEdit mengembalikannya ke spasi biasa.
+    let typed = text.replace(/ /g, (s, i) => (i === text.length - 1 && !rest) || /\s$/.test(prev + text.slice(0, i)) || /^\s/.test(rest) ? ' ' : ' ');
+    if (!typed) return true;
+    node.data = prev + typed + rest;
+    const caret = document.createRange();
+    caret.setStart(node, start + typed.length);
+    select(caret);
+    return true;
+  }
+  function onBeforeInput(e) {
+    if (e.inputType === 'insertText' && typeof e.data === 'string' && insertText(e.data)) e.preventDefault();
+  }
   function onPaste(e) {
     e.preventDefault();
-    const text = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
-    document.execCommand('insertText', false, text.replace(/\s+/g, ' '));
+    const text = ((e.clipboardData && e.clipboardData.getData('text/plain')) || '').replace(/\s+/g, ' ');
+    if (!insertText(text)) document.execCommand('insertText', false, text);
   }
   function onEditBlur() {
     finishEdit(true);
@@ -589,5 +616,5 @@
       report();
     }
   });
-  send({ type: 'ready', page: location.pathname });
+  send({ type: 'ready', page: location.pathname, route: location.pathname + location.search + location.hash });
 })();

@@ -66,6 +66,17 @@ export function removeBlock(b) {
   toPicker({ type: 'limit', limit: pageLimit() });
 }
 
+// Halaman di preview berpindah lewat tautan (atau Alt+klik): bar alamat mengikutinya, dan muat ulang berikutnya
+// (sesudah menyimpan, edit di <template>, perubahan AI) tetap di halaman itu, bukan kembali ke halaman file aktif.
+function followRoute(m) {
+  if (typeof m.route !== 'string' || typeof m.page !== 'string' || !m.route.startsWith('/') || m.route === currentRoute()) return;
+  const file = pageFile(m.page);
+  if (file) state.previewPath = file;
+  state.previewRoute = file && routeFor(file) === m.route ? null : m.route;
+  preview.route = m.route;
+  preview.url = `${previewBase()}${m.route}`;
+}
+
 export function bindBlockPicker() {
   window.addEventListener('message', (e) => {
     const m = e.data;
@@ -75,6 +86,7 @@ export function bindBlockPicker() {
     } else if (m.type === 'ready') {
       // Halaman preview dimuat (ulang/pindah halaman): aktifkan lagi dengan blok milik halaman ini.
       pick.page = m.page;
+      followRoute(m);
       if (textEdit.on) toPicker({ type: 'textMode', on: true });
       if (!pick.on) return;
       toPicker({ type: 'pick', on: true, limit: pageLimit(), restore: blocksOn(m.page).map((b) => b.selector) });
