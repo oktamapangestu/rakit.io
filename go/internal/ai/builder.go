@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	maxBuildRounds     = 8
+	maxBuildRounds     = 10
 	maxTruncatedRounds = 3
 	truncatedNote      = "\n\n_(Jawaban terpotong karena terlalu panjang.)_"
 )
@@ -282,9 +282,9 @@ func knownTables(existing []string, st *staged) map[string]bool {
 	return out
 }
 
-// stageToolCall mencatat satu panggilan tool sebagai perubahan (belum ditulis ke disk). Hasilnya
-// dikirim balik ke model.
-func stageToolCall(call toolCall, st *staged, existing []string, truncated bool) string {
+// stageToolCall menjalankan satu panggilan tool: read_file dijawab langsung, yang lain dicatat sebagai perubahan
+// (belum ditulis ke disk). Hasilnya dikirim balik ke model; found = masalah yang ditemukan (untuk statistik).
+func stageToolCall(call toolCall, ws *workspace, truncated bool) (result string, found []problem) {
 	args := map[string]any{}
 	raw := call.Arguments
 	if raw == "" {
@@ -295,9 +295,9 @@ func stageToolCall(call toolCall, st *staged, existing []string, truncated bool)
 		if truncated {
 			return "Error: panggilan ini terpotong karena jawabanmu melebihi batas panjang, jadi tidak disimpan. " +
 				"Panggil tool ini lagi dengan isi lengkap. Kalau filenya sangat besar, pecah jadi beberapa file lebih kecil " +
-				"(misalnya CSS atau JS terpisah) dan tulis satu file per panggilan."
+				"(misalnya CSS atau JS terpisah) dan tulis satu file per panggilan, atau ubah sebagian saja dengan edit_file.", []problem{{"tool", "terpotong"}}
 		}
-		return "Error: argumen bukan JSON yang valid. Panggil tool ini lagi dengan JSON yang benar."
+		return "Error: argumen bukan JSON yang valid. Panggil tool ini lagi dengan JSON yang benar.", []problem{{"tool", "json"}}
 	}
 	if obj, isObject := parsed.(map[string]any); isObject {
 		args = obj
@@ -306,32 +306,116 @@ func stageToolCall(call toolCall, st *staged, existing []string, truncated bool)
 	var valid change
 	var err error
 	switch call.Name {
+	case "read_file":
+		return readFile(args, ws), nil
 	case "write_file":
 		valid, err = validateFile("write", args)
+	case "edit_file":
+		valid, err = editFile(args, ws)
 	case "delete_file":
 		valid, err = validateFile("delete", args)
 	case "create_table":
 		valid, err = validateTable(args)
 	default:
-		return fmt.Sprintf(`Error: tool "%s" tidak dikenal.`, call.Name)
+		return fmt.Sprintf(`Error: tool "%s" tidak dikenal.`, call.Name), []problem{{"tool", "unknown"}}
 	}
+	if err != nil {
+		kind := "tool"
+		if call.Name == "edit_file" {
+			kind = "edit"
+		}
+		return "Error: " + err.Error(), []problem{{kind, err.Error()}}
+	}
+	ws.st.set(valid)
+	switch valid.Action {
+	case "table":
+		return fmt.Sprintf(`OK: tabel "%s" akan dibuat/diperbarui. Pakai dari JavaScript situs dengan fetch('/api/db/%s').`, valid.Name, valid.Name), nil
+	case "delete":
+		return fmt.Sprintf(`OK: "%s" akan dihapus.`, valid.Path), nil
+	}
+	code := syntaxProblems(valid.Path, valid.Content)
+	for _, p := range apiPathProblems(valid.Content, knownTables(ws.tables, ws.st)) {
+		code = append(code, problem{"api", p})
+	}
+	if len(code) > 0 {
+		return fmt.Sprintf(`Ditulis, TAPI ada masalah di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(texts(code), "; ")), code
+	}
+	if list := htmlProblems(valid.Path, valid.Content); len(list) > 0 {
+		for _, p := range list {
+			kind := "link"
+			if strings.Contains(p, "kontras") {
+				kind = "contrast"
+			}
+			found = append(found, problem{kind, p})
+		}
+		return fmt.Sprintf(`Ditulis, TAPI ada masalah kualitas di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(list, "; ")), found
+	}
+	if call.Name == "edit_file" {
+		return fmt.Sprintf(`OK: "%s" diubah (%d karakter sekarang).`, valid.Path, jsconv.Len(valid.Content)), nil
+	}
+	return fmt.Sprintf(`OK: "%s" ditulis (%d karakter).`, valid.Path, jsconv.Len(valid.Content)), nil
+}
+
+// readFile: isi terbaru sebuah file teks — termasuk perubahan yang sudah dibuat model di job ini.
+func readFile(args map[string]any, ws *workspace) string {
+	raw, _ := args["path"].(string)
+	clean, err := files.CleanPath(raw)
 	if err != nil {
 		return "Error: " + err.Error()
 	}
-	st.set(valid)
-	switch valid.Action {
-	case "table":
-		return fmt.Sprintf(`OK: tabel "%s" akan dibuat/diperbarui. Pakai dari JavaScript situs dengan fetch('/api/db/%s').`, valid.Name, valid.Name)
-	case "delete":
-		return fmt.Sprintf(`OK: "%s" akan dihapus.`, valid.Path)
+	content, ok := ws.read(clean)
+	if !ok {
+		if ws.exists(clean) {
+			return fmt.Sprintf(`Error: "%s" bukan file teks (.html, .css, .js).`, clean)
+		}
+		return fmt.Sprintf(`Error: "%s" tidak ada di project.`, clean)
 	}
-	if problems := apiPathProblems(valid.Content, knownTables(existing, st)); len(problems) > 0 {
-		return fmt.Sprintf(`Ditulis, TAPI ada masalah di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(problems, "; "))
+	return fmt.Sprintf("Isi terbaru \"%s\":\n%s", clean, content)
+}
+
+// editFile: ganti bagian file yang sudah ada. Setiap old_text harus cocok persis di satu tempat; bila satu saja
+// gagal, tidak ada yang diubah.
+func editFile(args map[string]any, ws *workspace) (change, error) {
+	raw, _ := args["path"].(string)
+	clean, err := files.CleanPath(raw)
+	if err != nil {
+		return change{}, err
 	}
-	if problems := htmlProblems(valid.Path, valid.Content); len(problems) > 0 {
-		return fmt.Sprintf(`Ditulis, TAPI ada masalah kualitas di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(problems, "; "))
+	if !files.IsTextFile(clean) {
+		return change{}, fmt.Errorf(`"%s": hanya file .html, .css, dan .js yang diizinkan.`, clean)
 	}
-	return fmt.Sprintf(`OK: "%s" ditulis (%d karakter).`, valid.Path, jsconv.Len(valid.Content))
+	content, ok := ws.read(clean)
+	if !ok {
+		return change{}, fmt.Errorf(`"%s" belum ada. Pakai write_file untuk membuat file baru.`, clean)
+	}
+	list, _ := args["edits"].([]any)
+	if len(list) == 0 {
+		return change{}, errors.New("edits harus berisi minimal satu { old_text, new_text }.")
+	}
+	crlf := strings.Contains(content, "\r\n")
+	for i, item := range list {
+		e, _ := item.(map[string]any)
+		old, okOld := e["old_text"].(string)
+		repl, okNew := e["new_text"].(string)
+		if !okOld || !okNew || old == "" {
+			return change{}, fmt.Errorf("edit ke-%d: old_text dan new_text harus berupa teks, dan old_text tidak boleh kosong. Tidak ada yang diubah.", i+1)
+		}
+		if crlf && !strings.Contains(old, "\r\n") {
+			old = strings.ReplaceAll(old, "\n", "\r\n")
+			repl = strings.ReplaceAll(repl, "\n", "\r\n")
+		}
+		switch n := strings.Count(content, old); {
+		case n == 0:
+			return change{}, fmt.Errorf(`edit ke-%d: old_text tidak ditemukan persis di "%s" (perhatikan spasi, indentasi, dan tanda kutip). Tidak ada yang diubah — panggil read_file untuk melihat isi terbarunya, lalu salin teksnya persis.`, i+1, clean)
+		case n > 1:
+			return change{}, fmt.Errorf(`edit ke-%d: old_text muncul %d kali di "%s". Sertakan baris di sekitarnya supaya hanya cocok di satu tempat. Tidak ada yang diubah.`, i+1, n, clean)
+		}
+		content = strings.Replace(content, old, repl, 1)
+	}
+	if len(content) > files.MaxFileSize {
+		return change{}, fmt.Errorf(`"%s" melebihi %d KB.`, clean, files.MaxFileSize/1024)
+	}
+	return change{Action: "write", Path: clean, Content: content}, nil
 }
 
 var (
@@ -361,17 +445,41 @@ type buildResult struct {
 	message          string
 	changes          []change
 	inTokens, outTok int
+	images           []string // gambar yang dirujuk tapi belum ada (lihat imagesNote)
+	stats            buildStats
 }
 
-// runBuilder: mode Builder — ulangi permintaan sampai model selesai memanggil tool dan menulis ringkasan.
+// buildStats: hasil pemeriksaan kode satu job Builder, disimpan di ai_requests.checks untuk dashboard owner.
+// Found = berapa kali tiap jenis masalah dikembalikan ke model; Left = yang masih ada saat selesai.
+type buildStats struct {
+	Found  map[string]int `json:"found,omitempty"`
+	Left   map[string]int `json:"left,omitempty"`
+	Rounds int            `json:"rounds"`
+}
+
+func (b *buildStats) count(target *map[string]int, list []problem) {
+	for _, p := range list {
+		if *target == nil {
+			*target = map[string]int{}
+		}
+		(*target)[p.kind]++
+	}
+}
+
+// slimNote menggantikan isi file di putaran lanjut (lihat slimContext).
+const slimNote = "(File contents from the first turn are left out here. Call read_file to see a file's current content, including your own changes.)"
+
 // slimContext membuang blok isi file (<file path="...">…</file>) dari konteks project.
 // Dipakai pada putaran lanjut runBuilder: konteks penuh hanya perlu sekali, putaran
 // berikutnya cukup struktur/daftar file supaya biaya token input tidak membengkak berulang.
+// Isi terbaru sebuah file bisa dibaca model dengan read_file.
 func slimContext(content string) string {
-	if !strings.Contains(content, "<file") {
+	loc := fileBlockRE.FindStringIndex(content)
+	if loc == nil {
 		return content
 	}
-	return blankLinesRE.ReplaceAllString(fileBlockRE.ReplaceAllString(content, ""), "\n\n")
+	slim := content[:loc[0]] + slimNote + fileBlockRE.ReplaceAllString(content[loc[0]:], "")
+	return blankLinesRE.ReplaceAllString(slim, "\n\n")
 }
 
 // messageText mengambil isi teks sebuah pesan (kosong bila bukan string).
@@ -390,19 +498,21 @@ func withText(m message, content string) message {
 	return out
 }
 
-func (s *Service) runBuilder(messages []message, existing []string, h hooks) (*buildResult, error) {
+// runBuilder: mode Builder — ulangi permintaan sampai model selesai memanggil tool dan menulis ringkasan.
+func (s *Service) runBuilder(messages []message, ws *workspace, h hooks) (*buildResult, error) {
 	convo := append([]message(nil), messages...)
 	// Pesan terakhir berisi konteks project + permintaan. Konteks penuh hanya dikirim di
 	// putaran pertama; putaran lanjut memakai versi ringkas. Pesan setelahnya (jawaban &
 	// hasil tool) selalu ikut utuh.
 	ctxIdx := len(convo) - 1
 	hasContext := ctxIdx >= 0 && strings.Contains(messageText(convo[ctxIdx]), "<file")
-	st := &staged{items: map[string]change{}}
 	out := &buildResult{}
 	text := ""
 	truncatedRounds := 0
+	lastNudge := "" // masalah yang terakhir dikembalikan di pemeriksaan akhir
 
 	for round := 0; round < maxBuildRounds; round++ {
+		out.stats.Rounds = round + 1
 		payload := convo
 		if round > 0 && hasContext {
 			payload = make([]message, len(convo))
@@ -439,22 +549,21 @@ func (s *Service) runBuilder(messages []message, existing []string, h hooks) (*b
 		}
 
 		if len(r.ToolCalls) == 0 {
-			// Pemeriksaan akhir: minta model memperbaiki pemakaian API database yang salah.
-			tables := knownTables(existing, st)
-			var problems []string
-			for _, c := range st.list() {
-				if c.Action != "write" {
-					continue
-				}
-				for _, p := range apiPathProblems(c.Content, tables) {
-					problems = append(problems, "- "+c.Path+": "+p)
-				}
-			}
-			if len(problems) == 0 || round >= maxBuildRounds-1 {
+			// Pemeriksaan akhir atas semua file yang ditulis: model memperbaiki masalahnya sebelum selesai. Masalah
+			// yang sama persis dengan pengembalian sebelumnya tidak dikirim lagi (model menganggapnya disengaja atau
+			// tidak bisa memperbaikinya), supaya tidak berputar sampai batas putaran.
+			byFile, _ := ws.finalProblems()
+			problems := problemList(byFile)
+			nudge := strings.Join(problems, "\n")
+			if len(problems) == 0 || round >= maxBuildRounds-1 || nudge == lastNudge {
 				break
 			}
+			lastNudge = nudge
+			for _, list := range byFile {
+				out.stats.count(&out.stats.Found, list)
+			}
 			if h.onNote != nil {
-				h.onNote("Memperbaiki pemakaian API database")
+				h.onNote(fmt.Sprintf("Pemeriksaan otomatis menemukan %d masalah — AI memperbaikinya", len(problems)))
 			}
 			content := r.Text
 			if content == "" {
@@ -462,7 +571,7 @@ func (s *Service) runBuilder(messages []message, existing []string, h hooks) (*b
 			}
 			convo = append(convo,
 				message{"role": "assistant", "content": content},
-				message{"role": "user", "content": "Sebelum selesai, perbaiki masalah ini dengan tool, lalu tulis ringkasan lagi:\n" + strings.Join(problems, "\n")})
+				message{"role": "user", "content": "Sebelum selesai, perbaiki masalah ini dengan tool, lalu tulis ringkasan lagi:\n" + nudge})
 			continue
 		}
 
@@ -484,15 +593,21 @@ func (s *Service) runBuilder(messages []message, existing []string, h hooks) (*b
 		}
 		convo = append(convo, assistant)
 		for n, c := range r.ToolCalls {
-			result := stageToolCall(c, st, existing, truncated)
+			result, found := stageToolCall(c, ws, truncated)
+			out.stats.count(&out.stats.Found, found)
 			if h.onToolResult != nil {
 				h.onToolResult(n, c, result)
 			}
 			convo = append(convo, message{"role": "tool", "tool_call_id": c.ID, "content": result})
 		}
 	}
+	byFile, images := ws.finalProblems()
+	for _, list := range byFile {
+		out.stats.count(&out.stats.Left, list)
+	}
+	out.images = images
 	out.message = planMessage(text)
-	out.changes = st.list()
+	out.changes = ws.st.list()
 	return out, nil
 }
 

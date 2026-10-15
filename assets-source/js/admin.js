@@ -300,6 +300,18 @@
         h('dt', {}, 'Token input / output'), h('dd', {}, `${num(st.ai.tokensIn)} / ${num(st.ai.tokensOut)}`),
         h('dt', {}, 'Kredit gratis terpakai hari ini'), h('dd', {}, num(st.credits.usedToday))));
 
+    // Pemeriksaan kode otomatis job Builder (go/internal/ai/codecheck.go), per model.
+    const CHECK_LABEL = { js: 'sintaks JS', ref: 'file/tautan hilang', alpine: 'Alpine', fn: 'fungsi hilang', api: 'API database', link: 'tautan mati', contrast: 'kontras', edit: 'edit_file meleset', tool: 'tool gagal' };
+    const quality = card('Kualitas kode AI per model', `${period} · job Builder yang selesai`, table([
+      { label: 'Model', value: (m) => h('span', { class: 'mono' }, m.model), wide: true },
+      { label: 'Job', num: true, value: (m) => num(m.builds) },
+      { label: 'Sempat bermasalah', num: true, value: (m) => `${num(m.problems)} (${pct(m.problems, m.builds)})` },
+      { label: 'Selesai masih bermasalah', num: true, value: (m) => `${num(m.left)} (${pct(m.left, m.builds)})` },
+      { label: 'Putaran rata-rata', num: true, value: (m) => (m.rounds / m.builds).toLocaleString('id-ID', { maximumFractionDigits: 1 }) },
+      { label: 'Masalah terbanyak', value: (m) => Object.entries(m.found).sort((a, b) => b[1] - a[1]).slice(0, 3)
+        .map(([k, n]) => `${CHECK_LABEL[k] ?? k} ${num(n)}`).join(' · ') || muted() },
+    ], st.ai.codeQuality ?? [], 'Belum ada job Builder di periode ini.'));
+
     const q = st.queue;
     const secs = (ms) => `${(ms / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} dtk`;
     const queueCard = card('Antrean AI', `Sejak server terakhir dinyalakan · maks ${num(q.maxConcurrent)} request bersamaan`, h('dl', { class: 'kv flush' },
@@ -329,7 +341,8 @@
       sectionTitle('Tren harian'),
       charts,
       sectionTitle('Sistem & transaksi'),
-      h('div', { class: 'grid three' }, health, h('div', { class: 'stack' }, queueCard, storage), payments));
+      h('div', { class: 'grid three' }, health, h('div', { class: 'stack' }, queueCard, storage), payments),
+      quality);
   }
 
   // Ranking pemakaian token: bar tersusun (input / output editor / asisten) relatif terhadap peringkat 1.

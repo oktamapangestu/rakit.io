@@ -7,5 +7,7 @@ dipakai untuk fungsi serverless pengguna (`internal/fn`). Tambalan, ditandai `ra
   tidak menghitung semua alokasi (mis. string besar), jadi tanpa ini satu fungsi bisa memakai hingga 4 GiB.
 - `Option.NoFS`: tidak memasang folder apa pun ke dalam sandbox. Versi asli selalu memasang folder kerja
   server sebagai `/`, sehingga kode JS bisa membaca/menulis file server lewat modul `std`/`os`.
+- `NoStrict()`: opsi eval/compile tanpa mode strict (bawaan selalu strict), untuk memeriksa sintaks skrip
+  browser klasik (`internal/jscheck`).
 
 File test dan testdata tidak ikut disalin.

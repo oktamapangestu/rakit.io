@@ -185,7 +185,8 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
   assert.equal(s.ai.byStatus.error, 1);
   assert.equal(s.ai.byStatus.ok, requests - 1);
   assert.deepEqual(s.ai.models, [{ model: 'mock-main', requests }]);
-  assert.deepEqual(Object.keys(s.ai).sort(), ['byDay', 'byStatus', 'currentModel', 'models', 'requests', 'tokensIn', 'tokensOut', 'users']);
+  // codeQuality hanya ada di server Go (diuji di 'kualitas kode AI per model').
+  assert.deepEqual(Object.keys(s.ai).filter((k) => k !== 'codeQuality').sort(), ['byDay', 'byStatus', 'currentModel', 'models', 'requests', 'tokensIn', 'tokensOut', 'users']);
   const day = s.ai.byDay.at(-1);
   assert.deepEqual([day.date, day.requests, day.failed, day.tokens], [today(), requests, 1, s.ai.tokensIn + s.ai.tokensOut]);
   assert.ok(s.ai.tokensIn >= 1000 && s.ai.tokensOut >= 200);
@@ -279,6 +280,30 @@ test('ranking per aksi: request AI editor dengan token terbanyak, aksinya, dan s
       { ...who, action: 'diagram', detail: 'erd', inTokens: 300, outTokens: 300 },
     ]);
     assert.ok(actions.every((a) => Math.abs(Date.parse(a.at) - Date.now()) < 60_000));
+  } finally {
+    await own.stop();
+  }
+});
+
+test('kualitas kode AI per model: dari hasil pemeriksaan job Builder', { skip: !process.env.RAKIT_SERVER_CMD?.includes('go/bin/rakit') && 'fitur khusus server Go' }, async () => {
+  const own = await startStack({ AI_BONUS_CREDITS: '10' });
+  try {
+    const owner = await own.admin();
+    const user = await own.register('mutu-a');
+    const now = Date.now();
+    const insert = own.db().prepare(`INSERT INTO ai_requests (user_id, created_at, model, status, action, checks) VALUES (?, ?, ?, ?, ?, ?)`);
+    insert.run(user.userId, now, 'model-a', 'ok', 'build', JSON.stringify({ found: { js: 2, ref: 1 }, rounds: 4 }));
+    insert.run(user.userId, now, 'model-a', 'ok', 'build', JSON.stringify({ found: { ref: 1 }, left: { ref: 1 }, rounds: 3 }));
+    insert.run(user.userId, now, 'model-a', 'ok', 'build', JSON.stringify({ rounds: 2 }));
+    insert.run(user.userId, now, 'model-b', 'ok', 'build', JSON.stringify({ rounds: 1 }));
+    insert.run(user.userId, now, 'model-b', 'error', 'build', JSON.stringify({ found: { js: 9 }, rounds: 1 })); // gagal: tidak dihitung
+    insert.run(user.userId, now, 'model-b', 'ok', 'plan', ''); // bukan Builder
+
+    const { codeQuality } = (await owner.get('/api/admin/stats?days=7')).body.ai;
+    assert.deepEqual(codeQuality, [
+      { model: 'model-a', builds: 3, problems: 2, left: 1, rounds: 9, found: { js: 2, ref: 2 } },
+      { model: 'model-b', builds: 1, problems: 0, left: 0, rounds: 1, found: {} },
+    ]);
   } finally {
     await own.stop();
   }

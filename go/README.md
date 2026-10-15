@@ -55,6 +55,14 @@ Catatan:
   Selama `src/` masih ada, perubahan skema harus dibuat di kedua tempat.
 - **Prompt AI** di `internal/ai/prompts.go` dihasilkan dari `src/ai.js` oleh `node scripts/gen-go-prompts.cjs`.
   Selama `src/ai.js` masih ada, ubah prompt di sana lalu jalankan skrip itu.
+- **Pemeriksaan kode AI Builder** (`internal/ai/codecheck.go`, `internal/jscheck`), hanya di server Go: sintaks JS
+  (dikompilasi QuickJS tanpa dijalankan) diperiksa saat file ditulis; rujukan file, komponen/urutan tag Alpine, dan
+  `/api/fn/` yang tidak ada diperiksa saat AI menyatakan selesai. Masalahnya dikembalikan ke AI untuk diperbaiki
+  (masalah yang sama tidak dikirim dua kali). Gambar yang belum ada disebut di ringkasan. Hasilnya tersimpan di
+  `ai_requests.checks` dan tampil di dashboard owner ("Kualitas kode AI per model"). Tool `edit_file` & `read_file`
+  juga ada versi minimal di `src/ai.js` (tanpa pemeriksaan kode).
+- **Evaluasi AI** (`scripts/ai-eval/`): `npm run ai:eval -- --only id,id --model nama` menjalankan kasus tetap di
+  `cases.mjs` dengan provider sungguhan dari `.env` (memakai biaya provider), hasil di `data/ai-eval/<waktu>/`.
 - **Konversi nilai** di `internal/jsconv` dan `internal/userdb` meniru JavaScript (`Number()`, `parseInt`,
   `Date.parse`); `go test ./...` membandingkannya dengan jawaban Node yang direkam di `testdata/js.json`.
 - **Statistik antrean AI** di dashboard owner kini angka asli (antrean ada di server Go).

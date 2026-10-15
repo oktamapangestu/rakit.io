@@ -42,6 +42,8 @@ export const ai = $state({
   input: '',
   messages: [],
   pendingId: null,
+  // Jawaban yang perubahannya baru diterapkan: error preview sejak `since` ditampilkan di kartunya (Reply.svelte).
+  watch: null, // { id, since }
   scrollTick: 0,
 });
 
@@ -208,6 +210,7 @@ export async function send() {
   const prompt = ai.input.trim();
   if (!prompt || ai.busy || ai.applying) return;
   markKept();
+  ai.watch = null;
 
   const mode = ai.mode;
   const attached = ai.images.map((i) => ({ full: i.full, thumb: i.thumb }));
@@ -315,7 +318,10 @@ async function attachJob(message) {
     addError('Koneksi ke server terputus. Muat ulang halaman untuk melihat hasilnya.');
   } else if (final.type === 'done') {
     addReply(final.message);
-    if (final.touched?.length) await host.syncFromServer(final.touched, { openFirst: true });
+    if (final.touched?.length) {
+      ai.watch = { id: final.message.id, since: Date.now() };
+      await host.syncFromServer(final.touched, { openFirst: true });
+    }
   } else {
     addError(final.error);
   }
@@ -329,7 +335,10 @@ export async function settle(m, action) {
     const res = await host.api('POST', `/api/ai/messages/${m.id}/${action}`);
     if (ai.pendingId === m.id) ai.pendingId = null;
     m.applyState = res.message.applyState;
-    if (action === 'revert') await host.syncFromServer(res.touched);
+    if (action === 'revert') {
+      if (ai.watch?.id === m.id) ai.watch = null;
+      await host.syncFromServer(res.touched);
+    }
     return true;
   } catch (err) {
     host.toast(err.message, 'error');

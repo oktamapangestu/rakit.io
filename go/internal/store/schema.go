@@ -308,6 +308,8 @@ func (s *Store) Migrate() error {
 		{"ai_requests", "action", "TEXT NOT NULL DEFAULT ''"},
 		{"ai_requests", "project_id", "INTEGER"},
 		{"ai_requests", "detail", "TEXT NOT NULL DEFAULT ''"},
+		// Hasil pemeriksaan kode job Builder (JSON { found, left, rounds }, lihat ai.buildStats).
+		{"ai_requests", "checks", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := addColumn(c[0], c[1], c[2]); err != nil {
 			return err

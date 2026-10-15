@@ -5,9 +5,11 @@ package admin
 
 import (
 	"database/sql"
+	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -254,6 +256,18 @@ type ModelRequests struct {
 	Requests int64  `json:"requests"`
 }
 
+// CodeQuality: hasil pemeriksaan kode otomatis job Builder per model (ai_requests.checks, lihat ai.buildStats).
+// Problems = job yang kodenya sempat bermasalah; Left = job yang selesai dengan masalah tersisa; Found = berapa
+// kali tiap jenis masalah dikembalikan ke model.
+type CodeQuality struct {
+	Model    string           `json:"model"`
+	Builds   int64            `json:"builds"`
+	Problems int64            `json:"problems"`
+	Left     int64            `json:"left"`
+	Rounds   int64            `json:"rounds"`
+	Found    map[string]int64 `json:"found"`
+}
+
 type AI struct {
 	Requests     int64            `json:"requests"`
 	TokensIn     int64            `json:"tokensIn"`
@@ -263,6 +277,7 @@ type AI struct {
 	ByDay        []Day            `json:"byDay"`
 	Models       []ModelRequests  `json:"models"`
 	CurrentModel string           `json:"currentModel"`
+	CodeQuality  []CodeQuality    `json:"codeQuality"`
 }
 
 type Credits struct {
@@ -491,6 +506,8 @@ func (s *Service) Stats(days int) (*Stats, error) {
 		return err
 	}, "SELECT model, COUNT(*) AS requests FROM ai_requests WHERE created_at >= ? GROUP BY model ORDER BY requests DESC", since))
 	ai.CurrentModel = s.models.Get().Model
+	ai.CodeQuality, err = s.codeQuality(since)
+	keep(err)
 
 	// Kredit
 	out.Credits = Credits{
@@ -711,4 +728,51 @@ func (s *Service) each(fn func(*sql.Rows) error, query string, args ...any) erro
 		}
 	}
 	return rows.Err()
+}
+
+// codeQuality: ringkasan pemeriksaan kode job Builder per model sejak since, urut jumlah job terbanyak.
+func (s *Service) codeQuality(since int64) ([]CodeQuality, error) {
+	byModel := map[string]*CodeQuality{}
+	err := s.each(func(rows *sql.Rows) error {
+		var model, raw string
+		if err := rows.Scan(&model, &raw); err != nil {
+			return err
+		}
+		var c struct {
+			Found  map[string]int64 `json:"found"`
+			Left   map[string]int64 `json:"left"`
+			Rounds int64            `json:"rounds"`
+		}
+		if json.Unmarshal([]byte(raw), &c) != nil {
+			return nil
+		}
+		q := byModel[model]
+		if q == nil {
+			q = &CodeQuality{Model: model, Found: map[string]int64{}}
+			byModel[model] = q
+		}
+		q.Builds++
+		q.Rounds += c.Rounds
+		if len(c.Found) > 0 || len(c.Left) > 0 {
+			q.Problems++
+		}
+		if len(c.Left) > 0 {
+			q.Left++
+		}
+		for kind, n := range c.Found {
+			q.Found[kind] += n
+		}
+		return nil
+	}, "SELECT model, checks FROM ai_requests WHERE action = 'build' AND status = 'ok' AND checks != '' AND created_at >= ?", since)
+	out := make([]CodeQuality, 0, len(byModel))
+	for _, q := range byModel {
+		out = append(out, *q)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Builds != out[j].Builds {
+			return out[i].Builds > out[j].Builds
+		}
+		return out[i].Model < out[j].Model
+	})
+	return out, err
 }

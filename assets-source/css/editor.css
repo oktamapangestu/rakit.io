@@ -1049,6 +1049,10 @@ body:has(#modal:not([hidden])) .release-dot { animation-play-state: paused; }
 .changes-actions button:disabled { opacity: 0.6; cursor: progress; }
 .changes-status { flex: 1; display: flex; align-items: center; gap: 6px; color: var(--ok); font-size: 12px; font-weight: 500; }
 .changes-status.muted { color: var(--muted); }
+.preview-errors { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); color: var(--warn-text); font-size: 12px; }
+.preview-errors > span { flex: 1; min-width: 160px; }
+.preview-errors .preview-fix { padding: 4px 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+.preview-errors .preview-fix:hover { border-color: var(--faint); }
 
 .ai-composer { width: calc(100% - 24px); max-width: 760px; margin: 0 auto 12px; padding: 8px; border: 1px solid var(--line-2); border-radius: 14px; background: var(--panel-2); transition: border-color 0.15s, box-shadow 0.15s; }
 .ai-composer:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }

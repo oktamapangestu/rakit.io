@@ -1135,5 +1135,9 @@
   "Panel file": "File panel",
   "Simpan otomatis saat mengetik": "Save automatically while typing",
   "Tabel|daftar": "Tables",
-  "Navigasi": "Navigation"
+  "Navigasi": "Navigation",
+  "Mengubah": "Editing",
+  "Membaca": "Reading",
+  "Setelah perubahan terakhir, preview menampilkan error ini:\\n${lines.join('\\n')}\\n\\nCari penyebabnya (terutama di kode yang baru diubah) dan perbaiki.": "After the last change, the preview shows these errors:\\n${lines.join('\\n')}\\n\\nFind the cause (especially in the code that was just changed) and fix it.",
+  "⚠ Preview menampilkan ${errorCount} error setelah perubahan ini.": "⚠ The preview shows ${errorCount} error(s) after this change."
 }

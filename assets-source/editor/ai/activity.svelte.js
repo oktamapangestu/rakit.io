@@ -3,7 +3,7 @@
 // selesai diringkas jadi "Lihat proses AI". Ditampilkan Activity.svelte; dipakai panel AI dan kanvas Diagram.
 import { DIAGRAM_NAMES } from '../diagram/info.js';
 
-export const STEP_LABEL = { write_file: 'Menulis', delete_file: 'Menghapus', create_table: 'Tabel', diagram: 'Menggambar diagram' };
+export const STEP_LABEL = { write_file: 'Menulis', edit_file: 'Mengubah', read_file: 'Membaca', delete_file: 'Menghapus', create_table: 'Tabel', diagram: 'Menggambar diagram' };
 
 // scroller: fungsi yang mengembalikan elemen yang digulir mengikuti isi baru (daftar pesan AI, atau panel proses di
 // kanvas diagram) — hanya bila pengguna tidak sedang menggulir ke atas membaca.

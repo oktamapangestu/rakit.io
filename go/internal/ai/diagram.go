@@ -409,7 +409,7 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 		} else if changing {
 			detail += " (ubah: " + excerpt(req.Instruction) + ")"
 		}
-		s.logRequest(user.ID, project.ID, "diagram", detail, usedModel, status, inTokens, outTokens)
+		s.logRequest(user.ID, project.ID, "diagram", detail, usedModel, status, inTokens, outTokens, "")
 	}()
 
 	if err != nil {

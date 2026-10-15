@@ -179,5 +179,5 @@ test('CSS dan JS terkait blok ikut dikirim ke AI dan didahulukan di konteks', { 
   assert.ok(asked.includes("JavaScript lines that refer to this block's id/class names:\n- script.js:2: document.querySelector('.hero').classList.add('tampil');"));
   // Didahulukan: halaman blok, CSS-nya, lalu JS-nya; file lain yang tidak muat dilewati.
   assert.ok(asked.includes('<file path="index.html">') && asked.includes('<file path="style.css">') && asked.includes('<file path="script.js">'));
-  assert.match(asked, /Not included because the project is too large: (a\.js|b\.js)$/m);
+  assert.match(asked, /Not included because the project is too large \(read them with read_file when needed\): (a\.js|b\.js)$/m);
 });

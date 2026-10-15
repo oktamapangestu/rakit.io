@@ -63,7 +63,7 @@ test('Builder: menulis, menghapus file dan membuat tabel; hasilnya menunggu konf
 
   // Request pertama membawa tool, konteks file, dan prompt sistem Builder.
   const first = sent(2);
-  assert.deepEqual(first.tools.map((t) => t.function.name), ['write_file', 'delete_file', 'create_table']);
+  assert.deepEqual(first.tools.map((t) => t.function.name), ['write_file', 'edit_file', 'read_file', 'delete_file', 'create_table']);
   assert.equal(first.model, 'mock-main');
   assert.equal(first.stream, true);
   assert.equal(first.messages[0].role, 'system');
@@ -218,6 +218,61 @@ test('Builder: alamat API database yang salah diminta diperbaiki sebelum selesai
   const nudge = sent(2).messages.at(-1);
   assert.equal(nudge.role, 'user');
   assert.equal(nudge.content, 'Sebelum selesai, perbaiki masalah ini dengan tool, lalu tulis ringkasan lagi:\n- app.js: alamat "/api/ucapan" salah, seharusnya "/api/db/ucapan"\n- app.js: tabel "komentar" belum ada, panggil create_table untuk membuatnya');
+});
+
+const goOnly = !process.env.RAKIT_SERVER_CMD?.includes('go/bin/rakit') && 'fitur khusus server Go';
+
+test('Builder: edit_file, read_file, cek sintaks & rujukan file, catatan gambar, statistik pemeriksaan', { skip: goOnly }, async () => {
+  const user = await stack.register();
+  stack.ai.script.push(
+    calls(
+      call('edit_file', { path: 'index.html', edits: [
+        { old_text: '<link rel="stylesheet" href="style.css">', new_text: '<link rel="stylesheet" href="style.css">\n  <script defer src="/js/tambahan.js"></script>' },
+        { old_text: '<h1>Halo, dunia! 👋</h1>', new_text: '<h1>Toko Kue</h1>\n    <img src="/images/kue.jpg" alt="Kue">' },
+      ] }),
+      call('write_file', { path: 'app.js', content: 'const harga = ;' }),
+    ),
+    calls(call('read_file', { path: 'index.html' }), call('write_file', { path: 'app.js', content: 'const harga = 1;' })),
+    { text: 'Selesai.' },
+    calls(call('write_file', { path: 'js/tambahan.js', content: 'console.log(1);' })),
+    { text: 'Selesai, sudah lengkap.' },
+  );
+  const { final } = await user.build('ganti judul jadi Toko Kue');
+  assert.equal(final.type, 'done');
+
+  const [edit, syntax] = toolResults(sent(4));
+  assert.match(edit, /^OK: "index\.html" diubah/);
+  assert.match(syntax, /^Ditulis, TAPI ada masalah di "app\.js": baris 1: SyntaxError/);
+  // read_file mengembalikan isi yang sudah diubah edit_file di job yang sama.
+  const [readBack] = toolResults(sent(3)).slice(2);
+  assert.match(readBack, /^Isi terbaru "index\.html":\n[\s\S]*<h1>Toko Kue<\/h1>/);
+  // Putaran lanjut tidak membawa isi file lagi; model diarahkan ke read_file.
+  assert.match(sent(3).messages[1].content, /Call read_file/);
+  assert.equal(sent(2).messages.at(-1).content, 'Sebelum selesai, perbaiki masalah ini dengan tool, lalu tulis ringkasan lagi:\n'
+    + '- index.html: <script src="/js/tambahan.js"> menunjuk file "js/tambahan.js" yang tidak ada di project');
+
+  assert.equal(final.message.content, 'Selesai, sudah lengkap.\n\n_Gambar yang dipakai tapi belum ada di project — unggah dengan nama ini: `/images/kue.jpg`._');
+  const page = read(user, 'index.html');
+  assert.ok(page.includes('<h1>Toko Kue</h1>') && page.includes('x-data="penghitung"'), 'bagian lain index.html tetap utuh');
+  assert.equal(read(user, 'js/tambahan.js'), 'console.log(1);');
+
+  const row = stack.db().prepare("SELECT checks FROM ai_requests WHERE user_id = ? AND action = 'build'").get(user.userId);
+  assert.deepEqual(JSON.parse(row.checks), { found: { js: 1, ref: 1 }, rounds: 5 });
+});
+
+test('Builder: masalah yang sama tidak dikembalikan berulang-ulang', { skip: goOnly }, async () => {
+  const user = await stack.register();
+  const before = stack.ai.requests.length;
+  stack.ai.script.push(
+    calls(call('write_file', { path: 'a.html', content: '<script src="/tidak-ada.js"></script>' })),
+    { text: 'Selesai.' },
+    { text: 'Sengaja, file itu akan dibuat nanti.' },
+  );
+  const { final } = await user.build('buat a.html');
+  assert.equal(final.message.content, 'Sengaja, file itu akan dibuat nanti.');
+  assert.equal(stack.ai.requests.length - before, 3);
+  const row = stack.db().prepare("SELECT checks FROM ai_requests WHERE user_id = ? AND action = 'build'").get(user.userId);
+  assert.deepEqual(JSON.parse(row.checks), { found: { ref: 1 }, left: { ref: 1 }, rounds: 3 });
 });
 
 test('Builder: perubahan yang gagal diterapkan dikembalikan utuh dan dilaporkan', async () => {

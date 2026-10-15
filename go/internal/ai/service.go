@@ -443,7 +443,7 @@ func (s *Service) projectContext(ctx context.Context, slug, activePath string, p
 		sections = append(sections, fmt.Sprintf(`The user currently has "%s" open in the editor.`, activePath))
 	}
 	if len(skipped) > 0 {
-		sections = append(sections, "Not included because the project is too large: "+strings.Join(skipped, ", "))
+		sections = append(sections, "Not included because the project is too large (read them with read_file when needed): "+strings.Join(skipped, ", "))
 	}
 	if joined := strings.Join(parts, "\n\n"); joined != "" {
 		sections = append(sections, joined)
@@ -638,11 +638,12 @@ type jobInput struct {
 	blocks                   []blocks.Block
 }
 
-// logRequest mencatat satu request AI (statistik & ranking token di dashboard owner).
-func (s *Service) logRequest(userID, projectID int64, action, detail, model, status string, inTokens, outTokens int) {
-	s.db.Exec(`INSERT INTO ai_requests (user_id, created_at, model, status, input_tokens, output_tokens, action, project_id, detail)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		userID, time.Now().UnixMilli(), model, status, inTokens, outTokens, action, projectID, detail)
+// logRequest mencatat satu request AI (statistik & ranking token di dashboard owner). checks: buildStats
+// dalam JSON untuk job Builder, "" untuk yang lain.
+func (s *Service) logRequest(userID, projectID int64, action, detail, model, status string, inTokens, outTokens int, checks string) {
+	s.db.Exec(`INSERT INTO ai_requests (user_id, created_at, model, status, input_tokens, output_tokens, action, project_id, detail, checks)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		userID, time.Now().UnixMilli(), model, status, inTokens, outTokens, action, projectID, detail, checks)
 }
 
 // excerpt: prompt dipendekkan jadi satu baris untuk dashboard owner.
@@ -663,6 +664,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 		task = aimodels.TaskPlan
 	}
 	usedModel, _ := s.models.For(task) // model yang benar-benar menjawab (bisa cadangan), untuk statistik
+	checks := ""                       // hasil pemeriksaan kode Builder (buildStats), untuk statistik
 	slug := in.project.Slug
 
 	err := func() (err error) {
@@ -790,13 +792,19 @@ func (s *Service) runJob(j *job, in jobInput) {
 					existing = append(existing, t.Name)
 				}
 			}
-			result, err := s.runBuilder(convo, existing, h)
+			result, err := s.runBuilder(convo, newWorkspace(s.cfg.SiteRoot(slug), existing), h)
 			if err != nil {
 				return err
 			}
 			inTokens += result.inTokens
 			outTokens += result.outTok
 			text, changes = result.message, result.changes
+			if note := imagesNote(result.images); note != "" {
+				text = strings.TrimSpace(text + "\n\n" + note)
+			}
+			if raw, err := json.Marshal(result.stats); err == nil {
+				checks = string(raw)
+			}
 		}
 		act.flush()
 		if text == "" && len(changes) == 0 {
@@ -881,7 +889,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 	if n := len(in.images); n > 0 {
 		detail = fmt.Sprintf("[%d gambar] %s", n, detail)
 	}
-	s.logRequest(in.user.ID, in.project.ID, in.mode, detail, usedModel, status, inTokens, outTokens)
+	s.logRequest(in.user.ID, in.project.ID, in.mode, detail, usedModel, status, inTokens, outTokens, checks)
 	j.finish() // tanda selesai untuk stream yang tersambung
 	j.cancel()
 	// Beri waktu editor menyambung ulang.

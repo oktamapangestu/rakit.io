@@ -131,6 +131,14 @@ func FlagStrict() EvalOptionFunc {
 	}
 }
 
+// rakit: NoStrict mematikan mode strict bawaan createEvalOption, untuk memeriksa skrip browser klasik
+// (bukan modul) yang tidak strict.
+func NoStrict() EvalOptionFunc {
+	return func(o *EvalOption) {
+		o.flags &^= JsEvalFlagStrict
+	}
+}
+
 // FlagCompileOnly compiles code without execution.
 // Returns bytecode object for later execution with JS_EvalFunction().
 func FlagCompileOnly() EvalOptionFunc {

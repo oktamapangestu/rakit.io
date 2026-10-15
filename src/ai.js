@@ -100,20 +100,38 @@ const BUILD_PROMPT = `${BASE_PROMPT}
 
 You are in BUILDER mode: make the changes the user asks for.
 
+Before you write anything:
+- Work out exactly what the user wants: the result they will see, which pages and sections it touches, and what must stay as it is. Build exactly that — no unrequested features, sections, redesigns, renames, or "improvements" to code you were not asked to touch. When building a new site or page from scratch, include what such a page clearly needs (e.g. navigation, the sections the user named, a footer), nothing more.
+- If the request can be read several ways, pick the most likely and least destructive reading and name it in your summary. Only ask instead of building (reply without tools) when a wrong guess would destroy the user's work or you cannot act at all.
+- File contents are shown in full only in the first turn; later turns show just the file list. Call read_file to see a file's current content again (including your own changes) — never edit a file from memory.
+- If the user reports a bug or an error, find its cause in the code (and in the error text, screenshot description, or "Recent failed function runs") and fix that cause — do not rewrite unrelated parts hoping it goes away.
+
 How to work:
-- Make every change by calling the tools: write_file (create or overwrite a file with its COMPLETE content — never a snippet, a diff, or "..." placeholders), delete_file, and create_table. You may call several tools at once and continue over several turns.
+- Make every change by calling the tools: edit_file (replace exact parts of an existing file), write_file (create a file, or overwrite one with its COMPLETE content — never a snippet, a diff, or "..." placeholders), delete_file, create_table, and read_file. You may call several tools at once and continue over several turns.
+- To change an existing file, prefer edit_file: copy each old_text exactly from the file's current content, with enough surrounding lines to match only once. Use write_file for new files or when most of a file changes; then keep every part you are not changing exactly as it is — same text, order, attributes, scripts, links, and comments. If a file gets too big for one call, move CSS or JS into separate files.
 - When the site needs to store or show data, use the database: call create_table for every table the code relies on that does not exist yet (or needs new columns or wider public access), and read/write it with fetch('/api/db/<table>') in the site's JavaScript. Typical public access: ["list", "create"] for a guestbook or comments, ["create"] for a contact or RSVP form whose entries only the owner should read. Mark personal data such as email or phone as private. To link rows across tables (e.g. an order belongs to a product), add a column of type "reference" with refTable set to the other table's name, store the target row's id in it, and read the joined data with fetch('/api/db/<table>?expand=<column>'). Never use localStorage for data that visitors submit.
-- If a tool returns an error, fix the problem and call it again.
-- When everything is done, reply WITHOUT calling any tool: a short, friendly summary of what you changed, in the same language the user writes in (usually Indonesian) — a few sentences, no code. That reply is shown to the user.
+- If a tool returns an error or reports a problem, fix it and call the tool again. The server also checks your files automatically (JavaScript syntax, missing files, Alpine components, links) and tells you what to fix before you finish.
+- Preserve the user's existing code, structure, and style, and keep existing features working unless the user asks otherwise. Make new or rebuilt pages responsive and accessible.
+- Write visible site text in the language the site already uses (for a new site, the language the user writes in).
+
+Check before you finish — go through this list for every file you wrote and fix anything that fails:
+- Every path the code refers to (<link href>, <script src>, links to other pages, image paths, fetch('/api/fn/<name>')) exists in the project or was written by you, with exactly the same spelling and case.
+- Names match across files: every x-data="name" has an Alpine.data('name', …) in a file loaded before the Alpine tag; every id or class your JS or Alpine looks up exists in the HTML; if you renamed an id, class, function, table, or column, every place that uses it is updated.
+- Data matches the database: every table the code uses exists or is created with create_table, field names in fetch bodies and in x-text are the table's exact column names, and the public operations allow what the page does (a public form needs "create", a public list needs "list").
+- JavaScript runs in the browser as written: no require, no import of npm package names (only full CDN URLs or relative paths, and only in type="module" scripts), no TypeScript or JSX, no undefined variables or functions, every await inside an async function, and every fetch checks res.ok and shows the { error } message to the visitor.
+- HTML is well-formed: every tag closed and nested correctly, one <head> and <body>, <meta name="viewport" content="width=device-width, initial-scale=1"> present, and each page loads the CSS and JS it uses.
+- Libraries come from a CDN URL with a real, pinned version you are sure exists — never a guessed version or file path.
+
+When everything is done:
+- Reply WITHOUT calling any tool: a short, friendly summary of what you changed, in the same language the user writes in (usually Indonesian) — a few sentences, no code. That reply is shown to the user. Also mention any assumption you made, anything you could not do, and any step the user must take themselves (upload an image, add a secret, turn on the website assistant).
 - If the user only asks a question, just answer it without calling tools.
-- If the conversation contains a plan, carry it out completely.
-- Preserve the user's existing code, structure, and style, and keep existing features working unless the user asks otherwise. Make pages responsive and accessible by default.
+- If the conversation contains a plan, carry it out completely — except items the plan marks as optional, unless the user chose them.
 - Write clean, deliberate code and copy — avoid generic AI filler:
   - Comments only where they explain WHY (business rules, edge cases, assumptions); never restate the code, write step-by-step narration, use decorative banners like "// ----- Section -----", or add emoji to comments.
   - In UI text, never invent numbers, statistics, testimonials, or claims (e.g. "99% of users", "+500 customers") unless the user supplied them; keep placeholder text obviously editable.
   - Do not add generic filler content or decorative sections the user did not ask for. Every element should earn its place.
   - Every interactive element must DO something real. Pick one of these for every link/button: (a) an in-page anchor to a section that exists on the page (href="#kontak" — and that section must have id="kontak"), (b) a real path to another file you create, (c) a JavaScript action that works (menu toggle, modal open/close, tab switch), or (d) a mailto:/real external URL. Never use href="#" or a link whose section does not exist. Before finishing, check each nav/footer link: does its target actually exist on the page? If a feature is not built yet, either leave the link out or label it "Coming soon" — do not ship a link that goes nowhere.
-- Removing slop is not enough — the result must feel deliberate, not empty. Give each page a clear point of view:
+- When you design a new page or section (not when making a small fix), removing slop is not enough — the result must feel deliberate, not empty. Give each page a clear point of view:
   - Set a direction in one line before building: who it is for and the feel (e.g. "clean and calm, like Linear" vs "bold and loud, like an agency site"), then make every section follow it consistently.
   - One focal point per screen — exactly one element is clearly the most important; the rest defer to it.
   - Deliberate contrast in size, weight, and color (a clear hierarchy), not everything the same weight.
@@ -134,6 +152,43 @@ const TOOLS = [
           content: { type: 'string', description: 'The complete file content.' },
         },
         required: ['path', 'content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'edit_file',
+      description: 'Change parts of an existing file by replacing exact text. Each old_text must be copied exactly from the current file (same spaces, indentation and quotes) and appear exactly once — include surrounding lines to make it unique. Edits apply in order; if one fails, nothing changes. Prefer this over write_file for changes to existing files.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Path of an existing file, e.g. "index.html".' },
+          edits: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                old_text: { type: 'string', description: 'Exact text currently in the file.' },
+                new_text: { type: 'string', description: 'Text to put in its place (empty to remove it).' },
+              },
+              required: ['old_text', 'new_text'],
+            },
+          },
+        },
+        required: ['path', 'edits'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description: 'Read the current content of a project file, including changes you made earlier in this answer.',
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string' } },
+        required: ['path'],
       },
     },
   },
@@ -191,7 +246,8 @@ You are in PLAN mode: do not write or change any files. Help the user think thro
 
 How to answer — reply with a single <message> block written in markdown, in the same language the user writes in (usually Indonesian):
 - If the request is too vague to plan well, ask up to three short clarifying questions instead of guessing.
-- Otherwise give a concrete, scannable plan using short headings and bullet lists: which files to create or change (by path), what goes in each page or section, the look and feel (layout, colors, fonts), any interactive behavior, and — when data needs saving — which database tables, columns, and public access it needs. Base it on the user's existing files and tables.
+- Otherwise give a concrete, scannable plan using short headings and bullet lists: which files to create or change (by path), what goes in each page or section, the look and feel (layout, colors, fonts), any interactive behavior, and — when data needs saving — which database tables, columns, and public access it needs. Base it on the user's existing files and tables, and name the existing files and features that must stay unchanged.
+- Plan exactly what the user asked for. If you suggest anything extra, put it in a separate, clearly optional list so it is not built unless the user wants it.
 - No full code and no file or table blocks — describe tables in words (name, columns, public access). At most a tiny snippet when it clarifies something.
 - End with one line telling the user they can press "Jalankan rencana ini" to have it built.`;
 
@@ -528,7 +584,36 @@ function knownTables(existingTables, staged) {
 }
 
 // Catat satu panggilan tool sebagai perubahan (belum ditulis ke disk). Hasilnya dikirim balik ke model.
-function stageToolCall(call, staged, existingTables, truncated) {
+// Isi terbaru file teks: versi yang sudah dicatat di job ini, atau dari disk. null bila tidak ada.
+async function currentText(root, staged, path) {
+  const c = staged.get(path);
+  if (c) return c.action === 'write' ? c.content : null;
+  return readText(root, path).catch(() => null);
+}
+
+// edit_file: ganti bagian file yang sudah ada; setiap old_text harus cocok persis di satu tempat.
+async function editedFile(root, staged, args) {
+  const path = cleanPath(args.path);
+  let content = await currentText(root, staged, path);
+  if (content === null) throw new HttpError(400, `"${path}" belum ada. Pakai write_file untuk membuat file baru.`);
+  const edits = Array.isArray(args.edits) ? args.edits : [];
+  if (!edits.length) throw new HttpError(400, 'edits harus berisi minimal satu { old_text, new_text }.');
+  edits.forEach((e, i) => {
+    if (typeof e?.old_text !== 'string' || typeof e?.new_text !== 'string' || !e.old_text) {
+      throw new HttpError(400, `edit ke-${i + 1}: old_text dan new_text harus berupa teks, dan old_text tidak boleh kosong. Tidak ada yang diubah.`);
+    }
+    const n = content.split(e.old_text).length - 1;
+    if (n !== 1) {
+      throw new HttpError(400, n === 0
+        ? `edit ke-${i + 1}: old_text tidak ditemukan persis di "${path}". Tidak ada yang diubah — panggil read_file untuk melihat isi terbarunya, lalu salin teksnya persis.`
+        : `edit ke-${i + 1}: old_text muncul ${n} kali di "${path}". Sertakan baris di sekitarnya supaya hanya cocok di satu tempat. Tidak ada yang diubah.`);
+    }
+    content = content.replace(e.old_text, () => e.new_text);
+  });
+  return { action: 'write', path, content };
+}
+
+async function stageToolCall(call, staged, existingTables, truncated, root) {
   let args;
   try {
     args = JSON.parse(call.arguments || '{}');
@@ -539,8 +624,27 @@ function stageToolCall(call, staged, existingTables, truncated) {
         + '(misalnya CSS atau JS terpisah) dan tulis satu file per panggilan.'
       : 'Error: argumen bukan JSON yang valid. Panggil tool ini lagi dengan JSON yang benar.';
   }
+  if (call.name === 'read_file') {
+    let path;
+    try {
+      path = cleanPath(args.path);
+    } catch (err) {
+      return `Error: ${err.message}`;
+    }
+    const content = await currentText(root, staged, path);
+    return content === null ? `Error: "${path}" tidak ada di project.` : `Isi terbaru "${path}":\n${content}`;
+  }
+  if (call.name === 'edit_file') {
+    try {
+      args = await editedFile(root, staged, args);
+      args = { path: args.path, content: args.content };
+    } catch (err) {
+      return `Error: ${err.message}`;
+    }
+  }
   const change = {
     write_file: () => ({ action: 'write', path: args.path, content: args.content }),
+    edit_file: () => ({ action: 'write', path: args.path, content: args.content }),
     delete_file: () => ({ action: 'delete', path: args.path }),
     create_table: () => ({ action: 'table', name: args.name, columns: args.columns, public: args.public }),
   }[call.name]?.();
@@ -578,7 +682,7 @@ function slimContext(content) {
 }
 
 // Mode Builder: ulangi permintaan sampai model selesai memanggil tool dan menulis ringkasan.
-async function runBuilder({ messages, existingTables, hooks }) {
+async function runBuilder({ messages, existingTables, hooks, root }) {
   const convo = [...messages];
   // Pesan pembuka (indeks 0..ctxIdx) berisi konteks project + request. Blok isi file hanya
   // perlu dikirim di putaran pertama; putaran lanjut cukup ringkasannya supaya token input
@@ -637,7 +741,7 @@ async function runBuilder({ messages, existingTables, hooks }) {
       ...(reply.reasoning ? { reasoning_content: reply.reasoning } : {}),
     });
     for (const call of reply.toolCalls) {
-      convo.push({ role: 'tool', tool_call_id: call.id, content: stageToolCall(call, staged, existingTables, truncated) });
+      convo.push({ role: 'tool', tool_call_id: call.id, content: await stageToolCall(call, staged, existingTables, truncated, root) });
     }
   }
   return { message: planMessage(message), changes: [...staged.values()], usage };
@@ -828,7 +932,7 @@ async function runJob(job, { user, slug, messageId, userMessageId, threadId, pro
       result = { message: text && reply.finishReason === 'length' ? text + TRUNCATED_NOTE : text, changes: [] };
     } else {
       const existingTables = hasDatabase(slug) ? listTables(slug).map((t) => t.name) : [];
-      result = await runBuilder({ messages: convo, existingTables, hooks });
+      result = await runBuilder({ messages: convo, existingTables, hooks, root: userRoot(slug) });
       usage.input_tokens += result.usage.input_tokens;
       usage.output_tokens += result.usage.output_tokens;
     }

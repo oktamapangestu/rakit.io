@@ -5,6 +5,9 @@
 <script>
   import { getContext } from 'svelte';
   import { ai, setMode, setInput, send, settle } from './state.svelte.js';
+  import { con } from '../console/state.svelte.js';
+  import { clipText } from '../handoff.js';
+  import AiButton from '../AiButton.svelte';
 
   let { m } = $props();
   const { renderMarkdown, showDiff, openTable } = getContext('editor');
@@ -32,6 +35,16 @@
   const kind = (c) => (c.action === 'table' ? 'table' : c.action === 'delete' ? 'delete' : m.before[c.path] == null ? 'new' : 'edit');
   const label = { new: 'baru', edit: 'ubah', delete: 'hapus', table: 'tabel' };
 
+  // Error di preview (console & request gagal, lihat tab Console) sejak perubahan jawaban ini diterapkan.
+  const previewErrors = $derived(ai.watch?.id === m.id
+    ? con.entries.filter((e) => e.time >= ai.watch.since && e.level === 'error' && (e.source === 'fe' || e.source === 'net'))
+    : []);
+  const errorCount = $derived(previewErrors.reduce((n, e) => n + e.count, 0));
+  function fixPrompt() {
+    const lines = previewErrors.slice(-8).map((e) => `- [${e.page || '/'}] ${clipText(e.text, 600)}${e.count > 1 ? ` (${e.count}×)` : ''}`);
+    return `Setelah perubahan terakhir, preview menampilkan error ini:\n${lines.join('\n')}\n\nCari penyebabnya (terutama di kode yang baru diubah) dan perbaiki.`;
+  }
+
   let settling = $state(null); // 'keep' | 'revert' selama menunggu server
   async function act(action) {
     settling = action;
@@ -53,4 +66,6 @@
       type="button" disabled={Boolean(settling)} onclick={() => act('revert')}>{settling === 'revert' ? 'Mengembalikan…' : 'Batalkan'}</button>{:else if m.applyState === 'kept'}<span
       class="changes-status">✓ Perubahan disimpan</span>{:else if m.applyState === 'reverted'}<span
       class="changes-status muted">↩ Dibatalkan — file dikembalikan ke versi sebelumnya</span>{:else if m.applyState === 'failed'}<span
-      class="changes-status error">{m.error || 'Gagal menerapkan perubahan. File dikembalikan seperti semula.'}</span>{/if}</div></div>{/if}</div>
+      class="changes-status error">{m.error || 'Gagal menerapkan perubahan. File dikembalikan seperti semula.'}</span>{/if}</div>{#if errorCount}<div
+    class="preview-errors" role="status"><span>{`⚠ Preview menampilkan ${errorCount} error setelah perubahan ini.`}</span><AiButton
+      label="Perbaiki dengan AI" text={fixPrompt} cls="preview-fix" /></div>{/if}</div>{/if}</div>
