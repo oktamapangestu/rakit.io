@@ -275,6 +275,45 @@ test('Builder: masalah yang sama tidak dikembalikan berulang-ulang', { skip: goO
   assert.deepEqual(JSON.parse(row.checks), { found: { ref: 1 }, left: { ref: 1 }, rounds: 3 });
 });
 
+test('Builder: ringkasan yang menyebut perubahan tanpa memanggil tool diminta dikerjakan', { skip: goOnly }, async () => {
+  const user = await stack.register();
+  stack.ai.script.push(
+    { text: 'Tombol pesan sudah diperbaiki.\n\n(Perubahan: tulis js/core.js, tulis functions/pesanan-buat.js)' },
+    calls(call('write_file', { path: 'js/core.js', content: 'console.log(1);' })),
+    { text: 'Tombol pesan sudah diperbaiki.\n\n(Perubahan: tulis js/core.js)' },
+  );
+  const { final } = await user.build('perbaiki tombol pesan');
+  assert.match(sent(2).messages.at(-1).content, /^Kamu menulis bahwa js\/core\.js, functions\/pesanan-buat\.js diubah, tapi belum ada tool/);
+  // Diminta sekali saja; baris tiruan catatan riwayat dibuang dari ringkasan.
+  assert.equal(final.message.content, 'Tombol pesan sudah diperbaiki.');
+  assert.equal(read(user, 'js/core.js'), 'console.log(1);');
+  const row = stack.db().prepare("SELECT checks FROM ai_requests WHERE user_id = ? AND action = 'build'").get(user.userId);
+  assert.deepEqual(JSON.parse(row.checks), { found: { claim: 1 }, rounds: 3 });
+});
+
+test('Builder: kode yang hilang saat file ditimpa dikembalikan ke model', { skip: goOnly }, async () => {
+  const user = await stack.register();
+  const original = read(user, 'script.js');
+  stack.ai.script.push(
+    // Placeholder langsung dilaporkan saat ditulis; komponen yang hilang dilaporkan di pemeriksaan akhir.
+    calls(call('write_file', { path: 'script.js', content: '// ... kode lainnya tetap sama\n' })),
+    calls(call('read_file', { path: 'script.js', original: true })),
+    { text: 'Selesai.' },
+    calls(call('write_file', { path: 'script.js', content: original })),
+    { text: 'Selesai, komponen dikembalikan.' },
+  );
+  const { final } = await user.build('rapikan script.js');
+  const [written] = toolResults(sent(4));
+  assert.match(written, /^Ditulis, TAPI ada masalah di "script\.js": ada komentar placeholder "\.\.\. kode lainnya tetap sama"/);
+  const [before] = toolResults(sent(3)).slice(1);
+  assert.equal(before, `Isi "script.js" sebelum jawaban ini:\n${original}`);
+  assert.match(sent(2).messages.at(-1).content, /x-data="penghitung" masih dipakai di index\.html/);
+  assert.equal(final.message.content, 'Selesai, komponen dikembalikan.');
+  assert.equal(read(user, 'script.js'), original);
+  const row = stack.db().prepare("SELECT checks FROM ai_requests WHERE user_id = ? AND action = 'build'").get(user.userId);
+  assert.deepEqual(JSON.parse(row.checks).left, undefined);
+});
+
 test('Builder: cek ekspresi Alpine, struktur CSS, dan nama kolom database', { skip: goOnly }, async () => {
   const user = await stack.register();
   const page = '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>'
@@ -348,9 +387,12 @@ test('Builder: perbaikan otomatis error preview gratis, sekali per jawaban', { s
   // Riwayat: jawaban yang dibatalkan ditandai, isi perubahan jawaban terbaru ikut terkirim.
   stack.ai.script.push({ text: 'Oke.' });
   await user.prompt('tadi apa saja?', { threadId });
-  const history = sent().messages.filter((m) => m.role === 'assistant').map((m) => m.content);
-  assert.ok(history.some((c) => c.includes('(Perubahan: tulis b.js)\n(Perubahan ini DIBATALKAN pengguna')));
-  assert.ok(history.some((c) => c.endsWith('(Perubahan: tulis a.js)\nIsi perubahan (- sebelum, + sesudah):\na.js (baris 1):\n- console.log(1);\n+ console.log(2);')));
+  // Catatan perubahan ada di pesan user sesudah jawabannya, bukan di jawaban AI (supaya tidak ditiru).
+  const replies = sent().messages.filter((m) => m.role === 'assistant').map((m) => m.content);
+  assert.ok(replies.every((c) => !c.includes('memanggil tool') && !c.includes('Isi perubahan')));
+  const notes = sent().messages.filter((m) => m.role === 'user').map((m) => m.content);
+  assert.ok(notes.some((c) => c.includes('Jawaban AI sebelumnya memanggil tool: tulis b.js.\nPerubahan ini DIBATALKAN pengguna')));
+  assert.ok(notes.some((c) => c.includes('Jawaban AI sebelumnya memanggil tool: tulis a.js.\nIsi perubahan (- sebelum, + sesudah):\na.js (baris 1):\n- console.log(1);\n+ console.log(2);\n\n')));
 });
 
 test('Builder: perubahan yang gagal diterapkan dikembalikan utuh dan dilaporkan', async () => {
@@ -440,7 +482,10 @@ test('percakapan: prompt lanjutan membawa riwayat; daftar & isi percakapan; hapu
   assert.deepEqual(history.map((m) => m.role), ['system', 'user', 'assistant', 'user']);
   assert.equal(history[1].content, 'ganti   judul\n halaman');
   if (goOnly) assert.equal(history[2].content, 'Judul diganti.\n\n(Perubahan: tulis index.html)');
-  else assert.match(history[2].content, /^Judul diganti\.\n\n\(Perubahan: tulis index\.html\)\nIsi perubahan \(- sebelum, \+ sesudah\):\nindex\.html \(baris 1\):\n- <!DOCTYPE html>[\s\S]*\n\+ v1$/);
+  else {
+    assert.equal(history[2].content, 'Judul diganti.');
+    assert.match(history[3].content, /^\[Catatan sistem, bukan tulisan pengguna[^\n]*\]\nJawaban AI sebelumnya memanggil tool: tulis index\.html\.\nIsi perubahan \(- sebelum, \+ sesudah\):\nindex\.html \(baris 1\):\n- <!DOCTYPE html>[\s\S]*\n\+ v1\n\n/);
+  }
   assert.ok(history[3].content.endsWith('Request:\nlanjutkan'));
 
   // Percakapan lain di project yang sama.

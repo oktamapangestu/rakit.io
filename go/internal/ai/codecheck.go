@@ -29,7 +29,7 @@ import (
 
 // problem: satu masalah beserta jenisnya (jenis dicatat di statistik dashboard owner, lihat buildStats).
 type problem struct {
-	kind string // js | css | ref | alpine | column | fn | api | link | contrast
+	kind string // js | css | ref | alpine | column | fn | api | link | contrast | edit | tool | claim | loss | shrink
 	text string
 }
 
@@ -479,6 +479,11 @@ func (ws *workspace) finalProblems() (byFile map[string][]problem, images []stri
 			continue
 		}
 		add(c.Path, syntaxProblems(c.Path, c.Content)...)
+		original := ""
+		if ws.disk[c.Path] {
+			original, _ = files.ReadText(ws.root, c.Path)
+		}
+		add(c.Path, placeholderProblems(original, c.Content)...)
 		for _, p := range apiPathProblems(c.Content, tables) {
 			add(c.Path, problem{"api", p})
 		}
@@ -519,6 +524,9 @@ func (ws *workspace) finalProblems() (byFile map[string][]problem, images []stri
 				}
 			}
 		}
+	}
+	for file, list := range ws.lostDefinitions() {
+		add(file, list...)
 	}
 	for k, v := range byFile {
 		if len(v) == 0 {

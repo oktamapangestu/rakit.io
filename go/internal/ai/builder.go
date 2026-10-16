@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -326,6 +327,7 @@ func stageToolCall(call toolCall, ws *workspace, truncated bool) (result string,
 		}
 		return "Error: " + err.Error(), []problem{{kind, err.Error()}}
 	}
+	previous, _ := ws.read(valid.Path) // isi sebelum panggilan ini (untuk placeholder)
 	ws.st.set(valid)
 	switch valid.Action {
 	case "table":
@@ -337,8 +339,15 @@ func stageToolCall(call toolCall, ws *workspace, truncated bool) (result string,
 	for _, p := range apiPathProblems(valid.Content, knownTables(ws.tables, ws.st)) {
 		code = append(code, problem{"api", p})
 	}
+	code = append(code, placeholderProblems(previous, valid.Content)...)
 	if len(code) > 0 {
 		return fmt.Sprintf(`Ditulis, TAPI ada masalah di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(texts(code), "; ")), code
+	}
+	note := "" // dibandingkan dengan isi sebelum jawaban ini, bukan tulisan model sebelumnya
+	if call.Name == "write_file" && ws.disk[valid.Path] {
+		if original, err := files.ReadText(ws.root, valid.Path); err == nil {
+			note = shrinkNote(valid.Path, original, valid.Content)
+		}
 	}
 	if list := htmlProblems(valid.Path, valid.Content); len(list) > 0 {
 		for _, p := range list {
@@ -348,12 +357,15 @@ func stageToolCall(call toolCall, ws *workspace, truncated bool) (result string,
 			}
 			found = append(found, problem{kind, p})
 		}
-		return fmt.Sprintf(`Ditulis, TAPI ada masalah kualitas di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(list, "; ")), found
+		return fmt.Sprintf(`Ditulis, TAPI ada masalah kualitas di "%s": %s. Perbaiki lalu panggil write_file lagi.`, valid.Path, strings.Join(list, "; ")) + note, found
 	}
 	if call.Name == "edit_file" {
 		return fmt.Sprintf(`OK: "%s" diubah (%d karakter sekarang).`, valid.Path, jsconv.Len(valid.Content)), nil
 	}
-	return fmt.Sprintf(`OK: "%s" ditulis (%d karakter).`, valid.Path, jsconv.Len(valid.Content)), nil
+	if note != "" {
+		found = append(found, problem{"shrink", note})
+	}
+	return fmt.Sprintf(`OK: "%s" ditulis (%d karakter).`, valid.Path, jsconv.Len(valid.Content)) + note, found
 }
 
 // readFile: isi terbaru sebuah file teks — termasuk perubahan yang sudah dibuat model di job ini.
@@ -362,6 +374,19 @@ func readFile(args map[string]any, ws *workspace) string {
 	clean, err := files.CleanPath(raw)
 	if err != nil {
 		return "Error: " + err.Error()
+	}
+	if truthy(args["original"]) {
+		if !ws.disk[clean] {
+			return fmt.Sprintf(`Error: "%s" belum ada sebelum jawaban ini.`, clean)
+		}
+		if !files.IsTextFile(clean) {
+			return fmt.Sprintf(`Error: "%s" bukan file teks (.html, .css, .js).`, clean)
+		}
+		content, err := files.ReadText(ws.root, clean)
+		if err != nil {
+			return "Error: " + err.Error()
+		}
+		return fmt.Sprintf("Isi \"%s\" sebelum jawaban ini:\n%s", clean, content)
 	}
 	content, ok := ws.read(clean)
 	if !ok {
@@ -431,6 +456,70 @@ func planMessage(text string) string {
 		text = m[1]
 	}
 	text = tableBlockRE.ReplaceAllString(fileBlockRE.ReplaceAllString(text, ""), "")
+	return strings.TrimSpace(blankLinesRE.ReplaceAllString(text, "\n\n"))
+}
+
+var (
+	// claimRE: baris "(Perubahan: tulis a.js, hapus b.html, tabel x)" — bentuk catatan riwayat lama yang kadang
+	// ditiru model sebagai teks tanpa memanggil tool. Setiap bagiannya harus berupa claimItemRE.
+	claimRE     = regexp.MustCompile(`(?im)^[ \t]*\(?(?:perubahan|jawaban ai sebelumnya memanggil tool)(?: ini)?:[ \t]*(.+?)\)?\.?[ \t]*$`)
+	claimItemRE = regexp.MustCompile(`(?i)^(tulis|hapus)[ \t]+/?([\w./-]+\.(?:html|css|js))$|^(tabel)[ \t]+([a-z][a-z0-9_]*)$`)
+	// claimDetailRE: blok "Isi perubahan (- sebelum, + sesudah):" sampai akhir teks, juga tiruan catatan riwayat.
+	claimDetailRE = regexp.MustCompile(`(?is)[ \t]*isi perubahan \(- sebelum, \+ sesudah\):.*$`)
+)
+
+// claimLines: baris "(Perubahan: …)" di teks model beserta isinya (key staged: path, atau "table:<nama>").
+func claimLines(text string) (lines []string, keys []string) {
+	for _, m := range claimRE.FindAllStringSubmatch(text, -1) {
+		var found []string
+		for _, part := range strings.Split(m[1], ",") {
+			item := claimItemRE.FindStringSubmatch(strings.TrimSpace(part))
+			if item == nil {
+				found = nil
+				break
+			}
+			if item[2] != "" {
+				found = append(found, item[2])
+			} else {
+				found = append(found, "table:"+strings.ToLower(item[4]))
+			}
+		}
+		if len(found) > 0 {
+			lines = append(lines, m[0])
+			keys = append(keys, found...)
+		}
+	}
+	return lines, keys
+}
+
+// unstagedClaims: file/tabel yang disebut di baris "(Perubahan: …)" di teks model tapi tidak pernah diubah lewat
+// tool di job ini — model mengira sudah mengubahnya padahal belum.
+func unstagedClaims(text string, st *staged) []string {
+	var out []string
+	_, keys := claimLines(text)
+	for _, key := range keys {
+		if _, done := st.items[key]; !done && !slices.Contains(out, key) {
+			out = append(out, key)
+		}
+	}
+	for i, key := range out {
+		if name, isTable := strings.CutPrefix(key, "table:"); isTable {
+			out[i] = "tabel " + name
+		}
+	}
+	return out
+}
+
+// stripClaims membuang tiruan catatan riwayat dari ringkasan: daftar perubahan sudah ditampilkan editor sendiri.
+func stripClaims(text string) string {
+	lines, _ := claimLines(text)
+	if len(lines) == 0 {
+		return text
+	}
+	for _, line := range lines {
+		text = strings.Replace(text, line, "", 1)
+	}
+	text = claimDetailRE.ReplaceAllString(text, "")
 	return strings.TrimSpace(blankLinesRE.ReplaceAllString(text, "\n\n"))
 }
 
@@ -510,6 +599,7 @@ func (s *Service) runBuilder(messages []message, ws *workspace, h hooks) (*build
 	text := ""
 	truncatedRounds := 0
 	lastNudge := "" // masalah yang terakhir dikembalikan di pemeriksaan akhir
+	claimNudged := false
 
 	for round := 0; round < maxBuildRounds; round++ {
 		out.stats.Rounds = round + 1
@@ -549,6 +639,21 @@ func (s *Service) runBuilder(messages []message, ws *workspace, h hooks) (*build
 		}
 
 		if len(r.ToolCalls) == 0 {
+			// Ringkasan menyebut file yang diubah, tapi tool untuk file itu tidak pernah dipanggil: minta sekali lagi.
+			if missing := unstagedClaims(r.Text, ws.st); len(missing) > 0 && !claimNudged && round < maxBuildRounds-1 {
+				claimNudged = true
+				out.stats.count(&out.stats.Found, []problem{{"claim", strings.Join(missing, ", ")}})
+				if h.onNote != nil {
+					h.onNote("AI menyebut perubahan yang belum dibuat — AI diminta mengerjakannya")
+				}
+				convo = append(convo,
+					message{"role": "assistant", "content": r.Text},
+					message{"role": "user", "content": "Kamu menulis bahwa " + strings.Join(missing, ", ") + " diubah, tapi belum ada tool yang " +
+						"dipanggil untuk itu — belum ada yang berubah. Menulis daftar perubahan di teks tidak mengubah apa pun. " +
+						"Kalau memang perlu diubah, panggil write_file/edit_file/delete_file/create_table sekarang, lalu tulis " +
+						"ringkasan lagi. Kalau ternyata tidak perlu, tulis ulang jawabanmu tanpa menyebut perubahan itu."})
+				continue
+			}
 			// Pemeriksaan akhir atas semua file yang ditulis: model memperbaiki masalahnya sebelum selesai. Masalah
 			// yang sama persis dengan pengembalian sebelumnya tidak dikirim lagi (model menganggapnya disengaja atau
 			// tidak bisa memperbaikinya), supaya tidak berputar sampai batas putaran.
@@ -605,8 +710,11 @@ func (s *Service) runBuilder(messages []message, ws *workspace, h hooks) (*build
 	for _, list := range byFile {
 		out.stats.count(&out.stats.Left, list)
 	}
+	if missing := unstagedClaims(text, ws.st); len(missing) > 0 {
+		out.stats.count(&out.stats.Left, []problem{{"claim", strings.Join(missing, ", ")}})
+	}
 	out.images = images
-	out.message = planMessage(text)
+	out.message = stripClaims(planMessage(text))
 	out.changes = ws.st.list()
 	return out, nil
 }

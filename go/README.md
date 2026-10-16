@@ -72,9 +72,22 @@ Catatan:
   8 × 600 karakter). Server Node menolaknya ("Prompt tidak boleh kosong").
 - **Riwayat percakapan AI** (`threadHistory`): dua jawaban terbaru yang mengubah file menyertakan baris yang berubah
   (maks. 3.000 karakter), dan jawaban yang dibatalkan pengguna ditandai, supaya permintaan lanjutan seperti "kembalikan
-  yang tadi" bisa dikerjakan. Hanya di server Go.
+  yang tadi" bisa dikerjakan. Catatan ini ditaruh di pesan user sesudah jawabannya (bukan di jawaban AI), karena model
+  menirunya sebagai teks tanpa memanggil tool. Bila ringkasan Builder tetap menyebut "(Perubahan: tulis x.js)" untuk
+  file yang tidak diubah lewat tool, model diminta sekali untuk mengerjakannya (`unstagedClaims`, jenis masalah
+  `claim` di statistik) dan baris itu dibuang dari ringkasan. Hanya di server Go.
+- **Kode yang hilang saat file ditimpa** (`internal/ai/losscheck.go`): komentar placeholder ("// ... sisanya sama")
+  dilaporkan saat ditulis dan di pemeriksaan akhir; komponen/store Alpine, fungsi global, dan id elemen yang hilang
+  dari file tapi masih dipakai file lain dilaporkan di pemeriksaan akhir; `write_file` yang membuat file jauh lebih
+  pendek diberi catatan (jenis `loss` dan `shrink` di statistik). `read_file` dengan `original: true` membaca isi
+  file sebelum jawaban ini, untuk mengembalikan bagian yang terhapus.
 - **Evaluasi AI** (`scripts/ai-eval/`): `npm run ai:eval -- --only id,id --model nama` menjalankan kasus tetap di
   `cases.mjs` dengan provider sungguhan dari `.env` (memakai biaya provider), hasil di `data/ai-eval/<waktu>/`.
+  Kasus boleh membawa riwayat percakapan (`history`, langsung dimasukkan ke database). Kegagalan sungguhan:
+  `node scripts/ai-eval/from-requests.mjs --data <folder data server>` mengambil job Builder yang masih menyisakan
+  masalah (`ai_requests.checks.left`) beserta isi project sebelum AI bekerja (riwayat versi), riwayat percakapan, dan
+  struktur database tanpa isi baris, ke `data/ai-eval/real/`; jalankan dengan `npm run ai:eval -- --real`. Isinya
+  data pengguna: jangan dibagikan atau di-commit.
 - **Konversi nilai** di `internal/jsconv` dan `internal/userdb` meniru JavaScript (`Number()`, `parseInt`,
   `Date.parse`); `go test ./...` membandingkannya dengan jawaban Node yang direkam di `testdata/js.json`.
 - **Statistik antrean AI** di dashboard owner kini angka asli (antrean ada di server Go).

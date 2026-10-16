@@ -184,10 +184,11 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'read_file',
-      description: 'Read the current content of a project file, including changes you made earlier in this answer.',
+      description: 'Read the current content of a project file, including changes you made earlier in this answer. '
+        + 'With original: true, read the file as it was before this answer instead (to restore something you removed by mistake).',
       parameters: {
         type: 'object',
-        properties: { path: { type: 'string' } },
+        properties: { path: { type: 'string' }, original: { type: 'boolean' } },
         required: ['path'],
       },
     },
@@ -630,6 +631,10 @@ async function stageToolCall(call, staged, existingTables, truncated, root) {
       path = cleanPath(args.path);
     } catch (err) {
       return `Error: ${err.message}`;
+    }
+    if (args.original) {
+      const content = await readText(root, path).catch(() => null);
+      return content === null ? `Error: "${path}" belum ada sebelum jawaban ini.` : `Isi "${path}" sebelum jawaban ini:\n${content}`;
     }
     const content = await currentText(root, staged, path);
     return content === null ? `Error: "${path}" tidak ada di project.` : `Isi terbaru "${path}":\n${content}`;

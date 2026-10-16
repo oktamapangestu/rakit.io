@@ -5,6 +5,8 @@
 //               (path berakhiran "/" = seluruh folder)
 //   must:       [file, regex] yang harus cocok di hasil akhir — pemeriksaan kasar "sesuai permintaan"
 //   needsTable: permintaan ini seharusnya membuat tabel database
+//   history:    percakapan sebelum prompt — [{ role, content, changes? }]; changes = perubahan yang dibuat jawaban itu
+//               (dimasukkan langsung ke database, tanpa memanggil AI)
 
 const LONG_PAGE = `<!DOCTYPE html>
 <html lang="id">
@@ -52,6 +54,144 @@ section { max-width: 720px; margin: 0 auto; padding: 32px 24px; }
 .menu { list-style: none; padding: 0; }
 .menu li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e8dccf; }
 footer { padding: 24px; text-align: center; color: #7a6a5a; }
+`;
+
+// Toko dengan banyak fungsi di satu file JS: permintaan kecil yang menggoda model menulis ulang seluruh file.
+const SHOP_PAGE = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toko Kue Bunda</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <h1>Toko Kue Bunda</h1>
+  <ul id="daftar-produk"></ul>
+  <p>Total: <strong id="total">Rp0</strong></p>
+  <input id="kupon" placeholder="Kode kupon">
+  <button type="button" onclick="pakaiKupon()">Pakai kupon</button>
+  <button type="button" onclick="kirimWhatsApp()">Pesan lewat WhatsApp</button>
+</body>
+</html>
+`;
+
+const SHOP_JS = `const PRODUK = [
+  { id: 1, nama: 'Brownies', harga: 45000 },
+  { id: 2, nama: 'Bolu pandan', harga: 38000 },
+  { id: 3, nama: 'Nastar', harga: 85000 },
+];
+const keranjang = [];
+let diskon = 0;
+
+function formatRupiah(n) {
+  return 'Rp' + n.toLocaleString('id-ID');
+}
+
+function tampilkanProduk() {
+  const ul = document.getElementById('daftar-produk');
+  PRODUK.forEach((p) => {
+    const li = document.createElement('li');
+    li.textContent = p.nama + ' — ' + formatRupiah(p.harga) + ' ';
+    const tombol = document.createElement('button');
+    tombol.type = 'button';
+    tombol.textContent = 'Tambah';
+    tombol.addEventListener('click', () => tambahKeKeranjang(p.id));
+    li.append(tombol);
+    ul.append(li);
+  });
+}
+
+function tambahKeKeranjang(id) {
+  const produk = PRODUK.find((p) => p.id === id);
+  keranjang.push(produk);
+  hitungTotal();
+}
+
+function hitungTotal() {
+  const subtotal = keranjang.reduce((jumlah, p) => jumlah + p.harga, 0);
+  const total = Math.max(0, subtotal - diskon);
+  document.getElementById('total').textContent = formatRupiah(total);
+  return total;
+}
+
+function pakaiKupon() {
+  const kode = document.getElementById('kupon').value.trim().toUpperCase();
+  diskon = kode === 'HEMAT10' ? 10000 : 0;
+  hitungTotal();
+}
+
+function kirimWhatsApp() {
+  const isi = keranjang.map((p) => '- ' + p.nama).join('\\n');
+  const pesan = 'Halo, saya mau pesan:\\n' + isi + '\\nTotal: ' + formatRupiah(hitungTotal());
+  window.open('https://wa.me/6281234567890?text=' + encodeURIComponent(pesan));
+}
+
+document.addEventListener('DOMContentLoaded', tampilkanProduk);
+`;
+
+// Percakapan lanjutan: jawaban sebelumnya sudah membuat form pesanan + fungsi serverless. Dulu model kadang
+// meniru catatan perubahan di riwayat ("(Perubahan: tulis js/core.js, …)") tanpa memanggil tool.
+const ORDER_PAGE = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pesan Katering</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="/js/core.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
+</head>
+<body>
+  <main x-data="formPesanan">
+    <h1>Pesan Katering</h1>
+    <form @submit.prevent="kirim">
+      <label>Nama <input x-model="nama" required></label>
+      <label>No HP <input x-model="hp" required></label>
+      <label>Jumlah porsi <input type="number" min="1" x-model.number="porsi" required></label>
+      <button type="submit" :disabled="mengirim">Pesan</button>
+    </form>
+    <p x-show="error" x-text="error"></p>
+  </main>
+</body>
+</html>
+`;
+
+const ORDER_JS = `document.addEventListener('alpine:init', () => {
+  Alpine.data('formPesanan', () => ({
+    nama: '',
+    hp: '',
+    porsi: 1,
+    mengirim: false,
+    error: '',
+    async kirim() {
+      this.mengirim = true;
+      this.error = '';
+      try {
+        const res = await fetch('/api/fn/pesanan-buat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nama: this.nama, hp: this.hp, porsi: this.porsi }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+      } catch (err) {
+        this.error = err.message;
+      } finally {
+        this.mengirim = false;
+      }
+    },
+  }));
+});
+`;
+
+const ORDER_FN = `export default async function (req, { db }) {
+  const { nama, hp, porsi } = req.body ?? {};
+  if (!nama || !hp || !(porsi > 0)) return Response.json({ error: 'Nama, no HP, dan jumlah porsi wajib diisi.' }, { status: 400 });
+  const row = await db.insert('pesanan', { nama, hp, porsi, total: porsi * 25000 });
+  return { ok: true, id: row.id, total: row.total };
+}
 `;
 
 export const CASES = [
@@ -175,6 +315,36 @@ export const CASES = [
     files: { 'index.html': LONG_PAGE, 'style.css': LONG_CSS, 'script.js': null },
     needsTable: true,
     must: [['index.html', /Jl\. Kaliurang km 5/]],
+  },
+  {
+    id: 'kode-banyak-fungsi',
+    prompt: 'Kupon HEMAT10 sekarang potong 10% dari subtotal, bukan Rp10.000.',
+    files: { 'index.html': SHOP_PAGE, 'script.js': SHOP_JS },
+    allow: ['script.js'],
+    must: [
+      ['script.js', /function kirimWhatsApp\(/], ['script.js', /function tampilkanProduk\(/],
+      ['script.js', /function tambahKeKeranjang\(/], ['script.js', /function formatRupiah\(/],
+      ['script.js', /wa\.me\/6281234567890/], ['index.html', /onclick="kirimWhatsApp\(\)"/],
+    ],
+  },
+  {
+    id: 'lanjutan-pesanan',
+    prompt: 'Setelah pesanan berhasil terkirim, tampilkan nomor pesanan dan totalnya, lalu kosongkan formnya.',
+    files: { 'index.html': ORDER_PAGE, 'js/core.js': ORDER_JS, 'functions/pesanan-buat.js': ORDER_FN, 'script.js': null },
+    history: [
+      { role: 'user', content: 'Buat form pesan katering (nama, no HP, jumlah porsi), harga Rp25.000 per porsi, simpan di server.' },
+      {
+        role: 'assistant',
+        content: 'Form pesanan sudah dibuat. Pesanan dikirim ke fungsi serverless yang menghitung total dan menyimpannya ke tabel pesanan.',
+        changes: [
+          { path: 'index.html', action: 'write', content: ORDER_PAGE },
+          { path: 'js/core.js', action: 'write', content: ORDER_JS },
+          { path: 'functions/pesanan-buat.js', action: 'write', content: ORDER_FN },
+        ],
+      },
+    ],
+    allow: ['index.html', 'js/core.js', 'functions/', 'style.css'],
+    must: [['js/core.js', /data\.id|nomor/i], ['functions/pesanan-buat.js', /db\.insert\('pesanan'/]],
   },
   {
     id: 'validasi-form',

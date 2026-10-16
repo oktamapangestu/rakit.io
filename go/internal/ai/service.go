@@ -361,6 +361,10 @@ func lineDiff(path, before, after string) string {
 }
 
 // threadHistory: pesan sebelumnya di percakapan, disiapkan untuk dikirim ke model.
+//
+// Perubahan file sebuah jawaban dicatat di awal pesan user sesudahnya sebagai catatan sistem, bukan di jawaban
+// AI itu sendiri: bila jawaban lama berisi "(Perubahan: tulis a.js)", model menirunya sebagai teks di jawaban
+// berikutnya tanpa memanggil tool, sehingga tampak sudah mengubah file padahal belum.
 func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 	rows, err := s.db.Query(`
 		SELECT role, content, changes, attachments, apply_state, snapshot FROM ai_messages
@@ -369,7 +373,7 @@ func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	type item struct{ role, content string }
+	type item struct{ role, content, note string } // note: catatan perubahan jawaban AI (lihat changesNote)
 	var history []item
 	detailed := 0 // jawaban terbaru yang perubahannya disertakan isinya (lihat changesDetail)
 	for rows.Next() {
@@ -385,11 +389,12 @@ func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 		if rawChanges.Valid {
 			json.Unmarshal([]byte(rawChanges.String), &changes)
 		}
+		note := ""
 		if role == "assistant" && len(changes) > 0 {
-			content += "\n\n(Perubahan: " + changesSummary(changes) + ")"
+			note = "Jawaban AI sebelumnya memanggil tool: " + changesSummary(changes) + "."
 			switch {
 			case applyState.String == "reverted":
-				content += "\n(Perubahan ini DIBATALKAN pengguna: file & tabel sudah kembali seperti sebelum jawaban ini.)"
+				note += "\nPerubahan ini DIBATALKAN pengguna: file & tabel sudah kembali seperti sebelum jawaban itu."
 			case detailed < historyDetailed:
 				detailed++
 				var snap snapshot
@@ -397,11 +402,11 @@ func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 					json.Unmarshal([]byte(rawSnapshot.String), &snap)
 				}
 				if detail := changesDetail(changes, snap); detail != "" {
-					content += "\n" + detail
+					note += "\n" + detail
 				}
 			}
 		}
-		history = append(history, item{role, content})
+		history = append(history, item{role, content, note})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -411,7 +416,7 @@ func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 	for i := len(history) - 1; i >= 0; i-- {
 		h := history[i]
 		if (h.role == "user" || h.role == "assistant") && strings.TrimSpace(h.content) != "" {
-			filtered = append(filtered, item{h.role, jsconv.Slice(h.content, maxHistoryChars)})
+			filtered = append(filtered, item{h.role, jsconv.Slice(h.content, maxHistoryChars), h.note})
 		}
 	}
 	if len(filtered) > maxHistory {
@@ -420,20 +425,38 @@ func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 	// Batas total: ambil dari yang terbaru, pesan yang lebih lama dibuang bila tidak muat.
 	total := 0
 	for i := len(filtered) - 1; i >= 0; i-- {
-		total += jsconv.Len(filtered[i].content)
+		total += jsconv.Len(filtered[i].content) + jsconv.Len(filtered[i].note)
 		if total > maxHistoryTotal {
 			filtered = filtered[i+1:]
 			break
 		}
 	}
-	// Harus diawali user dan bergantian.
+	// Harus diawali user dan bergantian. Catatan perubahan ikut pesan user sesudahnya; jawaban terakhir di
+	// riwayat diikuti pesan user berisi catatannya saja (runJob menyatukannya dengan permintaan baru).
 	var out []message
+	note := ""
 	for i, h := range filtered {
 		if (i == 0 && h.role == "user") || (i > 0 && h.role != filtered[i-1].role) {
-			out = append(out, message{"role": h.role, "content": h.content})
+			content := h.content
+			if h.role == "user" && note != "" {
+				content = changesNote(note) + "\n\n" + content
+			}
+			out = append(out, message{"role": h.role, "content": content})
+			note = ""
+			if h.role == "assistant" {
+				note = h.note
+			}
 		}
 	}
+	if note != "" {
+		out = append(out, message{"role": "user", "content": changesNote(note)})
+	}
 	return out, nil
+}
+
+// changesNote: catatan perubahan jawaban AI sebelumnya, ditulis server (lihat threadHistory).
+func changesNote(note string) string {
+	return "[Catatan sistem, bukan tulisan pengguna — jangan ditiru di jawabanmu]\n" + note
 }
 
 // ---------- Konteks proyek ----------

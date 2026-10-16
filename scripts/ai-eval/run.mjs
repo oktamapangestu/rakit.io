@@ -3,8 +3,11 @@
 // (ai_requests.checks), file di luar lingkup, cek isi kasar, token, dan waktu. Pakai ini untuk membandingkan
 // perubahan prompt atau model dengan angka. Memakai kredit/biaya provider sungguhan.
 //
-//   npm run ai:eval -- [--only id,id] [--model nama] [--parallel 3] [--repeat 1] [--out folder]
+//   npm run ai:eval -- [--only id,id] [--model nama] [--parallel 3] [--repeat 1] [--out folder] [--real [folder]]
 //   (sama dengan: npm run build:go && node scripts/ai-eval/run.mjs …)
+//
+// --real: jalankan kasus dari kegagalan sungguhan (dibuat from-requests.mjs, default data/ai-eval/real) sebagai
+// ganti cases.mjs. Hasilnya dibandingkan dengan masalah yang tersisa di jawaban aslinya.
 //
 // Pengaturan AI_* dibaca dari .env (atau variabel lingkungan). Hasil lengkap (file akhir tiap kasus, ringkasan AI,
 // report.json) disimpan di data/ai-eval/<waktu>/.
@@ -28,6 +31,9 @@ const only = opt('only', '').split(',').filter(Boolean);
 const parallel = Math.max(1, Number(opt('parallel', 3)) || 1);
 const repeat = Math.max(1, Number(opt('repeat', 1)) || 1);
 const outDir = path.resolve(ROOT, opt('out', path.join('data', 'ai-eval', new Date().toISOString().replace(/[:.]/g, '-'))));
+const realIndex = args.indexOf('--real');
+const realDir = realIndex < 0 ? null
+  : path.resolve(ROOT, args[realIndex + 1] && !args[realIndex + 1].startsWith('--') ? args[realIndex + 1] : path.join('data', 'ai-eval', 'real'));
 
 if (!fs.existsSync(path.join(ROOT, process.env.RAKIT_SERVER_CMD.split(' ')[0]))) {
   console.error(`${process.env.RAKIT_SERVER_CMD} belum ada. Jalankan dulu: npm run build:go`);
@@ -51,9 +57,20 @@ if (!env.AI_BASE_URL || !env.AI_API_KEY || !env.AI_MODEL) {
 }
 Object.assign(env, { AI_BONUS_CREDITS: '100000', AI_DAILY_CREDITS: '0', AI_CREDITS_PER_PROMPT: '1', AI_MAX_CONCURRENT: String(parallel) });
 
-const cases = CASES.filter((c) => !only.length || only.includes(c.id));
+// Kasus nyata: <realDir>/<id>/case.json; site/ dan db.sqlite di sebelahnya (lihat from-requests.mjs).
+function realCases(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter((id) => fs.existsSync(path.join(dir, id, 'case.json'))).map((id) => {
+    const c = JSON.parse(fs.readFileSync(path.join(dir, id, 'case.json'), 'utf8'));
+    return { ...c, siteDir: path.join(dir, id, c.site ?? 'site'), dbFile: c.db ? path.join(dir, id, c.db) : undefined };
+  });
+}
+const pool = realDir ? realCases(realDir) : CASES;
+const cases = pool.filter((c) => !only.length || only.includes(c.id));
 if (!cases.length) {
-  console.error(`Tidak ada kasus yang cocok. Pilihan: ${CASES.map((c) => c.id).join(', ')}`);
+  console.error(realDir && !pool.length
+    ? `Belum ada kasus nyata di ${path.relative(ROOT, realDir)}. Buat dulu: node scripts/ai-eval/from-requests.mjs`
+    : `Tidak ada kasus yang cocok. Pilihan: ${pool.map((c) => c.id).join(', ')}`);
   process.exit(1);
 }
 
@@ -67,9 +84,39 @@ function listFiles(dir, prefix = '') {
     : [`${prefix}${e.name}`]));
 }
 
+const json = (v) => (v == null || typeof v === 'string' ? v ?? null : JSON.stringify(v));
+
+// Riwayat percakapan sebelum prompt, langsung di database server: jawaban lama tidak perlu dibuat ulang dengan AI.
+// Setiap pesan: { role, content, changes?, apply_state?, snapshot?, description? } (changes/snapshot boleh objek).
+function seedHistory(stack, user, history) {
+  const db = stack.db();
+  const project = db.prepare('SELECT id FROM projects WHERE slug = ?').get(user.username);
+  const start = Date.now() - history.length * 1000;
+  const thread = db.prepare('INSERT INTO ai_threads (user_id, project_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run(user.userId, project.id, 'eval', start, start).lastInsertRowid;
+  const insert = db.prepare(`INSERT INTO ai_messages (thread_id, user_id, role, mode, content, status, changes, apply_state, snapshot, attachments, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  history.forEach((m, i) => {
+    const changes = json(m.changes);
+    insert.run(thread, user.userId, m.role, m.mode ?? 'build', m.content ?? '', m.status ?? (m.role === 'user' ? 'sent' : 'done'),
+      changes, m.apply_state ?? (m.role === 'assistant' && changes && changes !== '[]' ? 'kept' : null), json(m.snapshot),
+      m.description ? JSON.stringify({ thumbs: [], description: m.description }) : null, start + i * 1000);
+  });
+  return Number(thread);
+}
+
 async function runCase(stack, c, run) {
   const user = await stack.register(`eval${run}${c.id.replace(/[^a-z0-9]/g, '').slice(0, 20)}`);
   const root = path.join(stack.dataDir, 'sites', user.username);
+  if (c.siteDir) {
+    // Isi project kasus nyata menggantikan template.
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.cpSync(c.siteDir, root, { recursive: true });
+  }
+  if (c.dbFile) {
+    fs.mkdirSync(path.join(stack.dataDir, 'db'), { recursive: true });
+    fs.copyFileSync(c.dbFile, path.join(stack.dataDir, 'db', `${user.username}.db`));
+  }
   for (const [rel, content] of Object.entries(c.files ?? {})) {
     const full = path.join(root, rel);
     if (content === null) fs.rmSync(full, { force: true });
@@ -79,8 +126,9 @@ async function runCase(stack, c, run) {
     }
   }
 
+  const threadId = c.history?.length ? seedHistory(stack, user, c.history) : undefined;
   const t0 = Date.now();
-  const { started, final } = await user.build(c.prompt);
+  const { started, final } = await user.build(c.prompt, threadId ? { threadId } : undefined);
   const secs = Math.round((Date.now() - t0) / 1000);
   const result = { id: c.id, run, secs, prompt: c.prompt };
   if (started.status !== 201 || !final) {
@@ -125,6 +173,7 @@ async function runCase(stack, c, run) {
     must,
     tables,
     missingTable: Boolean(c.needsTable && !tables.length),
+    originalLeft: c.original?.checks?.left,
   };
 }
 
@@ -152,8 +201,9 @@ try {
         r.outOfScope?.length ? `di luar lingkup: ${r.outOfScope.join(', ')}` : '',
         r.must?.some((m) => !m.ok) ? `cek isi gagal: ${r.must.filter((m) => !m.ok).map((m) => `${m.where} ${m.pattern}`).join('; ')}` : '',
         r.missingTable ? 'tidak membuat tabel' : '',
+        r.originalLeft ? `jawaban asli: tersisa ${JSON.stringify(r.originalLeft)}` : '',
       ].filter(Boolean);
-      console.log(`${r.status === 'ok' && !flags.length ? '✓' : '✗'} ${r.id}${repeat > 1 ? ` #${r.run}` : ''} · ${r.status} · ${r.rounds ?? 0} putaran · ditemukan ${sum(r.found)} ${sum(r.found) ? JSON.stringify(r.found) : ''} · ${r.secs ?? 0} dtk · ${(r.inTokens ?? 0) + (r.outTokens ?? 0)} token${flags.length ? `\n    ${flags.join('\n    ')}` : ''}`);
+      console.log(`${r.status === 'ok' && !sum(r.left) && !r.outOfScope?.length && !r.must?.some((m) => !m.ok) && !r.missingTable ? '✓' : '✗'} ${r.id}${repeat > 1 ? ` #${r.run}` : ''} · ${r.status} · ${r.rounds ?? 0} putaran · ditemukan ${sum(r.found)} ${sum(r.found) ? JSON.stringify(r.found) : ''} · ${r.secs ?? 0} dtk · ${(r.inTokens ?? 0) + (r.outTokens ?? 0)} token${flags.length ? `\n    ${flags.join('\n    ')}` : ''}`);
     }
   }));
 } finally {
@@ -175,6 +225,8 @@ const summary = {
   avgRounds: ok.reduce((a, r) => a + r.rounds, 0) / Math.max(1, ok.length),
   avgTokens: Math.round(ok.reduce((a, r) => a + r.inTokens + r.outTokens, 0) / Math.max(1, ok.length)),
   avgSeconds: Math.round(ok.reduce((a, r) => a + r.secs, 0) / Math.max(1, ok.length)),
+  // Kasus nyata yang jawaban aslinya menyisakan masalah, kini selesai tanpa sisa.
+  realCleaned: realDir ? ok.filter((r) => !Object.keys(r.left).length).length : undefined,
 };
 fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify({ summary, results: results.sort((a, b) => a.id.localeCompare(b.id) || a.run - b.run) }, null, 2));
 const line = (label, value) => `  ${label.padEnd(32)}${value}`;
@@ -187,6 +239,7 @@ console.log([
   line('mengubah file di luar lingkup', `${summary.outOfScope} (${pct(summary.outOfScope)})`),
   line('cek isi gagal', `${summary.mustFailed} (${pct(summary.mustFailed)})`),
   line('tidak membuat tabel', String(summary.missingTable)),
+  ...(realDir ? [line('kasus nyata kini tanpa sisa', `${summary.realCleaned}/${summary.cases} (aslinya semua bersisa)`)] : []),
   line('rata-rata', `${summary.avgRounds.toFixed(1)} putaran · ${summary.avgTokens} token · ${summary.avgSeconds} dtk`),
   `Detail: ${path.relative(ROOT, path.join(outDir, 'report.json'))}`,
 ].join('\n'));
