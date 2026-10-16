@@ -15,6 +15,17 @@ export const AI_MODES = {
       'Jelaskan kode di file yang sedang dibuka',
     ],
   },
+  agent: {
+    title: 'Agen mengerjakan & menguji sendiri',
+    intro: 'Agen AI bekerja di sandbox: membaca file, mengubah kode, lalu membuka websitemu untuk menguji hasilnya sebelum selesai. Lebih lama dari Builder, tapi lebih teliti. Kamu tetap bisa cek dulu sebelum menerapkan.',
+    placeholder: 'Minta agen membuat atau memperbaiki sesuatu… (Enter kirim, Shift+Enter baris baru)',
+    suggestions: [
+      'Buat form pendaftaran yang datanya tersimpan',
+      'Tambahkan chatbot untuk menjawab pertanyaan pengunjung',
+      'Kirim notifikasi Telegram setiap ada pesanan baru',
+      'Cek semua halaman dan perbaiki yang error',
+    ],
+  },
   plan: {
     title: 'Rencanakan dulu, bangun kemudian',
     intro: 'Diskusikan idemu dengan AI tanpa mengubah file apa pun. Kalau rencananya sudah pas, jalankan dengan satu klik.',
@@ -36,7 +47,8 @@ export const ai = $state({
   busy: false, // ada job AI yang sedang diikuti editor ini
   jobId: null, // id pesan AI yang sedang berjalan
   threadId: null, // percakapan yang sedang dibuka
-  mode: 'build', // 'build' (Builder) | 'plan' (Plan)
+  mode: 'build', // 'build' (Builder) | 'agent' (Agen) | 'plan' (Plan)
+  engine: '', // mesin mode Agen: 'claude' | 'pi' | 'openhands' (yang tersedia di server: credits.agents)
   images: [], // lampiran prompt berikutnya: [{ full, thumb }] (data URL JPEG)
   applying: false, // sedang Simpan/Batalkan
   input: '',
@@ -55,7 +67,27 @@ let seq = 0;
 export function connect(editor) {
   host = editor;
   setMode(host.storageGet('rakit.aiMode', 'build'));
+  ai.engine = host.storageGet('rakit.aiEngine', '');
 }
+
+// Mesin mode Agen (id dari server, lihat go/internal/ai/agent.go).
+export const AGENT_ENGINES = {
+  claude: { name: 'Claude Agent', hint: 'Claude Agent SDK — teliti, menguji hasilnya sendiri' },
+  pi: { name: 'Pi', hint: 'Pi — ringan dan cepat' },
+  openhands: { name: 'OpenHands', hint: 'OpenHands — paling banyak menguji, paling lama' },
+};
+export const engineName = (id) => AGENT_ENGINES[id]?.name ?? id;
+// Mesin yang dipakai: pilihan pengguna bila masih tersedia, selain itu mesin pertama di server.
+export function currentEngine() {
+  const list = ai.credits?.agents ?? [];
+  return list.some((a) => a.id === ai.engine) ? ai.engine : list[0]?.id ?? '';
+}
+export function setEngine(id) {
+  ai.engine = id;
+  host?.storageSet('rakit.aiEngine', id);
+}
+// Mode yang benar-benar dipakai: Agen hanya bila server punya mesin agen.
+export const activeMode = () => (ai.mode === 'agent' && !currentEngine() ? 'build' : ai.mode);
 
 // Unlimited menghitung prompt, bukan kredit: selama jatah hari ini masih ada, prompt apa pun (dengan gambar pun)
 // cukup memakai 1 dari jatah itu. Setelah habis, kredit biasa yang dipakai.
@@ -65,7 +97,7 @@ export const canAfford = (c, cost) => unlimitedLeft(c) || c.remaining >= cost;
 export const promptCost = () => (ai.images.length && ai.credits?.images ? ai.credits.images.cost : ai.credits?.costPerPrompt ?? 1);
 
 export function setMode(mode) {
-  ai.mode = mode === 'plan' ? 'plan' : 'build';
+  ai.mode = mode === 'plan' || mode === 'agent' ? mode : 'build';
   host?.storageSet('rakit.aiMode', ai.mode);
 }
 
@@ -109,7 +141,7 @@ export function newConversation() {
 }
 
 function renderMessage(m) {
-  if (m.role === 'user') add({ kind: 'user', mode: m.mode, content: m.content, images: m.images, blocks: m.blocks, autoFix: Boolean(m.autoFix) });
+  if (m.role === 'user') add({ kind: 'user', mode: m.mode, engine: m.engine, content: m.content, images: m.images, blocks: m.blocks, autoFix: Boolean(m.autoFix) });
   else if (m.status === 'queued' || m.status === 'running') attachJob(m);
   else if (m.status === 'done') addReply(m);
   else addError(m.error || 'Gagal.');
@@ -222,10 +254,11 @@ export async function send() {
   ai.watch = null;
   cancelAutoFix();
 
-  const mode = ai.mode;
+  const mode = activeMode();
+  const engine = mode === 'agent' ? currentEngine() : '';
   const attached = ai.images.map((i) => ({ full: i.full, thumb: i.thumb }));
   const picked = host.pickedBlocks();
-  add({ kind: 'user', mode, content: prompt, images: attached.map((i) => i.thumb), blocks: picked });
+  add({ kind: 'user', mode, engine, content: prompt, images: attached.map((i) => i.thumb), blocks: picked });
   host.endPick(); // halaman akan berubah; pilih ulang untuk permintaan berikutnya
   ai.images = [];
   ai.input = '';
@@ -236,7 +269,7 @@ export async function send() {
   try {
     await host.saveAll(); // pastikan AI membaca versi terbaru
     started = await host.api('POST', '/api/ai/prompt', {
-      prompt, mode, activePath: host.activePath(), threadId: ai.threadId,
+      prompt, mode, ...(engine ? { engine } : {}), activePath: host.activePath(), threadId: ai.threadId,
       ...(attached.length ? { images: attached.map((i) => i.full), thumbs: attached.map((i) => i.thumb) } : {}),
       ...(picked.length ? { blocks: picked } : {}),
     });

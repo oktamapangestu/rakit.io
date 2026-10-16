@@ -53,6 +53,13 @@ func hostname(r *http.Request) string {
 }
 
 func main() {
+	// `rakit ai-check`: pemeriksaan kode Builder atas dua folder (dipakai scripts/ai-eval, lihat ai/evalcheck.go).
+	if len(os.Args) > 1 && os.Args[1] == "ai-check" {
+		if err := ai.RunCheckCommand(os.Stdin, os.Stdout); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	envFile := flag.String("env-file", "", "file .env yang dibaca bila ada")
 	flag.Parse()
 	if *envFile != "" {
@@ -108,6 +115,36 @@ func main() {
 	editorAI.SecretNames = functions.SecretNames
 	editorAI.AIProviders = functions.AIProviderNames
 	editorAI.FnStatus = functions.AIContext
+	// Mode Agen (internal/ai/agent.go): website project untuk container agen — file dari salinan kerja agen,
+	// /api/db & /api/fn project asli (fungsi dijalankan dari salinan kerja, supaya fungsi baru bisa diuji).
+	editorAI.AgentSite = func(slug, root string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p, err := db.ProjectBySlug(slug)
+			if err != nil || p == nil {
+				http.Error(w, "project tidak ada", http.StatusNotFound)
+				return
+			}
+			path := strings.ToLower(r.URL.Path)
+			switch {
+			case r.URL.Path == sites.ConsolePath:
+				sites.ServeConsole(w, r)
+			case siteapi.Matches(r.URL.Path):
+				siteDB.Serve(w, r, slug)
+			case path == "/api/ai/chat":
+				// Menguji chat asisten dari sandbox akan memotong saldo asisten pemilik.
+				httpx.Fail(w, httpx.Errorf(403, "Chat asisten tidak bisa diuji dari sandbox agen; widget-nya cukup dipasang."))
+			case assistant.MatchesSite(r.URL.Path):
+				helper.ServeSite(w, r, slug)
+			case fn.Matches(r.URL.Path):
+				functions.Serve(w, r, &fn.Target{Project: p, Root: root, DBKey: slug, Dev: true})
+			case path == "/api" || strings.HasPrefix(path, "/api/"):
+				httpx.Fail(w, httpx.Errorf(404, "Endpoint tidak ditemukan"))
+			default:
+				site.ServeTarget(w, r, &sites.Target{Project: p, Dev: true, Root: root, DBKey: slug})
+			}
+		})
+	}
+	wallet.AgentEngines = func() any { return editorAI.AgentEngines() }
 	editorAI.Start()
 	appAPI, err := api.New(cfg, db, sessions, api.Services{
 		Plans: limits, UserDB: projectDB, Versions: history, Credits: wallet,

@@ -120,6 +120,29 @@ func (s *staged) set(c change) {
 	s.items[key] = c
 }
 
+// effectiveChanges: perubahan yang benar-benar mengubah project. File yang ditulis ulang dengan isi sama persis
+// seperti semula, atau dibuat lalu dihapus lagi di jawaban yang sama, tidak diterapkan dan tidak ditampilkan
+// sebagai perubahan.
+func (ws *workspace) effectiveChanges() []change {
+	var out []change
+	for _, c := range ws.st.list() {
+		switch c.Action {
+		case "delete":
+			if !ws.disk[c.Path] {
+				continue
+			}
+		case "write":
+			if ws.disk[c.Path] {
+				if before, err := files.ReadText(ws.root, c.Path); err == nil && before == c.Content {
+					continue
+				}
+			}
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 func (s *staged) list() []change {
 	out := make([]change, 0, len(s.order))
 	for _, key := range s.order {
@@ -715,7 +738,7 @@ func (s *Service) runBuilder(messages []message, ws *workspace, h hooks) (*build
 	}
 	out.images = images
 	out.message = stripClaims(planMessage(text))
-	out.changes = ws.st.list()
+	out.changes = ws.effectiveChanges()
 	return out, nil
 }
 

@@ -273,6 +273,16 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, sub string) {
 		}
 		return
 	}
+	h.ServeTarget(w, r, target)
+}
+
+// ServeTarget menyajikan file website dari target.Root — juga dipakai mode Agen untuk menyajikan salinan kerja agen.
+func (h *Handler) ServeTarget(w http.ResponseWriter, r *http.Request, target *Target) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
 	if target.Dev {
 		// Versi dev (draft) jangan sampai diindeks mesin pencari.
 		w.Header().Set("X-Robots-Tag", "noindex")

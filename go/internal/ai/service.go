@@ -73,6 +73,13 @@ type Service struct {
 	AIProviders func(slug string) []string
 	// FnStatus: jadwal fungsi dan eksekusi gagal terbaru (error + console), dari paket fn.
 	FnStatus func(slug string) (schedules, failures []string)
+	// AgentSite: website project untuk container mode Agen — file dari root (salinan kerja agen), /api/db &
+	// /api/fn project asli (lihat agent.go). Dipasang di main.go.
+	AgentSite func(slug, root string) http.Handler
+
+	// Mode Agen: mesin yang siap (checkAgentEngines) dan giliran container.
+	agentReady []string
+	agentSlots chan struct{}
 
 	mu      sync.Mutex
 	jobs    map[int64]*job // id pesan AI -> job
@@ -90,12 +97,24 @@ func New(cfg *config.Config, db *store.Store, c *credits.Service, p *plans.Plans
 		jobs:        map[int64]*job{},
 		running:     map[int64]bool{},
 		explaining:  map[int64]bool{},
+		agentSlots:  make(chan struct{}, cfg.AI.Agent.MaxConcurrent),
+	}
+	// AI_BUILD_PROMPT_APPEND: file yang isinya ditambahkan ke prompt Builder — untuk eksperimen evaluasi
+	// (scripts/ai-eval/run.mjs --skill menambahkan skills/rakit/SKILL.md), bukan pengaturan produksi.
+	if path := os.Getenv("AI_BUILD_PROMPT_APPEND"); path != "" {
+		extra, err := os.ReadFile(path)
+		if err != nil {
+			log.Printf("AI_BUILD_PROMPT_APPEND: %v", err)
+		} else {
+			s.buildPrompt += "\n\n" + string(extra)
+		}
 	}
 	return s
 }
 
 // Start: pemulihan setelah restart dan pembersihan berkala. Dipanggil sekali saat server menyala.
 func (s *Service) Start() {
+	s.checkAgentEngines()
 	// Job yang terputus karena server mati/restart: tandai gagal dan kembalikan kreditnya.
 	rows, err := s.db.Query("SELECT id, user_id, credit FROM ai_messages WHERE role = 'assistant' AND status IN ('queued', 'running')")
 	if err != nil {
@@ -194,6 +213,7 @@ type attachments struct {
 	Thumbs      []string   `json:"thumbs"`
 	Description *string    `json:"description"`
 	Blocks      []blockRef `json:"blocks,omitempty"`  // blok halaman yang dipilih untuk diubah
+	Engine      string     `json:"engine,omitempty"`  // mesin mode Agen (lihat agent.go)
 	AutoFix     int64      `json:"autoFix,omitempty"` // perbaikan otomatis gratis untuk jawaban ini (lihat checkAutoFix)
 }
 
@@ -251,12 +271,14 @@ func publicMessage(m *messageRow) map[string]any {
 	images := []string{}
 	var refs []blockRef
 	var autoFix int64
+	engine := ""
 	if a := parseAttachments(m.Attachments); a != nil {
 		if a.Thumbs != nil {
 			images = a.Thumbs
 		}
 		refs = a.Blocks
 		autoFix = a.AutoFix
+		engine = a.Engine
 	}
 	out := map[string]any{
 		"id": m.ID, "threadId": m.ThreadID, "role": m.Role, "mode": m.Mode, "content": m.Content, "status": m.Status,
@@ -268,6 +290,9 @@ func publicMessage(m *messageRow) map[string]any {
 	}
 	if autoFix != 0 {
 		out["autoFix"] = autoFix // hanya permintaan perbaikan otomatis
+	}
+	if engine != "" {
+		out["engine"] = engine // mesin mode Agen
 	}
 	return out
 }
@@ -462,8 +487,10 @@ func changesNote(note string) string {
 // ---------- Konteks proyek ----------
 
 // projectContext: isi project untuk AI. priority (halaman & CSS/JS blok terpilih) didahulukan, lalu file
-// yang sedang dibuka, lalu yang kecil-kecil — yang tidak muat di batas konteks dilewati.
-func (s *Service) projectContext(ctx context.Context, slug, activePath string, priority []string) (string, error) {
+// yang sedang dibuka, lalu yang kecil-kecil — yang tidak muat di batas konteks dilewati. withContents = false:
+// tanpa isi file (mode Agen, yang membaca file sendiri — lihat agentsmd.go).
+func (s *Service) projectContext(ctx context.Context, slug, activePath string, priority []string, withContents ...bool) (string, error) {
+	contents := len(withContents) == 0 || withContents[0]
 	schema, err := s.userdb.SchemaSummary(ctx, slug)
 	if err != nil {
 		return "", err
@@ -504,6 +531,9 @@ func (s *Service) projectContext(ctx context.Context, slug, activePath string, p
 	var parts, skipped, tree []string
 	for _, f := range texts {
 		tree = append(tree, "- "+f.Path)
+		if !contents {
+			continue
+		}
 		if f.Size > budget {
 			skipped = append(skipped, f.Path)
 			continue
@@ -748,6 +778,7 @@ type jobInput struct {
 	messageID, userMessageID int64
 	threadID                 int64
 	prompt, mode, activePath string
+	engine                   string // mode Agen: claude | pi | openhands
 	reservation              *credits.Reservation
 	images, thumbs           []string
 	blocks                   []blocks.Block
@@ -813,7 +844,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 			if description == "" {
 				return &failure{"bad_output", "AI gagal membaca gambar. Coba lagi. Kredit dikembalikan."}
 			}
-			raw, _ := marshal(attachments{Thumbs: in.thumbs, Description: &description, Blocks: blockRefs(in.blocks)})
+			raw, _ := marshal(attachments{Thumbs: in.thumbs, Description: &description, Blocks: blockRefs(in.blocks), Engine: in.engine})
 			s.db.Exec("UPDATE ai_messages SET attachments = ? WHERE id = ?", string(raw), in.userMessageID)
 			ask = in.prompt + "\n\n" + imageNote(description)
 		}
@@ -822,21 +853,24 @@ func (s *Service) runJob(j *job, in jobInput) {
 			s.findBlockCode(slug, in.blocks)
 			ask += "\n\n" + blocks.Instructions(in.blocks)
 		}
-		projectContext, err := s.projectContext(j.ctx, slug, in.activePath, blocks.Related(in.blocks))
-		if err != nil {
-			return err
-		}
 		history, err := s.threadHistory(in.threadID, in.userMessageID)
 		if err != nil {
 			return err
 		}
-		// Riwayat bisa berakhir dengan pesan user; gabungkan agar role tetap bergantian.
+		// Riwayat bisa berakhir dengan pesan user; gabungkan agar role tetap bergantian. Mode Agen tidak memakai
+		// konteks berisi isi file: agen membaca sendiri file di salinan kerjanya.
 		var merged []message
-		for _, m := range append(history, message{"role": "user", "content": projectContext + "\n\n---\n\nRequest:\n" + ask}) {
-			if n := len(merged); n > 0 && merged[n-1]["role"] == m["role"] {
-				merged[n-1]["content"] = merged[n-1]["content"].(string) + "\n\n" + m["content"].(string)
-			} else {
-				merged = append(merged, m)
+		if in.mode != "agent" {
+			projectContext, err := s.projectContext(j.ctx, slug, in.activePath, blocks.Related(in.blocks))
+			if err != nil {
+				return err
+			}
+			for _, m := range append(history, message{"role": "user", "content": projectContext + "\n\n---\n\nRequest:\n" + ask}) {
+				if n := len(merged); n > 0 && merged[n-1]["role"] == m["role"] {
+					merged[n-1]["content"] = merged[n-1]["content"].(string) + "\n\n" + m["content"].(string)
+				} else {
+					merged = append(merged, m)
+				}
 			}
 		}
 
@@ -880,7 +914,23 @@ func (s *Service) runJob(j *job, in jobInput) {
 
 		var text string
 		var changes []change
-		if in.mode == "plan" {
+		var agentRes *agentResult // mode Agen: tabel yang sudah dibuat agen, untuk snapshot & pembatalan
+		if in.mode == "agent" {
+			result, err := s.runAgent(j.ctx, in, ask, history, h, act)
+			if err != nil {
+				return err
+			}
+			agentRes = result
+			inTokens += result.inTokens
+			outTokens += result.outTok
+			text, changes = result.message, result.changes
+			if note := imagesNote(result.images); note != "" {
+				text = strings.TrimSpace(text + "\n\n" + note)
+			}
+			if raw, err := json.Marshal(result.stats); err == nil {
+				checks = string(raw)
+			}
+		} else if in.mode == "plan" {
 			r, err := s.callAI(request{task: task, messages: convo}, h)
 			if err != nil {
 				return err
@@ -918,6 +968,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 			}
 			ws := newWorkspace(s.cfg.SiteRoot(slug), existing)
 			ws.columns = columns
+			ws.request = in.prompt
 			result, err := s.runBuilder(convo, ws, h)
 			if err != nil {
 				return err
@@ -948,11 +999,22 @@ func (s *Service) runJob(j *job, in jobInput) {
 		if len(changes) > 0 {
 			s.versions.BeforeAI(in.project, in.user.ID, "Sebelum AI: "+in.prompt)
 			// Penerapan tidak ikut dibatalkan oleh Stop: sudah bukan bagian menunggu AI.
-			snap, err := s.applyChanges(context.Background(), slug, changes)
+			apply := changes
+			if agentRes != nil {
+				// Tabel mode Agen sudah dibuat selama agen bekerja; yang diterapkan tinggal file-nya.
+				apply = slices.DeleteFunc(slices.Clone(changes), func(c change) bool { return c.Action == "table" })
+			}
+			snap, err := s.applyChanges(context.Background(), slug, apply)
 			if err != nil {
+				if agentRes != nil {
+					agentRes.tools.revert()
+				}
 				applyState = "failed"
 				applyError = "Gagal menerapkan perubahan: " + err.Error() + ". File dikembalikan seperti semula."
 			} else {
+				if agentRes != nil {
+					snap.Tables = append(slices.Clone(agentRes.tables), snap.Tables...)
+				}
 				raw, _ := marshal(snap)
 				applyState, snapJSON = "pending", string(raw)
 				touched = touchedPaths(changes)
@@ -1014,6 +1076,9 @@ func (s *Service) runJob(j *job, in jobInput) {
 	detail := excerpt(in.prompt)
 	if n := len(in.images); n > 0 {
 		detail = fmt.Sprintf("[%d gambar] %s", n, detail)
+	}
+	if in.engine != "" {
+		detail = "[" + in.engine + "] " + detail
 	}
 	s.logRequest(in.user.ID, in.project.ID, in.mode, detail, usedModel, status, inTokens, outTokens, checks)
 	j.finish() // tanda selesai untuk stream yang tersambung

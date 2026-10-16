@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -72,6 +73,24 @@ type AI struct {
 	CompleteDailyLimit int
 	// Baca Alur Kode (internal/ai/explain.go): gratis, dibatasi permintaan per akun per hari (0 = fitur mati).
 	ExplainDailyLimit int
+	Agent             Agent
+}
+
+// Agent: mode Agen di editor (internal/ai/agent.go) — Claude Agent SDK, Pi, atau OpenHands mengerjakan prompt di
+// container Docker (image deploy/agent, dibangun deploy/agent/build.sh).
+type Agent struct {
+	Engines       []string      // mesin yang aktif (AI_AGENT_ENGINES, mis. "claude,pi,openhands"); kosong = mode Agen mati
+	Docker        string        // perintah docker
+	ImagePrefix   string        // image = prefix + mesin, mis. rakit-agent-claude
+	MaxTokens     int           // batas token (input+output) per prompt; lewat batas, AI dihentikan
+	Timeout       time.Duration // batas waktu satu prompt
+	MaxConcurrent int           // container agen yang boleh berjalan bersamaan (sisanya menunggu giliran)
+	Memory, CPUs  string        // batas sumber daya per container
+	// Transport layanan host ke container: "unix" (unix socket, container tanpa jaringan — untuk server Linux)
+	// atau "tcp" (127.0.0.1 + host.docker.internal; untuk pengembangan di Docker Desktop, tanpa isolasi jaringan).
+	Transport string
+	// Command: pengganti docker untuk test (dijalankan lewat sh -c dengan env yang sama, path host).
+	Command string
 }
 
 type CreditPackage struct {
@@ -157,6 +176,22 @@ func (c *Config) loadServices() {
 		CompleteDailyLimit:  max(0, envIntOr("AI_COMPLETE_DAILY_LIMIT", 500)),
 		ExplainDailyLimit:   max(0, envIntOr("AI_EXPLAIN_DAILY_LIMIT", 30)),
 		MaxImages:           3,
+	}
+	c.AI.Agent = Agent{
+		Docker:        envOr("AI_AGENT_DOCKER", "docker"),
+		ImagePrefix:   envOr("AI_AGENT_IMAGE_PREFIX", "rakit-agent-"),
+		MaxTokens:     max(10000, envIntOr("AI_AGENT_MAX_TOKENS", 1500000)),
+		Timeout:       time.Duration(max(60, envInt("AI_AGENT_TIMEOUT_S", 900))) * time.Second,
+		MaxConcurrent: max(1, envInt("AI_AGENT_MAX_CONCURRENT", 2)),
+		Memory:        envOr("AI_AGENT_MEMORY", "1536m"),
+		CPUs:          envOr("AI_AGENT_CPUS", "1"),
+		Transport:     envOr("AI_AGENT_TRANSPORT", "unix"),
+		Command:       os.Getenv("AI_AGENT_CMD"),
+	}
+	for _, e := range strings.Split(os.Getenv("AI_AGENT_ENGINES"), ",") {
+		if e = strings.TrimSpace(strings.ToLower(e)); e != "" && !slices.Contains(c.AI.Agent.Engines, e) {
+			c.AI.Agent.Engines = append(c.AI.Agent.Engines, e)
+		}
 	}
 	c.AI.Enabled = c.AI.APIKey != "" && c.AI.BaseURL != ""
 

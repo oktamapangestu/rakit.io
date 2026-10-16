@@ -1,0 +1,24 @@
+# Image mesin agen OpenHands SDK: OpenHands + Node + Chromium untuk cek-halaman.
+# Dipakai mode Agen di editor (go/internal/ai/agent.go) dan evaluasi (scripts/ai-eval/sandbox-engines.mjs).
+# Dibangun dengan deploy/agent/build.sh (juga otomatis oleh `npm run ai:eval -- --engine openhands`); versi dikunci.
+# Konteks build: deploy/agent (docker build -f Dockerfile.openhands).
+FROM node:24.11.1-bookworm-slim AS node
+
+FROM python:3.12.12-slim-bookworm
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends bash ca-certificates curl git ripgrep \
+ && npm install -g --ignore-scripts playwright@1.56.1 \
+ && playwright install --with-deps chromium \
+ && pip install --no-cache-dir openhands-sdk==1.50.1 openhands-tools==1.50.1 \
+ && rm -rf /var/lib/apt/lists/* /root/.npm
+
+# LITELLM_LOCAL_MODEL_COST_MAP: LiteLLM tidak mengunduh daftar harga model saat start (container tanpa jaringan).
+ENV NODE_PATH=/usr/local/lib/node_modules PYTHONUNBUFFERED=1 LITELLM_LOCAL_MODEL_COST_MAP=True
+COPY openhands_driver.py cek-halaman.cjs proxy.cjs entrypoint.sh /opt/rakit/
+RUN chmod +x /opt/rakit/cek-halaman.cjs /opt/rakit/entrypoint.sh \
+ && ln -s /opt/rakit/cek-halaman.cjs /usr/local/bin/cek-halaman
+WORKDIR /workspace
+ENTRYPOINT ["/opt/rakit/entrypoint.sh"]

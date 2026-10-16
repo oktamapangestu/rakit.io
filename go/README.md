@@ -81,6 +81,10 @@ Catatan:
   dari file tapi masih dipakai file lain dilaporkan di pemeriksaan akhir; `write_file` yang membuat file jauh lebih
   pendek diberi catatan (jenis `loss` dan `shrink` di statistik). `read_file` dengan `original: true` membaca isi
   file sebelum jawaban ini, untuk mengembalikan bagian yang terhapus.
+- **Pemeriksaan maksud** (`internal/ai/intentcheck.go`, jenis `form` & `chatbot`): form isian pengunjung yang datanya
+  tidak disimpan/dikirim ke mana pun, dan permintaan chatbot pengunjung yang tidak memakai widget asisten (atau masih
+  menyisakan chat buatan sendiri). Keduanya terbukti sering dilewatkan model walau aturannya tertulis di prompt.
+  Perubahan tanpa efek (isi sama seperti semula, file yang dibuat lalu dihapus lagi) tidak diterapkan.
 - **Evaluasi AI** (`scripts/ai-eval/`): `npm run ai:eval -- --only id,id --model nama` menjalankan kasus tetap di
   `cases.mjs` dengan provider sungguhan dari `.env` (memakai biaya provider), hasil di `data/ai-eval/<waktu>/`.
   Kasus boleh membawa riwayat percakapan (`history`, langsung dimasukkan ke database). Kegagalan sungguhan:
@@ -88,6 +92,19 @@ Catatan:
   masalah (`ai_requests.checks.left`) beserta isi project sebelum AI bekerja (riwayat versi), riwayat percakapan, dan
   struktur database tanpa isi baris, ke `data/ai-eval/real/`; jalankan dengan `npm run ai:eval -- --real`. Isinya
   data pengguna: jangan dibagikan atau di-commit.
+  `--engine pi`, `openhands`, atau `claude` (dipisah koma untuk membandingkan, mis. `builder,pi,openhands,claude`)
+  mengerjakan kasus yang sama dengan [Pi](https://pi.dev) (mode RPC), [OpenHands SDK](https://docs.openhands.dev/sdk),
+  atau [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) (lewat endpoint Anthropic-compatible
+  provider) di container Docker (`deploy/agent/`, perlu Docker): tool bawaan mesinnya termasuk shell,
+  `create_table` dengan skema Builder, dan uji halaman dengan Chromium (`cek-halaman`). Hasilnya dinilai dengan
+  pemeriksaan akhir Builder yang sama lewat `rakit ai-check` (`internal/ai/evalcheck.go`), dan masalahnya dikirim
+  balik ke mesin seperti di Builder. `--agents-md` menaruh aturan rakit di `AGENTS.md` ([agents.md](https://agents.md))
+  di root project, dimuat mesinnya sendiri, sebagai ganti tambahan prompt sistem. `--skill` memasang skill rakit
+  (`skills/rakit/SKILL.md`, format Agent Skills: semua detail teknis platform) di mesin sandbox; Builder tidak punya
+  sistem skill, jadi isinya ditambahkan ke prompt Builder lewat `AI_BUILD_PROMPT_APPEND` (khusus eksperimen).
+  `node scripts/ai-eval/compare.mjs
+  <run> <run>…` menggabungkan beberapa run.
+  Hanya untuk evaluasi, belum dipakai di produksi.
 - **Konversi nilai** di `internal/jsconv` dan `internal/userdb` meniru JavaScript (`Number()`, `parseInt`,
   `Date.parse`); `go test ./...` membandingkannya dengan jawaban Node yang direkam di `testdata/js.json`.
 - **Statistik antrean AI** di dashboard owner kini angka asli (antrean ada di server Go).
@@ -114,6 +131,30 @@ Catatan:
   tidak tampil dan `/api/forgot-password` menjawab 503. Link berlaku 1 jam, sekali pakai, maks. 3 per akun per jam
   (`password_resets`); dipakai = semua sesi lama keluar. Email dikirim di latar (jawaban API sama, ada akunnya atau
   tidak), jadi kegagalan kirim hanya tercatat di log — pakai tombol "Kirim tes" di dashboard untuk memeriksa pengaturan.
+
+## Mode Agen
+
+Selain Builder dan Plan, editor punya mode **Agen** (`internal/ai/agent.go`): prompt dikerjakan Claude Agent SDK,
+Pi, atau OpenHands di container Docker, untuk semua akun, 1 kredit per prompt seperti Builder. Hasilnya lewat jalur
+Builder (perubahan diterapkan dengan snapshot, Simpan/Batalkan, statistik `ai_requests` dengan action `agent`).
+
+- **Sandbox:** salinan kerja project + `AGENTS.md` (aturan prompt Builder + keadaan project, `agentsmd.go`) di-mount
+  ke container. Container tanpa jaringan (`--network none`, `--cap-drop ALL`, batas memori/CPU/proses); tiga layanan
+  host dibuka lewat unix socket dan dipetakan `deploy/agent/proxy.cjs` ke 127.0.0.1 di dalam container:
+  website salinan kerja beserta `/api/db` & `/api/fn` project asli (`AgentSite` di `main.go`; chat asisten diblokir
+  supaya saldo pemilik tidak terpakai), proxy AI (`agentproxy.go`: kunci provider tidak masuk container, model
+  dipaksa ke model Builder, `max_tokens` dibatasi, token dihitung, batas `AI_AGENT_MAX_TOKENS` per prompt), dan
+  `create_table` (tabel langsung dibuat supaya bisa diuji; snapshot-nya ikut Batalkan).
+- **Pemeriksaan:** setiap kali agen selesai, `finalProblems` Builder dijalankan atas selisih file dan masalahnya
+  dikirim balik (maks. 3 kali). File selain .html/.css/.js yang dibuat agen diabaikan dan disebut di jawaban.
+- **Deploy:** `deploy/agent/build.sh` (butuh Docker, ±6 GB untuk tiga image), lalu `AI_AGENT_ENGINES=claude,pi,openhands`
+  di `.env` dan restart. Server mencatat di log mesin mana yang aktif; mesin tanpa image tidak ditampilkan. Mesin
+  Claude memakai format Anthropic Messages (`<AI_BASE_URL>/messages`), jadi provider harus mendukungnya; Pi &
+  OpenHands memakai Chat Completions seperti Builder.
+- **Pengembangan di macOS:** Docker Desktop tidak bisa membagi unix socket ke container — pakai
+  `AI_AGENT_TRANSPORT=tcp` (tanpa isolasi jaringan, jangan untuk produksi).
+- **Test:** `tests/agent.test.mjs` memakai mesin tiruan (`AI_AGENT_CMD`, `tests/helpers/fake-agent.mjs`) tanpa Docker;
+  evaluasi dengan mesin sungguhan: `npm run ai:eval -- --engine agent:claude,agent:pi,agent:openhands`.
 
 ## Deploy tahap ini
 

@@ -48,6 +48,7 @@ type workspace struct {
 	disk    map[string]bool // semua file di disk (teks & gambar), path relatif
 	tables  []string
 	columns map[string][]string // kolom tabel di database (lihat knownColumns); nil = tidak diketahui
+	request string              // permintaan pengguna (untuk pemeriksaan maksud, lihat intentcheck.go)
 	st      *staged
 }
 
@@ -450,7 +451,14 @@ func (ws *workspace) alpineProblems(page string, info pageInfo) []problem {
 
 // ---------- Pemeriksaan akhir ----------
 
-var fnCallRE = regexp.MustCompile(`/api/fn/([a-z0-9_-]+)`)
+var fnCallRE = regexp.MustCompile(`/api/fn/([A-Za-z0-9_-]+)`)
+
+// fnNameRE: nama fungsi serverless yang sah (sama dengan nama file functions/<nama>.js). camelRE: untuk menyarankan
+// nama yang sah dari nama camelCase (kirimPesanan → kirim-pesanan).
+var (
+	fnNameRE = regexp.MustCompile(`^[a-z0-9_-]{1,40}$`)
+	camelRE  = regexp.MustCompile(`([a-z0-9])([A-Z])`)
+)
 
 // finalProblems: masalah di file yang ditulis Builder (per path), setelah semua perubahannya dicatat.
 // images: gambar yang dirujuk tapi belum ada (untuk ringkasan, bukan untuk diperbaiki model).
@@ -488,8 +496,12 @@ func (ws *workspace) finalProblems() (byFile map[string][]problem, images []stri
 			add(c.Path, problem{"api", p})
 		}
 		for _, m := range fnCallRE.FindAllStringSubmatch(c.Content, -1) {
-			if !ws.exists("functions/" + m[1] + ".js") {
-				add(c.Path, problem{"fn", fmt.Sprintf(`memanggil /api/fn/%s, tapi functions/%s.js tidak ada`, m[1], m[1])})
+			switch {
+			case !fnNameRE.MatchString(m[1]):
+				name := strings.ToLower(camelRE.ReplaceAllString(m[1], "$1-$2"))
+				add(c.Path, problem{"fn", fmt.Sprintf(`memanggil /api/fn/%s, tapi nama fungsi harus huruf kecil, angka, - atau _ — pakai mis. /api/fn/%s dan tulis functions/%s.js dengan write_file`, m[1], name, name)})
+			case !ws.exists("functions/" + m[1] + ".js"):
+				add(c.Path, problem{"fn", fmt.Sprintf(`memanggil /api/fn/%s, tapi functions/%s.js tidak ada — tulis fungsinya dengan write_file (path "functions/%s.js"), file .js biasa yang bisa kamu buat sendiri`, m[1], m[1], m[1])})
 			}
 		}
 		add(c.Path, bodyColumnProblems(c.Content, columns)...)
@@ -501,6 +513,7 @@ func (ws *workspace) finalProblems() (byFile map[string][]problem, images []stri
 			add(c.Path, missing...)
 			add(c.Path, ws.alpineProblems(c.Path, info)...)
 			add(c.Path, loopColumnProblems(c.Content, ws.pageCode(c.Path, c.Content, info), columns)...)
+			add(c.Path, ws.unsavedForms(c.Path, c.Content, original)...)
 			addImages(imgs)
 		case strings.HasSuffix(lower, ".css"):
 			addImages(ws.cssImages(c.Path, c.Content))
@@ -527,6 +540,9 @@ func (ws *workspace) finalProblems() (byFile map[string][]problem, images []stri
 	}
 	for file, list := range ws.lostDefinitions() {
 		add(file, list...)
+	}
+	if page, list := ws.chatbotProblems(); len(list) > 0 {
+		add(page, list...)
 	}
 	for k, v := range byFile {
 		if len(v) == 0 {

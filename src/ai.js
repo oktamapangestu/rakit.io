@@ -148,7 +148,7 @@ const TOOLS = [
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Path relative to the site root, e.g. "index.html" or "js/app.js". Only .html, .css and .js.' },
+          path: { type: 'string', description: 'Path relative to the site root, e.g. "index.html" or "js/app.js". Only .html, .css and .js. Serverless functions are .js files too: functions/<name>.js (name in lowercase letters, digits, - or _, e.g. "functions/kirim-pesanan.js").' },
           content: { type: 'string', description: 'The complete file content.' },
         },
         required: ['path', 'content'],

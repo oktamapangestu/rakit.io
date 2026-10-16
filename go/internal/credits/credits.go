@@ -32,6 +32,7 @@ type Service struct {
 	AddAssistantBalance func(q store.Q, userID int64, rupiah int) error
 	VisionEnabled       func() bool
 	AIEnabled           func() bool // ada provider AI (.env atau dashboard); nil = menurut .env
+	AgentEngines        func() any  // mesin mode Agen yang aktif; kosong = mode Agen tidak ditampilkan
 }
 
 func New(cfg *config.Config, db *store.Store, p *plans.Plans) *Service {
@@ -103,6 +104,7 @@ type Info struct {
 	Images         *ImageInfo `json:"images"`   // lampiran gambar di prompt (null = tidak tersedia)
 	ResetsAt       string     `json:"resetsAt"` // jatah gratis terisi lagi 00.00 WIB
 	Plan           *PlanInfo  `json:"plan"`
+	Agents         any        `json:"agents,omitempty"` // mesin mode Agen yang aktif (lihat ai.AgentEngines)
 }
 
 func (s *Service) Info(userID int64) *Info {
@@ -125,6 +127,9 @@ func (s *Service) Info(userID int64) *Info {
 	}
 	if s.VisionEnabled != nil && s.VisionEnabled() {
 		info.Images = &ImageInfo{Cost: s.cfg.AI.ImagePromptCredits, Max: s.cfg.AI.MaxImages}
+	}
+	if s.AgentEngines != nil {
+		info.Agents = s.AgentEngines()
 	}
 	planRemaining := 0
 	if plan := s.plans.Active(userID); plan != nil {

@@ -151,8 +151,17 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 	}
 	prompt := strings.TrimSpace(jsconv.String(body["prompt"]))
 	mode := "build"
-	if body["mode"] == "plan" {
+	engine := ""
+	switch body["mode"] {
+	case "plan":
 		mode = "plan"
+	case "agent":
+		// Mode Agen (agent.go): mesin harus aktif di server.
+		mode = "agent"
+		engine, _ = body["engine"].(string)
+		if !s.agentAvailable(engine) {
+			return nil, httpx.Errorf(400, "Mesin agen tidak tersedia. Pilih mesin lain atau pakai Builder.")
+		}
 	}
 	// Perbaikan otomatis error preview (gratis, lihat checkAutoFix): permintaannya disusun server dari daftar error.
 	var autoFix int64
@@ -162,7 +171,7 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 		if prompt, err = autoFixPrompt(body["errors"]); err != nil {
 			return nil, err
 		}
-		mode = "build"
+		mode, engine = "build", ""
 	}
 	if prompt == "" {
 		return nil, httpx.Errorf(400, "Prompt tidak boleh kosong")
@@ -293,14 +302,18 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 	if err != nil {
 		return fail(err)
 	}
-	if len(images) > 0 || len(picked) > 0 || autoFix != 0 {
-		raw, _ := marshal(attachments{Thumbs: thumbs, Blocks: blockRefs(picked), AutoFix: autoFix})
+	if len(images) > 0 || len(picked) > 0 || autoFix != 0 || engine != "" {
+		raw, _ := marshal(attachments{Thumbs: thumbs, Blocks: blockRefs(picked), AutoFix: autoFix, Engine: engine})
 		s.db.Exec("UPDATE ai_messages SET attachments = ? WHERE id = ?", string(raw), userMessageID)
 	}
 	credit, _ := json.Marshal(reservation)
 	messageID, err := s.insertMessage(threadID, user.ID, "assistant", mode, "", "queued", string(credit))
 	if err != nil {
 		return fail(err)
+	}
+	if engine != "" {
+		raw, _ := marshal(attachments{Thumbs: []string{}, Engine: engine})
+		s.db.Exec("UPDATE ai_messages SET attachments = ? WHERE id = ?", string(raw), messageID)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -311,7 +324,7 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 	started = true
 	go s.runJob(j, jobInput{
 		user: user, project: project, messageID: messageID, userMessageID: userMessageID, threadID: threadID,
-		prompt: prompt, mode: mode, activePath: activePath, reservation: reservation, images: images, thumbs: thumbs,
+		prompt: prompt, mode: mode, engine: engine, activePath: activePath, reservation: reservation, images: images, thumbs: thumbs,
 		blocks: picked,
 	})
 
@@ -378,7 +391,7 @@ func (s *Service) checkAutoFix(userID, threadID, target int64) error {
 	if m != nil && m.Changes.Valid {
 		json.Unmarshal([]byte(m.Changes.String), &changes)
 	}
-	if m == nil || m.ThreadID != threadID || m.Role != "assistant" || m.Mode != "build" || m.Status != "done" ||
+	if m == nil || m.ThreadID != threadID || m.Role != "assistant" || (m.Mode != "build" && m.Mode != "agent") || m.Status != "done" ||
 		len(changes) == 0 || (m.ApplyState.String != "pending" && m.ApplyState.String != "kept") ||
 		time.Since(time.UnixMilli(m.CreatedAt)) > autoFixWindow {
 		return unavailable

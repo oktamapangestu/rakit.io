@@ -1,11 +1,11 @@
 <!--
   Kotak prompt: blok pilihan dari preview (#aiBlocks, diisi renderBlocks di editor.js), lampiran gambar (pilih, tempel,
-  atau seret), mode Builder/Plan, dan kirim. Banner muncul saat kredit habis.
+  atau seret), mode Builder/Agen/Plan (Agen: pilihan mesin, bila server punya), dan kirim. Banner muncul saat kredit habis.
 -->
 <script>
   import { getContext } from 'svelte';
   import Icon from '../Icon.svelte';
-  import { ai, AI_MODES, canAfford, promptCost, setMode, send, addImages, removeImage } from './state.svelte.js';
+  import { ai, AI_MODES, AGENT_ENGINES, activeMode, currentEngine, setEngine, canAfford, promptCost, setMode, send, addImages, removeImage } from './state.svelte.js';
   import { preview, pageName } from '../preview/state.svelte.js';
 
   const { openTopup, autoFocus, icons, pickParent, pickRemove } = getContext('editor');
@@ -17,7 +17,8 @@
   const canSend = $derived(Boolean(c?.enabled) && canAfford(c, promptCost()) && !ai.busy && !ai.applying);
   const placeholder = $derived(blocks.length
     ? 'Mau blok ini diubah jadi seperti apa? Mis. buat lebih modern dengan warna gelap'
-    : AI_MODES[ai.mode].placeholder);
+    : AI_MODES[activeMode()].placeholder);
+  const agents = $derived(c?.agents ?? []);
 
   // Kotak prompt membesar mengikuti isinya (maks. 200 px), juga saat diisi dari luar (mis. tombol "Tanya AI").
   let input;
@@ -80,9 +81,16 @@
     <div class="ai-mode" role="radiogroup" aria-label="Mode AI">
       <button type="button" role="radio" data-ai-mode="build" aria-checked={String(ai.mode === 'build')} title="AI langsung menulis dan mengubah file"
         onclick={() => { setMode('build'); autoFocus(input); }}><svg viewBox="0 0 16 16"><path d="M9.8 1.2a3.8 3.8 0 0 0-4.6 4.9L1 10.3a1.7 1.7 0 0 0 2.4 2.4l4.2-4.2a3.8 3.8 0 0 0 4.9-4.6l-2 2-1.8-.3-.3-1.8zM2.3 11.6l4.5-4.5.1.1.4.4-4.5 4.5a.4.4 0 0 1-.5-.5"/></svg>Builder</button>
+      {#if agents.length}<button type="button" role="radio" data-ai-mode="agent" aria-checked={String(activeMode() === 'agent')} title="Agen AI mengerjakan di sandbox lalu menguji hasilnya sendiri (lebih lama, lebih teliti)"
+        onclick={() => { setMode('agent'); autoFocus(input); }}><svg viewBox="0 0 16 16"><path d="M8 1a1 1 0 0 1 1 1v1h2.5A2.5 2.5 0 0 1 14 5.5v5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 2 10.5v-5A2.5 2.5 0 0 1 4.5 3H7V2a1 1 0 0 1 1-1M4.5 4.5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1zM6 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2m4 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2M0 7h1v3H0zm15 0h1v3h-1z"/></svg>Agen</button>{/if}
       <button type="button" role="radio" data-ai-mode="plan" aria-checked={String(ai.mode === 'plan')} title="Diskusi & susun rencana, tanpa mengubah file"
         onclick={() => { setMode('plan'); autoFocus(input); }}><svg viewBox="0 0 16 16"><path d="M2 3h1.5v1.5H2zm3 .25h9v1H5zM2 7.25h1.5v1.5H2zm3 .25h9v1H5zM2 11.5h1.5V13H2zm3 .25h9v1H5z"/></svg>Plan</button>
     </div>
+    {#if activeMode() === 'agent'}
+      <select class="ai-engine" aria-label="Mesin agen" title={AGENT_ENGINES[currentEngine()]?.hint ?? ''} value={currentEngine()} onchange={(e) => setEngine(e.currentTarget.value)}>
+        {#each agents as a (a.id)}<option value={a.id} title={AGENT_ENGINES[a.id]?.hint ?? ''}>{AGENT_ENGINES[a.id]?.name ?? a.name}</option>{/each}
+      </select>
+    {/if}
     <button type="button" class="ai-attach" id="aiAttach" title="Lampirkan gambar: desain, sketsa, atau screenshot error (bisa juga tempel/seret)" hidden={!c?.enabled || !c.images} onclick={pick}>
       <svg viewBox="0 0 16 16"><path d="M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 2zM2 3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v7.3l-3-3-2.5 2.5-3-3L2 11.8zM10.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3"/></svg>
       <span>Gambar</span>

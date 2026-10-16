@@ -4,7 +4,17 @@
 // perubahan prompt atau model dengan angka. Memakai kredit/biaya provider sungguhan.
 //
 //   npm run ai:eval -- [--only id,id] [--model nama] [--parallel 3] [--repeat 1] [--out folder] [--real [folder]]
+//                      [--engine builder|pi|openhands|claude|agent:claude|agent:pi|agent:openhands|…] [--agents-md] [--skill]
 //   (sama dengan: npm run build:go && node scripts/ai-eval/run.mjs …)
+//
+// --engine: mesin yang mengerjakan kasus. builder (default) = AI Builder; pi = Pi (pi.dev), openhands = OpenHands
+// SDK — keduanya di container Docker dengan shell & uji halaman sendiri (lihat sandbox-engines.mjs; perlu Docker).
+// agent:<mesin> = mode Agen di editor (go/internal/ai/agent.go) lewat /api/ai/prompt — jalur produksi lengkap (perlu
+// image deploy/agent/build.sh). Beberapa mesin dipisah koma: semuanya mengerjakan kasus yang sama, lalu dibandingkan.
+// --agents-md: untuk mesin sandbox, aturan rakit ditaruh di AGENTS.md (https://agents.md) di root project dan dimuat
+// mesinnya sendiri, sebagai ganti tambahan prompt sistem. Builder tidak membaca AGENTS.md (aturannya di prompt).
+// --skill: skill rakit (skills/rakit/SKILL.md, format Agent Skills) dipasang di mesin sandbox lewat cara bawaannya;
+// Builder tidak punya sistem skill, jadi isinya ditambahkan ke prompt Builder (AI_BUILD_PROMPT_APPEND).
 //
 // --real: jalankan kasus dari kegagalan sungguhan (dibuat from-requests.mjs, default data/ai-eval/real) sebagai
 // ganti cases.mjs. Hasilnya dibandingkan dengan masalah yang tersisa di jawaban aslinya.
@@ -31,6 +41,14 @@ const only = opt('only', '').split(',').filter(Boolean);
 const parallel = Math.max(1, Number(opt('parallel', 3)) || 1);
 const repeat = Math.max(1, Number(opt('repeat', 1)) || 1);
 const outDir = path.resolve(ROOT, opt('out', path.join('data', 'ai-eval', new Date().toISOString().replace(/[:.]/g, '-'))));
+const engines = opt('engine', 'builder').split(',').filter(Boolean);
+const ENGINES = ['builder', 'pi', 'openhands', 'claude', 'agent:claude', 'agent:pi', 'agent:openhands'];
+if (!engines.length || engines.some((e) => !ENGINES.includes(e))) {
+  console.error(`--engine harus salah satu atau gabungan dari: ${ENGINES.join(', ')}`);
+  process.exit(1);
+}
+const useAgentsMd = args.includes('--agents-md');
+const useSkill = args.includes('--skill');
 const realIndex = args.indexOf('--real');
 const realDir = realIndex < 0 ? null
   : path.resolve(ROOT, args[realIndex + 1] && !args[realIndex + 1].startsWith('--') ? args[realIndex + 1] : path.join('data', 'ai-eval', 'real'));
@@ -55,6 +73,14 @@ if (!env.AI_BASE_URL || !env.AI_API_KEY || !env.AI_MODEL) {
   console.error('AI_BASE_URL, AI_API_KEY, dan AI_MODEL harus diisi (di .env atau variabel lingkungan).');
   process.exit(1);
 }
+const agentEngines = engines.filter((e) => e.startsWith('agent:')).map((e) => e.slice(6));
+if (agentEngines.length) {
+  env.AI_AGENT_ENGINES = agentEngines.join(',');
+  // Docker Desktop (macOS) tidak bisa membagi unix socket ke container: pakai tcp.
+  env.AI_AGENT_TRANSPORT ||= process.platform === 'darwin' ? 'tcp' : 'unix';
+  env.AI_AGENT_MAX_CONCURRENT ||= String(parallel);
+}
+if (useSkill) env.AI_BUILD_PROMPT_APPEND = path.join(ROOT, 'skills', 'rakit', 'SKILL.md');
 Object.assign(env, { AI_BONUS_CREDITS: '100000', AI_DAILY_CREDITS: '0', AI_CREDITS_PER_PROMPT: '1', AI_MAX_CONCURRENT: String(parallel) });
 
 // Kasus nyata: <realDir>/<id>/case.json; site/ dan db.sqlite di sebelahnya (lihat from-requests.mjs).
@@ -105,8 +131,22 @@ function seedHistory(stack, user, history) {
   return Number(thread);
 }
 
-async function runCase(stack, c, run) {
-  const user = await stack.register(`eval${run}${c.id.replace(/[^a-z0-9]/g, '').slice(0, 20)}`);
+// Akun per kasus, masing-masing dengan "IP" sendiri (X-Forwarded-For dipercaya dari loopback): batas laju register
+// server (30 per 15 menit per IP) tidak boleh menggagalkan evaluasi yang besar.
+let accounts = 0;
+async function register(stack, name) {
+  const n = ++accounts;
+  const client = stack.client({ ip: `10.77.${n >> 8}.${n & 255}` });
+  const res = await client.post('/api/register', { username: name, email: `${name}@test.local`, password: 'rahasia-123' });
+  if (res.status !== 201) throw new Error(`register ${name} gagal: ${res.status} ${JSON.stringify(res.body)}`);
+  client.username = name;
+  client.userId = stack.db().prepare('SELECT id FROM users WHERE username = ?').get(name).id;
+  return client;
+}
+
+async function runCase(stack, c, run, engine) {
+  const tag = { builder: '', pi: 'p', openhands: 'o', claude: 'c', 'agent:claude': 'ac', 'agent:pi': 'ap', 'agent:openhands': 'ao' }[engine];
+  const user = await register(stack, `eval${tag}${run}${c.id.replace(/[^a-z0-9]/g, '').slice(0, 20)}`);
   const root = path.join(stack.dataDir, 'sites', user.username);
   if (c.siteDir) {
     // Isi project kasus nyata menggantikan template.
@@ -126,19 +166,37 @@ async function runCase(stack, c, run) {
     }
   }
 
-  const threadId = c.history?.length ? seedHistory(stack, user, c.history) : undefined;
-  const t0 = Date.now();
-  const { started, final } = await user.build(c.prompt, threadId ? { threadId } : undefined);
-  const secs = Math.round((Date.now() - t0) / 1000);
-  const result = { id: c.id, run, secs, prompt: c.prompt };
-  if (started.status !== 201 || !final) {
-    return { ...result, status: `gagal mulai (${started.status})`, error: JSON.stringify(started.body) };
+  const result = { id: c.id, run, engine, prompt: c.prompt };
+  let outcome;
+  if (engine !== 'builder' && !engine.startsWith('agent:')) {
+    outcome = await runSandboxCase(engine, { repoRoot: ROOT, stack, client: user, root, prompt: c.prompt, history: c.history, env, useAgentsMd, useSkill });
+  } else {
+    const threadId = c.history?.length ? seedHistory(stack, user, c.history) : undefined;
+    const t0 = Date.now();
+    const extra = { ...(threadId ? { threadId } : {}), ...(engine.startsWith('agent:') ? { mode: 'agent', engine: engine.slice(6) } : {}) };
+    const { started, final } = await user.build(c.prompt, extra);
+    const secs = Math.round((Date.now() - t0) / 1000);
+    if (started.status !== 201 || !final) {
+      return { ...result, secs, status: `gagal mulai (${started.status})`, error: JSON.stringify(started.body) };
+    }
+    const row = stack.db().prepare("SELECT model, status, input_tokens AS inTokens, output_tokens AS outTokens, checks FROM ai_requests WHERE user_id = ? AND action IN ('build', 'agent') ORDER BY id DESC").get(user.userId);
+    const checks = row?.checks ? JSON.parse(row.checks) : {};
+    outcome = {
+      status: final.type === 'done' ? row?.status ?? 'ok' : `error: ${final.error}`,
+      secs,
+      model: row?.model,
+      inTokens: row?.inTokens ?? 0,
+      outTokens: row?.outTokens ?? 0,
+      rounds: checks.rounds ?? 0,
+      found: checks.found ?? {},
+      left: checks.left ?? {},
+      touched: (final.message?.changes ?? []).filter((x) => x.path).map((x) => x.path),
+      message: final.message?.content ?? final.error ?? '',
+    };
   }
-  const row = stack.db().prepare("SELECT model, status, input_tokens AS inTokens, output_tokens AS outTokens, checks FROM ai_requests WHERE user_id = ? AND action = 'build' ORDER BY id DESC").get(user.userId);
-  const checks = row?.checks ? JSON.parse(row.checks) : {};
-  const changes = final.message?.changes ?? [];
-  const touched = changes.filter((x) => x.path).map((x) => x.path);
-  const files = listFiles(root);
+  const { touched } = outcome;
+  // AGENTS.md (mode --agents-md) memuat contoh kode seperti /api/db/ — jangan ikut dinilai "cek isi".
+  const files = listFiles(root).filter((f) => f !== 'AGENTS.md');
   const read = (rel) => { try { return fs.readFileSync(path.join(root, rel), 'utf8'); } catch { return ''; } };
 
   const must = (c.must ?? []).map(([where, re]) => {
@@ -154,21 +212,16 @@ async function runCase(stack, c, run) {
   }
 
   // Simpan hasil akhir untuk dilihat manusia.
-  const caseDir = path.join(outDir, repeat > 1 ? `${c.id}-${run}` : c.id);
+  const caseDir = path.join(outDir, engines.length > 1 ? engine.replace(':', '-') : '', repeat > 1 ? `${c.id}-${run}` : c.id);
   fs.mkdirSync(caseDir, { recursive: true });
   fs.cpSync(root, path.join(caseDir, 'site'), { recursive: true });
-  fs.writeFileSync(path.join(caseDir, 'ringkasan-ai.md'), `# ${c.id}\n\n**Prompt:** ${c.prompt}\n\n${final.message?.content ?? final.error ?? ''}\n`);
+  fs.writeFileSync(path.join(caseDir, 'ringkasan-ai.md'), `# ${c.id}\n\n**Prompt:** ${c.prompt}\n\n${outcome.message}\n`);
+  if (outcome.transcript) fs.writeFileSync(path.join(caseDir, 'transcript.json'), JSON.stringify(outcome.transcript, null, 2));
+  const { transcript, message, ...metrics } = outcome;
 
   return {
     ...result,
-    status: final.type === 'done' ? row?.status ?? 'ok' : `error: ${final.error}`,
-    model: row?.model,
-    inTokens: row?.inTokens ?? 0,
-    outTokens: row?.outTokens ?? 0,
-    rounds: checks.rounds ?? 0,
-    found: checks.found ?? {},
-    left: checks.left ?? {},
-    touched,
+    ...metrics,
     outOfScope: c.allow ? touched.filter((p) => !c.allow.some((rule) => matchesPath(rule, p))) : [],
     must,
     tables,
@@ -178,32 +231,44 @@ async function runCase(stack, c, run) {
 }
 
 // ---------- Main ----------
-console.log(`Model: ${env.AI_MODEL} · ${cases.length} kasus × ${repeat} · paralel ${parallel}\nHasil: ${path.relative(ROOT, outDir)}\n`);
+let runSandboxCase;
+if (engines.some((e) => e !== 'builder')) {
+  const sandbox = await import('./sandbox-engines.mjs');
+  // Image yang sama untuk mesin sandbox evaluasi (pi) dan mode Agen (agent:pi).
+  for (const e of new Set(engines.filter((x) => x !== 'builder').map((x) => x.replace(/^agent:/, '')))) {
+    console.log(`Menyiapkan image Docker ${e}…`);
+    sandbox.ensureImage(ROOT, e);
+  }
+  runSandboxCase = sandbox.runSandboxCase;
+}
+console.log(`Model: ${env.AI_MODEL} · mesin ${engines.join(' & ')}${useAgentsMd ? ' · AGENTS.md' : ''}${useSkill ? ' · skill' : ''} · ${cases.length} kasus × ${repeat} · paralel ${parallel}\nHasil: ${path.relative(ROOT, outDir)}\n`);
 fs.mkdirSync(outDir, { recursive: true });
 const stack = await startStack(env);
 const queue = [];
-for (let run = 1; run <= repeat; run++) for (const c of cases) queue.push([c, run]);
+for (let run = 1; run <= repeat; run++) for (const c of cases) for (const engine of engines) queue.push([c, run, engine]);
 const results = [];
+const sum = (o) => Object.values(o ?? {}).reduce((a, b) => a + b, 0);
 try {
   await Promise.all(Array.from({ length: Math.min(parallel, queue.length) }, async () => {
     while (queue.length) {
-      const [c, run] = queue.shift();
+      const [c, run, engine] = queue.shift();
       let r;
       try {
-        r = await runCase(stack, c, run);
+        r = await runCase(stack, c, run, engine);
       } catch (err) {
-        r = { id: c.id, run, status: `crash: ${err.message}` };
+        r = { id: c.id, run, engine, status: `crash: ${err.message}` };
       }
       results.push(r);
-      const sum = (o) => Object.values(o ?? {}).reduce((a, b) => a + b, 0);
       const flags = [
         sum(r.left) ? `TERSISA ${JSON.stringify(r.left)}` : '',
         r.outOfScope?.length ? `di luar lingkup: ${r.outOfScope.join(', ')}` : '',
         r.must?.some((m) => !m.ok) ? `cek isi gagal: ${r.must.filter((m) => !m.ok).map((m) => `${m.where} ${m.pattern}`).join('; ')}` : '',
         r.missingTable ? 'tidak membuat tabel' : '',
         r.originalLeft ? `jawaban asli: tersisa ${JSON.stringify(r.originalLeft)}` : '',
+        r.sandbox ? `${r.engine}: ${r.sandbox.shell} perintah shell (${r.sandbox.selfTests} uji sendiri) · ${r.sandbox.fixes} putaran perbaikan dari pemeriksaan server${r.sandbox.errors.length ? ` · error: ${r.sandbox.errors.join(' | ')}` : ''}` : '',
       ].filter(Boolean);
-      console.log(`${r.status === 'ok' && !sum(r.left) && !r.outOfScope?.length && !r.must?.some((m) => !m.ok) && !r.missingTable ? '✓' : '✗'} ${r.id}${repeat > 1 ? ` #${r.run}` : ''} · ${r.status} · ${r.rounds ?? 0} putaran · ditemukan ${sum(r.found)} ${sum(r.found) ? JSON.stringify(r.found) : ''} · ${r.secs ?? 0} dtk · ${(r.inTokens ?? 0) + (r.outTokens ?? 0)} token${flags.length ? `\n    ${flags.join('\n    ')}` : ''}`);
+      const engineTag = engines.length > 1 ? `[${r.engine}] ` : '';
+      console.log(`${r.status === 'ok' && !sum(r.left) && !r.outOfScope?.length && !r.must?.some((m) => !m.ok) && !r.missingTable ? '✓' : '✗'} ${engineTag}${r.id}${repeat > 1 ? ` #${r.run}` : ''} · ${r.status} · ${r.rounds ?? 0} putaran · ditemukan ${sum(r.found)} ${sum(r.found) ? JSON.stringify(r.found) : ''} · ${r.secs ?? 0} dtk · ${(r.inTokens ?? 0) + (r.outTokens ?? 0)} token${flags.length ? `\n    ${flags.join('\n    ')}` : ''}`);
     }
   }));
 } finally {
@@ -211,35 +276,44 @@ try {
 }
 
 // ---------- Ringkasan ----------
-const ok = results.filter((r) => r.status === 'ok');
-const pct = (n) => `${Math.round((n / Math.max(1, results.length)) * 100)}%`;
-const summary = {
-  model: env.AI_MODEL,
-  cases: results.length,
-  ok: ok.length,
-  hadProblems: ok.filter((r) => Object.keys(r.found).length).length,
-  problemsLeft: ok.filter((r) => Object.keys(r.left).length).length,
-  outOfScope: ok.filter((r) => r.outOfScope.length).length,
-  mustFailed: ok.filter((r) => r.must.some((m) => !m.ok)).length,
-  missingTable: ok.filter((r) => r.missingTable).length,
-  avgRounds: ok.reduce((a, r) => a + r.rounds, 0) / Math.max(1, ok.length),
-  avgTokens: Math.round(ok.reduce((a, r) => a + r.inTokens + r.outTokens, 0) / Math.max(1, ok.length)),
-  avgSeconds: Math.round(ok.reduce((a, r) => a + r.secs, 0) / Math.max(1, ok.length)),
-  // Kasus nyata yang jawaban aslinya menyisakan masalah, kini selesai tanpa sisa.
-  realCleaned: realDir ? ok.filter((r) => !Object.keys(r.left).length).length : undefined,
-};
-fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify({ summary, results: results.sort((a, b) => a.id.localeCompare(b.id) || a.run - b.run) }, null, 2));
-const line = (label, value) => `  ${label.padEnd(32)}${value}`;
-console.log([
-  '',
-  `Ringkasan (${summary.model})`,
-  line('selesai tanpa error', `${summary.ok}/${summary.cases}`),
-  line('sempat ada masalah kode', `${summary.hadProblems} (${pct(summary.hadProblems)})`),
-  line('selesai MASIH bermasalah', `${summary.problemsLeft} (${pct(summary.problemsLeft)})`),
-  line('mengubah file di luar lingkup', `${summary.outOfScope} (${pct(summary.outOfScope)})`),
-  line('cek isi gagal', `${summary.mustFailed} (${pct(summary.mustFailed)})`),
-  line('tidak membuat tabel', String(summary.missingTable)),
-  ...(realDir ? [line('kasus nyata kini tanpa sisa', `${summary.realCleaned}/${summary.cases} (aslinya semua bersisa)`)] : []),
-  line('rata-rata', `${summary.avgRounds.toFixed(1)} putaran · ${summary.avgTokens} token · ${summary.avgSeconds} dtk`),
+function summarize(list) {
+  const ok = list.filter((r) => r.status === 'ok');
+  const avg = (fn) => ok.reduce((a, r) => a + fn(r), 0) / Math.max(1, ok.length);
+  return {
+    model: env.AI_MODEL,
+    cases: list.length,
+    ok: ok.length,
+    hadProblems: ok.filter((r) => Object.keys(r.found).length).length,
+    problemsLeft: ok.filter((r) => Object.keys(r.left).length).length,
+    problemsLeftTotal: ok.reduce((a, r) => a + sum(r.left), 0),
+    outOfScope: ok.filter((r) => r.outOfScope.length).length,
+    mustFailed: ok.filter((r) => r.must.some((m) => !m.ok)).length,
+    missingTable: ok.filter((r) => r.missingTable).length,
+    avgRounds: avg((r) => r.rounds),
+    avgTokens: Math.round(avg((r) => r.inTokens + r.outTokens)),
+    avgSeconds: Math.round(avg((r) => r.secs)),
+    // Kasus nyata yang jawaban aslinya menyisakan masalah, kini selesai tanpa sisa.
+    realCleaned: realDir ? ok.filter((r) => !Object.keys(r.left).length).length : undefined,
+  };
+}
+const summaries = Object.fromEntries(engines.map((e) => [e, summarize(results.filter((r) => r.engine === e))]));
+const summary = engines.length === 1 ? summaries[engines[0]] : summaries;
+fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify({ summary, agentsMd: useAgentsMd, skill: useSkill, results: results.sort((a, b) => a.id.localeCompare(b.id) || a.run - b.run || a.engine.localeCompare(b.engine)) }, null, 2));
+const pct = (n, of) => `${n} (${Math.round((n / Math.max(1, of)) * 100)}%)`;
+const rows = [
+  ['selesai tanpa error', (s) => `${s.ok}/${s.cases}`],
+  ['sempat ada masalah kode', (s) => pct(s.hadProblems, s.cases)],
+  ['selesai MASIH bermasalah', (s) => `${pct(s.problemsLeft, s.cases)} · ${s.problemsLeftTotal} masalah`],
+  ['mengubah file di luar lingkup', (s) => pct(s.outOfScope, s.cases)],
+  ['cek isi gagal', (s) => pct(s.mustFailed, s.cases)],
+  ['tidak membuat tabel', (s) => String(s.missingTable)],
+  ...(realDir ? [['kasus nyata kini tanpa sisa', (s) => `${s.realCleaned}/${s.cases}`]] : []),
+  ['rata-rata putaran', (s) => s.avgRounds.toFixed(1)],
+  ['rata-rata token', (s) => String(s.avgTokens)],
+  ['rata-rata waktu', (s) => `${s.avgSeconds} dtk`],
+];
+console.log(['', `Ringkasan (${env.AI_MODEL})`, `  ${''.padEnd(32)}${engines.map((e) => e.padEnd(28)).join('')}`,
+  ...rows.map(([label, fn]) => `  ${label.padEnd(32)}${engines.map((e) => fn(summaries[e]).padEnd(28)).join('')}`),
+  ...(engines.some((e) => e !== 'builder') ? ['  ("ditemukan" Builder = semua masalah yang dikembalikan saat menulis; mesin lain = yang dikirim balik setelah mesin selesai)'] : []),
   `Detail: ${path.relative(ROOT, path.join(outDir, 'report.json'))}`,
 ].join('\n'));

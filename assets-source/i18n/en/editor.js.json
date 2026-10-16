@@ -1142,5 +1142,21 @@
   "⚠ Preview menampilkan ${errorCount} error setelah perubahan ini.": "⚠ The preview shows ${errorCount} error(s) after this change.",
   "AI memperbaikinya otomatis (gratis) dalam ${ai.autoFix.left} dtk…": "The AI will fix it automatically (free) in ${ai.autoFix.left}s…",
   "Jangan": "Don't",
-  "Perbaikan otomatis · gratis": "Automatic fix · free"
+  "Perbaikan otomatis · gratis": "Automatic fix · free",
+  "Agen AI bekerja di sandbox: membaca file, mengubah kode, lalu membuka websitemu untuk menguji hasilnya sebelum selesai. Lebih lama dari Builder, tapi lebih teliti. Kamu tetap bisa cek dulu sebelum menerapkan.": "An AI agent works in a sandbox: it reads your files, changes the code, then opens your website to test the result before finishing. Slower than Builder, but more thorough. You can still review before applying.",
+  "Minta agen membuat atau memperbaiki sesuatu… (Enter kirim, Shift+Enter baris baru)": "Ask the agent to build or fix something… (Enter to send, Shift+Enter for a new line)",
+  "Buat form pendaftaran yang datanya tersimpan": "Build a sign-up form that saves its data",
+  "Tambahkan chatbot untuk menjawab pertanyaan pengunjung": "Add a chatbot that answers visitor questions",
+  "Kirim notifikasi Telegram setiap ada pesanan baru": "Send a Telegram notification for every new order",
+  "Cek semua halaman dan perbaiki yang error": "Check every page and fix what is broken",
+  "Pi — ringan dan cepat": "Pi — light and fast",
+  "Agen AI mengerjakan di sandbox lalu menguji hasilnya sendiri (lebih lama, lebih teliti)": "An AI agent works in a sandbox and tests its own result (slower, more thorough)",
+  "Agen mengerjakan & menguji sendiri": "The agent builds & tests on its own",
+  "Agen": "Agent",
+  "Menjalankan": "Running",
+  "Menyusun rencana kerja": "Planning the work",
+  "Mesin agen": "Agent engine",
+  "Claude Agent SDK — teliti, menguji hasilnya sendiri": "Claude Agent SDK — thorough, tests its own result",
+  "OpenHands — paling banyak menguji, paling lama": "OpenHands — tests the most, takes the longest",
+  "Agen · ${engineName(item.engine)}": "Agent · ${engineName(item.engine)}"
 }

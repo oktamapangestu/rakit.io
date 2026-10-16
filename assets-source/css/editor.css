@@ -1460,6 +1460,21 @@ button.credit-badge:disabled { cursor: default; }
 .ai-mode button:hover { color: var(--white); }
 .ai-mode [data-ai-mode="build"][aria-checked="true"] { background: var(--accent); color: var(--on-accent); }
 .ai-mode [data-ai-mode="plan"][aria-checked="true"] { background: #0e7490; color: #fff; }
+.ai-mode [data-ai-mode="agent"][aria-checked="true"] { background: #7c3aed; color: #fff; }
+.ai-engine {
+  min-width: 0;
+  max-width: 130px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.msg-mode.agent { background: color-mix(in srgb, #7c3aed 35%, transparent); }
 
 .msg-mode {
   display: inline-block;
