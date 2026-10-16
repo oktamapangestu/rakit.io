@@ -275,6 +275,84 @@ test('Builder: masalah yang sama tidak dikembalikan berulang-ulang', { skip: goO
   assert.deepEqual(JSON.parse(row.checks), { found: { ref: 1 }, left: { ref: 1 }, rounds: 3 });
 });
 
+test('Builder: cek ekspresi Alpine, struktur CSS, dan nama kolom database', { skip: goOnly }, async () => {
+  const user = await stack.register();
+  const page = '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>'
+    + '<div x-data="{ n: 0 }"><button @click="n++)">+</button></div>'
+    + '<script>fetch("/api/db/tamu", { method: "POST", body: JSON.stringify({ nama: "a", pesan: "b" }) })</script>';
+  stack.ai.script.push(
+    calls(
+      call('create_table', { name: 'tamu', columns: [{ name: 'nama', type: 'text' }, { name: 'ucapan', type: 'text' }], public: ['create'] }),
+      call('write_file', { path: 'buku.html', content: page }),
+      call('write_file', { path: 'buku.css', content: '.a { color: red;\n.b { color: blue }\n' }),
+    ),
+    { text: 'Selesai.' },
+    calls(
+      call('write_file', { path: 'buku.html', content: page.replace('n++)', 'n++').replace('pesan:', 'ucapan:') }),
+      call('write_file', { path: 'buku.css', content: '.a { color: red; }\n.b { color: blue }\n' }),
+    ),
+    { text: 'Buku tamu siap.' },
+  );
+  const { final } = await user.build('buat buku tamu');
+  assert.equal(final.message.content, 'Buku tamu siap.');
+  const [, alpine, css] = toolResults(sent(3));
+  assert.match(alpine, /^Ditulis, TAPI ada masalah di "buku\.html": <button @click="n\+\+\)">: SyntaxError/);
+  assert.match(css, /^Ditulis, TAPI ada masalah di "buku\.css": kurung \{ untuk "\.a" di baris 1 tidak pernah ditutup/);
+  assert.match(sent(2).messages.at(-1).content, /- buku\.html: data yang dikirim ke \/api\/db\/tamu berisi "pesan", tapi tabel tamu tidak punya kolom itu \(kolomnya: nama, ucapan\)/);
+  const row = stack.db().prepare("SELECT checks FROM ai_requests WHERE user_id = ? AND action = 'build'").get(user.userId);
+  assert.deepEqual(JSON.parse(row.checks), { found: { alpine: 2, css: 2, column: 1 }, rounds: 4 });
+});
+
+test('Builder: perbaikan otomatis error preview gratis, sekali per jawaban', { skip: goOnly }, async () => {
+  const user = await stack.register();
+  stack.ai.script.push(calls(call('write_file', { path: 'a.js', content: 'console.log(1);' })), { text: 'Dibuat.' });
+  const first = await user.build('buat a.js');
+  const threadId = first.started.body.threadId;
+  const target = first.final.message.id;
+  const credits = (await user.credits()).remaining;
+
+  // Daftar error kosong ditolak; prompt dari klien diabaikan.
+  assert.equal((await user.startPrompt('apa saja', { mode: 'build', autoFix: target, errors: [' '], threadId })).status, 400);
+  stack.ai.script.push(calls(call('write_file', { path: 'a.js', content: 'console.log(2);' })), { text: 'Diperbaiki.' });
+  const fix = await user.prompt('buat toko online lengkap', { autoFix: target, errors: ['[/] Uncaught ReferenceError: x is not defined', 'GET /api/db/x → 404'], threadId });
+  assert.equal(fix.started.status, 201);
+  assert.equal(fix.final.message.content, 'Diperbaiki.');
+  assert.equal(fix.started.body.userMessage.autoFix, target);
+  assert.equal(fix.started.body.userMessage.content, 'Setelah perubahan terakhir, preview menampilkan error ini:\n'
+    + '- [/] Uncaught ReferenceError: x is not defined\n- GET /api/db/x → 404\n\nCari penyebabnya (terutama di kode yang baru diubah) dan perbaiki. Jangan mengubah hal lain.');
+  assert.ok(sent(2).messages.at(-1).content.endsWith('Jangan mengubah hal lain.'));
+  assert.equal((await user.credits()).remaining, credits, 'gratis');
+  // Jawaban sebelumnya dianggap disimpan, sama seperti prompt biasa.
+  assert.equal(stack.db().prepare('SELECT apply_state FROM ai_messages WHERE id = ?').get(target).apply_state, 'kept');
+
+  // Sekali per jawaban, dan jawaban hasil perbaikan otomatis tidak diperbaiki otomatis lagi.
+  const again = (id) => user.startPrompt('', { autoFix: id, errors: ['Uncaught Error: y'], threadId });
+  assert.equal((await again(target)).status, 409);
+  assert.equal((await again(fix.final.message.id)).status, 409);
+  // Riwayat percakapan menandai permintaan perbaikan otomatis.
+  const thread = (await user.get(`/api/ai/threads/${threadId}`)).body.messages;
+  assert.deepEqual(thread.map((m) => m.autoFix ?? null), [null, null, target, null]);
+
+  // Jawaban yang dibatalkan, jawaban Plan, dan jawaban orang lain tidak bisa.
+  stack.ai.script.push(calls(call('write_file', { path: 'b.js', content: '1' })), { text: 'Ok.' });
+  const third = await user.build('buat b.js', { threadId });
+  assert.equal((await user.post(`/api/ai/messages/${third.final.message.id}/revert`)).status, 200);
+  assert.equal((await again(third.final.message.id)).status, 409);
+  stack.ai.script.push({ text: 'Rencana.' });
+  const plan = await user.prompt('rencanakan', { threadId });
+  assert.equal((await again(plan.final.message.id)).status, 409);
+  const stranger = await stack.register();
+  assert.equal((await stranger.startPrompt('', { autoFix: target, errors: ['x'], threadId })).status, 400);
+  assert.equal((await user.credits()).remaining, credits - 2);
+
+  // Riwayat: jawaban yang dibatalkan ditandai, isi perubahan jawaban terbaru ikut terkirim.
+  stack.ai.script.push({ text: 'Oke.' });
+  await user.prompt('tadi apa saja?', { threadId });
+  const history = sent().messages.filter((m) => m.role === 'assistant').map((m) => m.content);
+  assert.ok(history.some((c) => c.includes('(Perubahan: tulis b.js)\n(Perubahan ini DIBATALKAN pengguna')));
+  assert.ok(history.some((c) => c.endsWith('(Perubahan: tulis a.js)\nIsi perubahan (- sebelum, + sesudah):\na.js (baris 1):\n- console.log(1);\n+ console.log(2);')));
+});
+
 test('Builder: perubahan yang gagal diterapkan dikembalikan utuh dan dilaporkan', async () => {
   const user = await stack.register();
   const original = read(user, 'index.html');
@@ -361,7 +439,8 @@ test('percakapan: prompt lanjutan membawa riwayat; daftar & isi percakapan; hapu
   const history = sent().messages;
   assert.deepEqual(history.map((m) => m.role), ['system', 'user', 'assistant', 'user']);
   assert.equal(history[1].content, 'ganti   judul\n halaman');
-  assert.equal(history[2].content, 'Judul diganti.\n\n(Perubahan: tulis index.html)');
+  if (goOnly) assert.equal(history[2].content, 'Judul diganti.\n\n(Perubahan: tulis index.html)');
+  else assert.match(history[2].content, /^Judul diganti\.\n\n\(Perubahan: tulis index\.html\)\nIsi perubahan \(- sebelum, \+ sesudah\):\nindex\.html \(baris 1\):\n- <!DOCTYPE html>[\s\S]*\n\+ v1$/);
   assert.ok(history[3].content.endsWith('Request:\nlanjutkan'));
 
   // Percakapan lain di project yang sama.

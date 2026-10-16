@@ -301,7 +301,7 @@
         h('dt', {}, 'Kredit gratis terpakai hari ini'), h('dd', {}, num(st.credits.usedToday))));
 
     // Pemeriksaan kode otomatis job Builder (go/internal/ai/codecheck.go), per model.
-    const CHECK_LABEL = { js: 'sintaks JS', ref: 'file/tautan hilang', alpine: 'Alpine', fn: 'fungsi hilang', api: 'API database', link: 'tautan mati', contrast: 'kontras', edit: 'edit_file meleset', tool: 'tool gagal' };
+    const CHECK_LABEL = { js: 'sintaks JS', css: 'struktur CSS', ref: 'file/tautan hilang', alpine: 'Alpine', column: 'kolom database', fn: 'fungsi hilang', api: 'API database', link: 'tautan mati', contrast: 'kontras', edit: 'edit_file meleset', tool: 'tool gagal' };
     const quality = card('Kualitas kode AI per model', `${period} · job Builder yang selesai`, table([
       { label: 'Model', value: (m) => h('span', { class: 'mono' }, m.model), wide: true },
       { label: 'Job', num: true, value: (m) => num(m.builds) },

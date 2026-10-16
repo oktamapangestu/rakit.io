@@ -3,8 +3,8 @@
   menunggu (applyState pending) perubahannya sudah tampil di preview dan bisa Disimpan atau Dibatalkan.
 -->
 <script>
-  import { getContext } from 'svelte';
-  import { ai, setMode, setInput, send, settle } from './state.svelte.js';
+  import { getContext, untrack } from 'svelte';
+  import { ai, setMode, setInput, send, settle, startAutoFix, cancelAutoFix, scrollToEnd } from './state.svelte.js';
   import { con } from '../console/state.svelte.js';
   import { clipText } from '../handoff.js';
   import AiButton from '../AiButton.svelte';
@@ -40,10 +40,29 @@
     ? con.entries.filter((e) => e.time >= ai.watch.since && e.level === 'error' && (e.source === 'fe' || e.source === 'net'))
     : []);
   const errorCount = $derived(previewErrors.reduce((n, e) => n + e.count, 0));
+  const errorLine = (e) => `[${e.page || '/'}] ${clipText(e.text, 600)}${e.count > 1 ? ` (${e.count}×)` : ''}`;
   function fixPrompt() {
-    const lines = previewErrors.slice(-8).map((e) => `- [${e.page || '/'}] ${clipText(e.text, 600)}${e.count > 1 ? ` (${e.count}×)` : ''}`);
+    const lines = previewErrors.slice(-8).map((e) => `- ${errorLine(e)}`);
     return `Setelah perubahan terakhir, preview menampilkan error ini:\n${lines.join('\n')}\n\nCari penyebabnya (terutama di kode yang baru diubah) dan perbaiki.`;
   }
+
+  // Error yang bisa diperbaiki AI tanpa bantuan pengguna: error JavaScript, file script/stylesheet yang gagal dimuat,
+  // dan request yang gagal. Gambar yang belum diunggah dan request yang ditolak karena belum login tidak dihitung.
+  const fixable = (e) => e.source === 'fe'
+    || (e.source === 'net' && !/^Gagal memuat <(img|video|audio|source|iframe)\b/.test(e.text) && ![401, 403, 429].includes(e.status));
+  const autoErrors = () => previewErrors.filter(fixable).slice(-8).map(errorLine);
+  $effect(() => {
+    if (previewErrors.some(fixable)) untrack(() => startAutoFix(m, autoErrors));
+  });
+  // Bar error muncul setelah kartu ini tampil: gulir supaya tidak tertutup kotak prompt (sekali saja).
+  let shown = false;
+  $effect(() => {
+    if (errorCount > 0 && !shown) {
+      shown = true;
+      untrack(scrollToEnd);
+    }
+  });
+  const counting = $derived(ai.autoFix?.id === m.id);
 
   let settling = $state(null); // 'keep' | 'revert' selama menunggu server
   async function act(action) {
@@ -67,5 +86,6 @@
       class="changes-status">✓ Perubahan disimpan</span>{:else if m.applyState === 'reverted'}<span
       class="changes-status muted">↩ Dibatalkan — file dikembalikan ke versi sebelumnya</span>{:else if m.applyState === 'failed'}<span
       class="changes-status error">{m.error || 'Gagal menerapkan perubahan. File dikembalikan seperti semula.'}</span>{/if}</div>{#if errorCount}<div
-    class="preview-errors" role="status"><span>{`⚠ Preview menampilkan ${errorCount} error setelah perubahan ini.`}</span><AiButton
-      label="Perbaiki dengan AI" text={fixPrompt} cls="preview-fix" /></div>{/if}</div>{/if}</div>
+    class="preview-errors" class:counting role="status"><span>{`⚠ Preview menampilkan ${errorCount} error setelah perubahan ini.`}</span>{#if counting}<span
+      class="preview-autofix">{`AI memperbaikinya otomatis (gratis) dalam ${ai.autoFix.left} dtk…`}</span><button type="button" class="preview-fix"
+      onclick={cancelAutoFix}>Jangan</button>{:else}<AiButton label="Perbaiki dengan AI" text={fixPrompt} cls="preview-fix" />{/if}</div>{/if}</div>{/if}</div>

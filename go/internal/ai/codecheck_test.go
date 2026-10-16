@@ -46,9 +46,6 @@ func TestSyntaxProblems(t *testing.T) {
 	if got := syntaxProblems("functions/kirim.js", "export async function handler() {}"); len(got) != 1 || !strings.Contains(got[0].text, "export default") {
 		t.Errorf("fungsi tanpa export default: %q", joined(got))
 	}
-	if got := syntaxProblems("style.css", "a {"); got != nil {
-		t.Errorf("CSS tidak diperiksa: %q", joined(got))
-	}
 }
 
 func TestLocalTarget(t *testing.T) {

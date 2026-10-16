@@ -55,12 +55,24 @@ Catatan:
   Selama `src/` masih ada, perubahan skema harus dibuat di kedua tempat.
 - **Prompt AI** di `internal/ai/prompts.go` dihasilkan dari `src/ai.js` oleh `node scripts/gen-go-prompts.cjs`.
   Selama `src/ai.js` masih ada, ubah prompt di sana lalu jalankan skrip itu.
-- **Pemeriksaan kode AI Builder** (`internal/ai/codecheck.go`, `internal/jscheck`), hanya di server Go: sintaks JS
-  (dikompilasi QuickJS tanpa dijalankan) diperiksa saat file ditulis; rujukan file, komponen/urutan tag Alpine, dan
-  `/api/fn/` yang tidak ada diperiksa saat AI menyatakan selesai. Masalahnya dikembalikan ke AI untuk diperbaiki
-  (masalah yang sama tidak dikirim dua kali). Gambar yang belum ada disebut di ringkasan. Hasilnya tersimpan di
-  `ai_requests.checks` dan tampil di dashboard owner ("Kualitas kode AI per model"). Tool `edit_file` & `read_file`
+- **Pemeriksaan kode AI Builder** (`internal/ai/codecheck.go`, `alpinecheck.go`, `csscheck.go`, `columncheck.go`,
+  `internal/jscheck`), hanya di server Go. Saat file ditulis: sintaks JS (dikompilasi QuickJS tanpa dijalankan),
+  ekspresi Alpine di atribut (`@click`, `x-text`, `:class`, …, dikompilasi seperti Alpine menyusunnya), `x-for`/`x-if`
+  di `<template>` dengan satu elemen akar, dan struktur CSS (kurung `{}`, komentar, tanda kutip). Saat AI menyatakan
+  selesai: rujukan file, komponen/urutan tag Alpine, `/api/fn/` yang tidak ada, dan nama kolom database (body
+  `JSON.stringify({...})` ke `/api/db/<tabel>`, `p.<kolom>` di `<template x-for>`). Masalahnya dikembalikan ke AI untuk
+  diperbaiki (masalah yang sama tidak dikirim dua kali). Gambar yang belum ada disebut di ringkasan. Hasilnya tersimpan
+  di `ai_requests.checks` dan tampil di dashboard owner ("Kualitas kode AI per model"). Tool `edit_file` & `read_file`
   juga ada versi minimal di `src/ai.js` (tanpa pemeriksaan kode).
+- **Perbaikan otomatis error preview** (`checkAutoFix` di `internal/ai/api.go`), hanya di server Go: bila preview
+  menampilkan error JavaScript/request gagal setelah jawaban Builder, editor menghitung mundur 6 detik lalu mengirim
+  `POST /api/ai/prompt` dengan `autoFix: <id jawaban>` dan `errors`. Gratis (tanpa kredit), sekali per jawaban, hanya
+  untuk jawaban Builder terakhir di percakapan yang mengubah file, belum dibatalkan, dan berumur < 30 menit; jawaban
+  hasil perbaikan otomatis tidak diperbaiki otomatis lagi. Isi permintaannya disusun server dari daftar error (maks.
+  8 × 600 karakter). Server Node menolaknya ("Prompt tidak boleh kosong").
+- **Riwayat percakapan AI** (`threadHistory`): dua jawaban terbaru yang mengubah file menyertakan baris yang berubah
+  (maks. 3.000 karakter), dan jawaban yang dibatalkan pengguna ditandai, supaya permintaan lanjutan seperti "kembalikan
+  yang tadi" bisa dikerjakan. Hanya di server Go.
 - **Evaluasi AI** (`scripts/ai-eval/`): `npm run ai:eval -- --only id,id --model nama` menjalankan kasus tetap di
   `cases.mjs` dengan provider sungguhan dari `.env` (memakai biaya provider), hasil di `data/ai-eval/<waktu>/`.
 - **Konversi nilai** di `internal/jsconv` dan `internal/userdb` meniru JavaScript (`Number()`, `parseInt`,

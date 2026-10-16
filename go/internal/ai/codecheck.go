@@ -3,9 +3,11 @@ package ai
 // Pemeriksaan kode hasil Builder yang tidak bergantung pada kepatuhan model (lihat juga htmlquality.go dan
 // apiPathProblems). Masalahnya dikirim balik ke model untuk diperbaiki:
 //   - per file saat ditulis (stageToolCall): sintaks JavaScript — file .js, <script> di HTML, fungsi serverless;
+//     ekspresi & <template> Alpine di atribut (alpinecheck.go); struktur CSS (csscheck.go);
 //   - sekali saat model menyatakan selesai (finalProblems): rujukan antar-file (script/link/halaman yang tidak
-//     ada, komponen Alpine yang tidak terdaftar, urutan tag Alpine, fungsi /api/fn/ yang tidak ada). Dicek di
-//     akhir karena file yang dirujuk boleh ditulis belakangan di jawaban yang sama.
+//     ada, komponen Alpine yang tidak terdaftar, urutan tag Alpine, fungsi /api/fn/ yang tidak ada), nama kolom
+//     database (columncheck.go). Dicek di akhir karena file/tabel yang dirujuk boleh dibuat belakangan di jawaban
+//     yang sama.
 // Gambar yang dirujuk tapi belum ada tidak dikembalikan ke model (model tidak bisa membuat gambar); gambar itu
 // disebut di ringkasan supaya pengguna mengunggahnya (missingImages).
 
@@ -27,7 +29,7 @@ import (
 
 // problem: satu masalah beserta jenisnya (jenis dicatat di statistik dashboard owner, lihat buildStats).
 type problem struct {
-	kind string // js | ref | alpine | fn | api | link | contrast
+	kind string // js | css | ref | alpine | column | fn | api | link | contrast
 	text string
 }
 
@@ -42,10 +44,11 @@ func texts(list []problem) []string {
 // ---------- Tampilan project bagi Builder: file di disk + perubahan yang sudah dicatat ----------
 
 type workspace struct {
-	root   string
-	disk   map[string]bool // semua file di disk (teks & gambar), path relatif
-	tables []string
-	st     *staged
+	root    string
+	disk    map[string]bool // semua file di disk (teks & gambar), path relatif
+	tables  []string
+	columns map[string][]string // kolom tabel di database (lihat knownColumns); nil = tidak diketahui
+	st      *staged
 }
 
 func newWorkspace(root string, tables []string) *workspace {
@@ -108,7 +111,8 @@ var (
 
 func isFunctionFile(rel string) bool { return strings.HasPrefix(rel, "functions/") }
 
-// syntaxProblems: kesalahan sintaks JS di file .js atau di <script> sebuah halaman HTML.
+// syntaxProblems: kesalahan sintaks JS di file .js atau di <script> sebuah halaman HTML, ekspresi Alpine di atribut
+// (alpinecheck.go), dan struktur CSS di file .css atau <style> (csscheck.go).
 func syntaxProblems(rel, content string) []problem {
 	lower := strings.ToLower(rel)
 	switch {
@@ -125,9 +129,22 @@ func syntaxProblems(rel, content string) []problem {
 			out = append(out, problem{"js", "fungsi serverless harus punya export default async function (req, { db, env, fetch, ai })"})
 		}
 		return out
+	case strings.HasSuffix(lower, ".css"):
+		var out []problem
+		for _, p := range cssProblems(content, 1) {
+			out = append(out, problem{"css", p})
+		}
+		return out
 	case strings.HasSuffix(lower, ".html"):
 		var out []problem
-		for _, s := range parsePage(content).scripts {
+		info := parsePage(content)
+		for _, st := range info.styles {
+			for _, p := range cssProblems(st.code, st.line) {
+				out = append(out, problem{"css", "<style>: " + p})
+			}
+		}
+		out = append(out, alpineProblemsIn(content)...)
+		for _, s := range info.scripts {
 			if s.src != "" || strings.TrimSpace(s.code) == "" {
 				continue
 			}
@@ -168,8 +185,15 @@ type pageRef struct {
 	tag, attr, value string
 }
 
+// pageStyle: isi <style> beserta baris tempat isinya mulai.
+type pageStyle struct {
+	code string
+	line int
+}
+
 type pageInfo struct {
 	scripts []pageScript
+	styles  []pageStyle
 	refs    []pageRef // rujukan file lokal & tautan
 	xData   []string  // nilai x-data yang berupa nama komponen
 	alpine  bool      // ada atribut x-data (halaman memakai Alpine)
@@ -182,6 +206,7 @@ func parsePage(content string) pageInfo {
 	z := html.NewTokenizer(strings.NewReader(content))
 	offset := 0
 	var open *pageScript
+	var style *pageStyle
 	for {
 		tt := z.Next()
 		raw := z.Raw()
@@ -194,10 +219,18 @@ func parsePage(content string) pageInfo {
 			if open != nil {
 				open.code += string(raw)
 			}
+			if style != nil {
+				style.code += string(raw)
+			}
 		case html.EndTagToken:
-			if name, _ := z.TagName(); string(name) == "script" && open != nil {
+			name, _ := z.TagName()
+			if string(name) == "script" && open != nil {
 				info.scripts = append(info.scripts, *open)
 				open = nil
+			}
+			if string(name) == "style" && style != nil {
+				info.styles = append(info.styles, *style)
+				style = nil
 			}
 		case html.StartTagToken, html.SelfClosingTagToken:
 			name, hasAttr := z.TagName()
@@ -215,6 +248,10 @@ func parsePage(content string) pageInfo {
 				}
 			}
 			switch tag {
+			case "style":
+				if tt == html.StartTagToken {
+					style = &pageStyle{line: strings.Count(content[:start+len(raw)], "\n") + 1}
+				}
 			case "script":
 				_, deferred := attrs["defer"]
 				s := pageScript{src: strings.TrimSpace(attrs["src"]), typ: strings.ToLower(strings.TrimSpace(attrs["type"])), deferred: deferred}
@@ -423,6 +460,7 @@ func (ws *workspace) finalProblems() (byFile map[string][]problem, images []stri
 		byFile[file] = append(byFile[file], list...)
 	}
 	tables := knownTables(ws.tables, ws.st)
+	columns := ws.knownColumns()
 	seenImage := map[string]bool{}
 	addImages := func(list []string) {
 		for _, img := range list {
@@ -449,6 +487,7 @@ func (ws *workspace) finalProblems() (byFile map[string][]problem, images []stri
 				add(c.Path, problem{"fn", fmt.Sprintf(`memanggil /api/fn/%s, tapi functions/%s.js tidak ada`, m[1], m[1])})
 			}
 		}
+		add(c.Path, bodyColumnProblems(c.Content, columns)...)
 		lower := strings.ToLower(c.Path)
 		switch {
 		case strings.HasSuffix(lower, ".html"):
@@ -456,6 +495,7 @@ func (ws *workspace) finalProblems() (byFile map[string][]problem, images []stri
 			missing, imgs := ws.pageRefs(c.Path, info)
 			add(c.Path, missing...)
 			add(c.Path, ws.alpineProblems(c.Path, info)...)
+			add(c.Path, loopColumnProblems(c.Content, ws.pageCode(c.Path, c.Content, info), columns)...)
 			addImages(imgs)
 		case strings.HasSuffix(lower, ".css"):
 			addImages(ws.cssImages(c.Path, c.Content))

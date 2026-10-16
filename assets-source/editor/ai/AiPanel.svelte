@@ -38,7 +38,7 @@
   {#each ai.messages as item (item.key)}
     {#if item.kind === 'user'}
       {@const many = new Set((item.blocks ?? []).map((x) => pageName(x.page))).size > 1}
-      <div class="msg user">{#if item.mode === 'plan'}<span class="msg-mode">Plan</span>{/if}{#if item.images?.length}<div class="msg-images">{#each item.images as src, i (i)}<!-- svelte-ignore a11y_img_redundant_alt --><img {src} alt="Gambar terlampir">{/each}</div>{/if}{#if item.blocks?.length}<div class="msg-blocks">{#each item.blocks as b, i (i)}<span class="ai-block"><Icon d={icons.block} />{b.label}{#if many}<span class="ai-block-page">{pageName(b.page)}</span>{/if}</span>{/each}</div>{/if}{item.content}</div>
+      <div class="msg user">{#if item.mode === 'plan'}<span class="msg-mode">Plan</span>{/if}{#if item.autoFix}<span class="msg-mode">Perbaikan otomatis · gratis</span>{/if}{#if item.images?.length}<div class="msg-images">{#each item.images as src, i (i)}<!-- svelte-ignore a11y_img_redundant_alt --><img {src} alt="Gambar terlampir">{/each}</div>{/if}{#if item.blocks?.length}<div class="msg-blocks">{#each item.blocks as b, i (i)}<span class="ai-block"><Icon d={icons.block} />{b.label}{#if many}<span class="ai-block-page">{pageName(b.page)}</span>{/if}</span>{/each}</div>{/if}{item.content}</div>
     {:else if item.kind === 'reply'}
       <Reply m={item.m} />
     {:else if item.kind === 'error'}

@@ -44,6 +44,8 @@ export const ai = $state({
   pendingId: null,
   // Jawaban yang perubahannya baru diterapkan: error preview sejak `since` ditampilkan di kartunya (Reply.svelte).
   watch: null, // { id, since }
+  // Hitung mundur perbaikan otomatis error preview (lihat startAutoFix): { id, left } — id jawaban yang diperbaiki.
+  autoFix: null,
   scrollTick: 0,
 });
 
@@ -68,6 +70,7 @@ export function setMode(mode) {
 }
 
 const scroll = () => { ai.scrollTick += 1; };
+export const scrollToEnd = scroll;
 const threadKey = () => `rakit.aiThread.${host.projectSlug()}`;
 function add(item) {
   ai.messages.push({ ...item, key: ++seq });
@@ -98,13 +101,15 @@ export function newConversation() {
   if (guardBusy()) return;
   ai.threadId = null;
   ai.pendingId = null;
+  ai.watch = null;
+  cancelAutoFix();
   host.storageSet(threadKey(), 'new');
   ai.messages = [];
   host.focusInput();
 }
 
 function renderMessage(m) {
-  if (m.role === 'user') add({ kind: 'user', mode: m.mode, content: m.content, images: m.images, blocks: m.blocks });
+  if (m.role === 'user') add({ kind: 'user', mode: m.mode, content: m.content, images: m.images, blocks: m.blocks, autoFix: Boolean(m.autoFix) });
   else if (m.status === 'queued' || m.status === 'running') attachJob(m);
   else if (m.status === 'done') addReply(m);
   else addError(m.error || 'Gagal.');
@@ -119,6 +124,8 @@ export async function openThread(id) {
   }
   ai.threadId = data.thread.id;
   ai.pendingId = null;
+  ai.watch = null;
+  cancelAutoFix();
   host.storageSet(threadKey(), ai.threadId);
   ai.messages = [];
   data.messages.forEach(renderMessage);
@@ -160,6 +167,8 @@ export async function clearHistory() {
   }
   ai.threadId = null;
   ai.pendingId = null;
+  ai.watch = null;
+  cancelAutoFix();
   host.storageSet(threadKey(), 'new');
   ai.messages = [];
   host.toast('Riwayat percakapan dihapus');
@@ -211,6 +220,7 @@ export async function send() {
   if (!prompt || ai.busy || ai.applying) return;
   markKept();
   ai.watch = null;
+  cancelAutoFix();
 
   const mode = ai.mode;
   const attached = ai.images.map((i) => ({ full: i.full, thumb: i.thumb }));
@@ -239,6 +249,67 @@ export async function send() {
   }
   ai.threadId = started.threadId;
   host.storageSet(threadKey(), ai.threadId);
+  host.setCredits(started.credits);
+  attachJob(started.assistantMessage);
+}
+
+// ---------- Perbaikan otomatis error preview ----------
+// Bila preview menampilkan error setelah jawaban Builder diterapkan, kartu jawabannya (Reply.svelte) menghitung mundur
+// lalu meminta AI memperbaikinya tanpa memotong kredit. Sekali per jawaban, tidak untuk jawaban hasil perbaikan
+// otomatis (server memeriksa hal yang sama). Kotak prompt pengguna tidak disentuh.
+
+const AUTO_FIX_DELAY = 6; // detik
+const autoFixAsked = new Set(); // jawaban yang sudah (atau batal) diperbaiki otomatis
+let autoFixTimer = null;
+
+// Jawaban hasil perbaikan otomatis: pesan pengguna tepat sebelumnya adalah permintaan perbaikan otomatis.
+function isAutoFixReply(m) {
+  const at = ai.messages.findIndex((x) => x.kind === 'reply' && x.m.id === m.id);
+  for (let i = at - 1; i >= 0; i--) if (ai.messages[i].kind === 'user') return ai.messages[i].autoFix;
+  return false;
+}
+
+export const canAutoFix = (m) => ai.watch?.id === m.id && !autoFixAsked.has(m.id) && !ai.busy && !ai.applying
+  && (m.applyState === 'pending' || m.applyState === 'kept') && !isAutoFixReply(m);
+
+// errors(): daftar error terbaru (dibaca saat hitung mundur selesai, supaya error yang muncul belakangan ikut).
+export function startAutoFix(m, errors) {
+  if (ai.autoFix || !canAutoFix(m)) return;
+  autoFixAsked.add(m.id);
+  ai.autoFix = { id: m.id, left: AUTO_FIX_DELAY };
+  autoFixTimer = setInterval(() => {
+    if (ai.watch?.id !== m.id || ai.busy || ai.applying) return cancelAutoFix();
+    ai.autoFix.left -= 1;
+    if (ai.autoFix.left > 0) return;
+    cancelAutoFix();
+    sendAutoFix(m, errors());
+  }, 1000);
+}
+
+export function cancelAutoFix() {
+  clearInterval(autoFixTimer);
+  autoFixTimer = null;
+  ai.autoFix = null;
+}
+
+async function sendAutoFix(m, errors) {
+  if (!errors.length || ai.busy || ai.applying) return;
+  ai.busy = true;
+  let started;
+  try {
+    await host.saveAll();
+    started = await host.api('POST', '/api/ai/prompt', {
+      autoFix: m.id, errors, mode: 'build', threadId: ai.threadId, activePath: host.activePath(),
+    });
+  } catch (err) {
+    ai.busy = false;
+    host.toast(err.message, 'error');
+    return;
+  }
+  markKept();
+  ai.watch = null;
+  const u = started.userMessage;
+  add({ kind: 'user', mode: 'build', content: u.content, autoFix: true });
   host.setCredits(started.credits);
   attachJob(started.assistantMessage);
 }
@@ -336,7 +407,10 @@ export async function settle(m, action) {
     if (ai.pendingId === m.id) ai.pendingId = null;
     m.applyState = res.message.applyState;
     if (action === 'revert') {
-      if (ai.watch?.id === m.id) ai.watch = null;
+      if (ai.watch?.id === m.id) {
+        ai.watch = null;
+        cancelAutoFix();
+      }
       await host.syncFromServer(res.touched);
     }
     return true;

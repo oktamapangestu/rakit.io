@@ -38,6 +38,9 @@ const (
 	maxHistoryChars = 8_000   // per pesan lama di riwayat yang dikirim ulang ke model
 	maxHistoryTotal = 40_000  // total riwayat; pesan terbaru didahulukan
 	maxContextChars = 200_000 // batas isi file proyek yang dikirim ke model
+	historyDetailed = 2       // jawaban terbaru di riwayat yang disertai isi perubahannya (changesDetail)
+	maxDetailChars  = 3_000   // batas isi perubahan per jawaban di riwayat
+	maxDetailFile   = 1_200   // batas isi perubahan per file
 
 	maxThreadsPerUser = 50
 	historyRetention  = 90 * 24 * time.Hour
@@ -190,7 +193,8 @@ func (s *Service) finish(id int64, status, content string, errMsg any, changes, 
 type attachments struct {
 	Thumbs      []string   `json:"thumbs"`
 	Description *string    `json:"description"`
-	Blocks      []blockRef `json:"blocks,omitempty"` // blok halaman yang dipilih untuk diubah
+	Blocks      []blockRef `json:"blocks,omitempty"`  // blok halaman yang dipilih untuk diubah
+	AutoFix     int64      `json:"autoFix,omitempty"` // perbaikan otomatis gratis untuk jawaban ini (lihat checkAutoFix)
 }
 
 // blockRef: blok terpilih seperti yang ditampilkan di riwayat chat.
@@ -246,11 +250,13 @@ func publicMessage(m *messageRow) map[string]any {
 	}
 	images := []string{}
 	var refs []blockRef
+	var autoFix int64
 	if a := parseAttachments(m.Attachments); a != nil {
 		if a.Thumbs != nil {
 			images = a.Thumbs
 		}
 		refs = a.Blocks
+		autoFix = a.AutoFix
 	}
 	out := map[string]any{
 		"id": m.ID, "threadId": m.ThreadID, "role": m.Role, "mode": m.Mode, "content": m.Content, "status": m.Status,
@@ -259,6 +265,9 @@ func publicMessage(m *messageRow) map[string]any {
 	}
 	if len(refs) > 0 {
 		out["blocks"] = refs // hanya pesan yang memilih blok
+	}
+	if autoFix != 0 {
+		out["autoFix"] = autoFix // hanya permintaan perbaikan otomatis
 	}
 	return out
 }
@@ -282,10 +291,79 @@ func changesSummary(changes []change) string {
 	return strings.Join(parts, ", ")
 }
 
+// changesDetail: isi perubahan file sebuah jawaban, ringkas (baris yang berubah saja, dipotong), supaya permintaan
+// lanjutan seperti "kembalikan warna yang tadi" atau "yang barusan kurang besar" bisa dikerjakan tanpa menebak.
+func changesDetail(changes []change, snap snapshot) string {
+	before := map[string]*string{}
+	for _, f := range snap.Files {
+		before[f.Path] = f.Before
+	}
+	var b strings.Builder
+	for _, c := range changes {
+		if c.Action != "write" {
+			continue
+		}
+		var part string
+		old, known := before[c.Path]
+		switch {
+		case !known:
+			continue
+		case old == nil:
+			part = fmt.Sprintf("%s: file baru (%d baris)", c.Path, strings.Count(c.Content, "\n")+1)
+		default:
+			part = lineDiff(c.Path, *old, c.Content)
+		}
+		if part == "" {
+			continue
+		}
+		if jsconv.Len(part) > maxDetailFile {
+			part = jsconv.Slice(part, maxDetailFile) + "\n…(dipotong)"
+		}
+		if b.Len() > 0 && jsconv.Len(b.String())+jsconv.Len(part) > maxDetailChars {
+			b.WriteString("\n…(perubahan file lain tidak ditampilkan)")
+			break
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(part)
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "Isi perubahan (- sebelum, + sesudah):\n" + b.String()
+}
+
+// lineDiff: bagian file yang berubah — baris di antara awal & akhir yang sama.
+func lineDiff(path, before, after string) string {
+	a, b := strings.Split(before, "\n"), strings.Split(after, "\n")
+	start := 0
+	for start < len(a) && start < len(b) && a[start] == b[start] {
+		start++
+	}
+	endA, endB := len(a), len(b)
+	for endA > start && endB > start && a[endA-1] == b[endB-1] {
+		endA--
+		endB--
+	}
+	if start == endA && start == endB {
+		return ""
+	}
+	var out strings.Builder
+	fmt.Fprintf(&out, "%s (baris %d):", path, start+1)
+	for _, l := range a[start:endA] {
+		out.WriteString("\n- " + strings.TrimRight(l, "\r"))
+	}
+	for _, l := range b[start:endB] {
+		out.WriteString("\n+ " + strings.TrimRight(l, "\r"))
+	}
+	return out.String()
+}
+
 // threadHistory: pesan sebelumnya di percakapan, disiapkan untuk dikirim ke model.
 func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 	rows, err := s.db.Query(`
-		SELECT role, content, changes, attachments FROM ai_messages
+		SELECT role, content, changes, attachments, apply_state, snapshot FROM ai_messages
 		WHERE thread_id = ? AND id < ? AND status IN ('sent', 'done') ORDER BY id DESC LIMIT ?`, threadID, beforeID, maxHistory)
 	if err != nil {
 		return nil, err
@@ -293,10 +371,11 @@ func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 	defer rows.Close()
 	type item struct{ role, content string }
 	var history []item
+	detailed := 0 // jawaban terbaru yang perubahannya disertakan isinya (lihat changesDetail)
 	for rows.Next() {
 		var role, content string
-		var rawChanges, rawAttachments sql.NullString
-		if err := rows.Scan(&role, &content, &rawChanges, &rawAttachments); err != nil {
+		var rawChanges, rawAttachments, applyState, rawSnapshot sql.NullString
+		if err := rows.Scan(&role, &content, &rawChanges, &rawAttachments, &applyState, &rawSnapshot); err != nil {
 			return nil, err
 		}
 		if a := parseAttachments(rawAttachments); a != nil && a.Description != nil && *a.Description != "" {
@@ -308,6 +387,19 @@ func (s *Service) threadHistory(threadID, beforeID int64) ([]message, error) {
 		}
 		if role == "assistant" && len(changes) > 0 {
 			content += "\n\n(Perubahan: " + changesSummary(changes) + ")"
+			switch {
+			case applyState.String == "reverted":
+				content += "\n(Perubahan ini DIBATALKAN pengguna: file & tabel sudah kembali seperti sebelum jawaban ini.)"
+			case detailed < historyDetailed:
+				detailed++
+				var snap snapshot
+				if rawSnapshot.Valid {
+					json.Unmarshal([]byte(rawSnapshot.String), &snap)
+				}
+				if detail := changesDetail(changes, snap); detail != "" {
+					content += "\n" + detail
+				}
+			}
 		}
 		history = append(history, item{role, content})
 	}
@@ -783,6 +875,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 			}
 		} else {
 			var existing []string
+			columns := map[string][]string{}
 			if s.userdb.HasDatabase(slug) {
 				tables, err := s.userdb.ListTables(j.ctx, slug)
 				if err != nil {
@@ -790,9 +883,19 @@ func (s *Service) runJob(j *job, in jobInput) {
 				}
 				for _, t := range tables {
 					existing = append(existing, t.Name)
+					cols := []string{}
+					for _, c := range t.Columns {
+						cols = append(cols, c.Name)
+						if c.Type == "reference" {
+							cols = append(cols, c.Name+"__ref")
+						}
+					}
+					columns[t.Name] = cols
 				}
 			}
-			result, err := s.runBuilder(convo, newWorkspace(s.cfg.SiteRoot(slug), existing), h)
+			ws := newWorkspace(s.cfg.SiteRoot(slug), existing)
+			ws.columns = columns
+			result, err := s.runBuilder(convo, ws, h)
 			if err != nil {
 				return err
 			}

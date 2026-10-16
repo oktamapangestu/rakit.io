@@ -154,6 +154,16 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 	if body["mode"] == "plan" {
 		mode = "plan"
 	}
+	// Perbaikan otomatis error preview (gratis, lihat checkAutoFix): permintaannya disusun server dari daftar error.
+	var autoFix int64
+	if n, ok := body["autoFix"].(float64); ok && n > 0 {
+		autoFix = int64(n)
+		var err error
+		if prompt, err = autoFixPrompt(body["errors"]); err != nil {
+			return nil, err
+		}
+		mode = "build"
+	}
 	if prompt == "" {
 		return nil, httpx.Errorf(400, "Prompt tidak boleh kosong")
 	}
@@ -183,6 +193,14 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 		} else if t == nil {
 			threadID = 0
 		}
+	}
+
+	if autoFix != 0 {
+		if threadID == 0 {
+			return nil, httpx.Errorf(400, "Perbaikan otomatis tidak tersedia untuk jawaban ini")
+		}
+		delete(body, "blocks")
+		delete(body, "images")
 	}
 
 	// Blok halaman yang dipilih di preview: AI diarahkan hanya mengubah bagian itu.
@@ -239,6 +257,13 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 			s.mu.Unlock()
 		}
 	}()
+	if autoFix != 0 {
+		// Diperiksa setelah jatah prompt dikunci: dua permintaan bersamaan tidak bisa sama-sama lolos.
+		if err := s.checkAutoFix(user.ID, threadID, autoFix); err != nil {
+			return nil, err
+		}
+		cost = 0
+	}
 	reservation, err := s.credits.Reserve(user.ID, cost)
 	if err != nil {
 		return nil, err
@@ -268,8 +293,8 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 	if err != nil {
 		return fail(err)
 	}
-	if len(images) > 0 || len(picked) > 0 {
-		raw, _ := marshal(attachments{Thumbs: thumbs, Blocks: blockRefs(picked)})
+	if len(images) > 0 || len(picked) > 0 || autoFix != 0 {
+		raw, _ := marshal(attachments{Thumbs: thumbs, Blocks: blockRefs(picked), AutoFix: autoFix})
 		s.db.Exec("UPDATE ai_messages SET attachments = ? WHERE id = ?", string(raw), userMessageID)
 	}
 	credit, _ := json.Marshal(reservation)
@@ -307,6 +332,73 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 		"assistantMessage": view,
 		"credits":          s.credits.Info(user.ID),
 	}, nil
+}
+
+// ---------- Perbaikan otomatis error preview ----------
+// Setelah jawaban Builder diterapkan, editor mengumpulkan error di preview (JavaScript, file/request yang gagal). Bila
+// ada, editor meminta satu perbaikan otomatis tanpa memotong kredit — sekali per jawaban, dan tidak berantai (jawaban
+// hasil perbaikan otomatis tidak diperbaiki otomatis lagi). Isi permintaannya disusun server dari daftar error.
+
+const (
+	autoFixWindow    = 30 * time.Minute // jawaban yang lebih lama dari ini tidak bisa diperbaiki otomatis
+	autoFixMaxErrors = 8
+	autoFixErrorLen  = 600
+)
+
+func autoFixPrompt(raw any) (string, error) {
+	list, _ := raw.([]any)
+	var lines []string
+	for _, item := range list {
+		text, _ := item.(string)
+		if text = strings.TrimSpace(text); text == "" {
+			continue
+		}
+		lines = append(lines, "- "+jsconv.Slice(spacesRE.ReplaceAllString(text, " "), autoFixErrorLen))
+		if len(lines) == autoFixMaxErrors {
+			break
+		}
+	}
+	if len(lines) == 0 {
+		return "", httpx.Errorf(400, "Daftar error kosong")
+	}
+	return "Setelah perubahan terakhir, preview menampilkan error ini:\n" + strings.Join(lines, "\n") +
+		"\n\nCari penyebabnya (terutama di kode yang baru diubah) dan perbaiki. Jangan mengubah hal lain.", nil
+}
+
+// checkAutoFix: target harus jawaban Builder terakhir di percakapan ini yang mengubah file dan belum dibatalkan, masih
+// baru, dan bukan jawaban atas perbaikan otomatis. Karena harus yang terakhir, permintaan kedua untuk jawaban yang sama
+// tertolak (pesan perbaikan pertama sudah ada sesudahnya).
+func (s *Service) checkAutoFix(userID, threadID, target int64) error {
+	unavailable := httpx.Errorf(409, "Perbaikan otomatis tidak tersedia untuk jawaban ini")
+	m, err := s.message(target, userID)
+	if err != nil {
+		return err
+	}
+	var changes []change
+	if m != nil && m.Changes.Valid {
+		json.Unmarshal([]byte(m.Changes.String), &changes)
+	}
+	if m == nil || m.ThreadID != threadID || m.Role != "assistant" || m.Mode != "build" || m.Status != "done" ||
+		len(changes) == 0 || (m.ApplyState.String != "pending" && m.ApplyState.String != "kept") ||
+		time.Since(time.UnixMilli(m.CreatedAt)) > autoFixWindow {
+		return unavailable
+	}
+	var newer int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM ai_messages WHERE thread_id = ? AND id > ?", threadID, target).Scan(&newer); err != nil {
+		return err
+	}
+	if newer > 0 {
+		return unavailable
+	}
+	var raw sql.NullString
+	err = s.db.QueryRow("SELECT attachments FROM ai_messages WHERE thread_id = ? AND id < ? AND role = 'user' ORDER BY id DESC LIMIT 1", threadID, target).Scan(&raw)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if a := parseAttachments(raw); a != nil && a.AutoFix != 0 {
+		return unavailable
+	}
+	return nil
 }
 
 // Events mengikuti progres job (NDJSON). Bisa disambung ulang kapan saja; event yang sudah lewat
