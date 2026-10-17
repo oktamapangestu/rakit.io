@@ -222,6 +222,27 @@ func startAgentServers(transport, sockDir string, handlers map[string]http.Handl
 	return upstreams, hostAddrs, stop, nil
 }
 
+// agentUser: uid:gid proses di container — user server, supaya file buatan agen di folder kerja milik server (bisa
+// dihapus, tidak pernah milik root). Server yang berjalan sebagai root memakai 1000:1000 dan folder kerjanya di-chown.
+func agentUser(dirs ...string) (string, error) {
+	uid, gid := os.Getuid(), os.Getgid()
+	if uid == 0 {
+		uid, gid = 1000, 1000
+		for _, d := range dirs {
+			err := filepath.WalkDir(d, func(p string, _ os.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				return os.Lchown(p, uid, gid)
+			})
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	return fmt.Sprintf("%d:%d", uid, gid), nil
+}
+
 func joinUpstreams(m map[string]string) string {
 	var parts []string
 	for _, name := range []string{"site", "ai", "tools"} {
@@ -722,8 +743,15 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 			cmd.Env = append(cmd.Env, k+"="+v)
 		}
 	} else {
+		user, err := agentUser(wsDir, runDir, sockDir)
+		if err != nil {
+			return nil, err
+		}
+		// User non-root tanpa capability, filesystem image read-only (hanya /workspace, /run/rakit/cfg, dan /tmp
+		// sementara yang bisa ditulis). Port <1024 dibuka lewat sysctl supaya proxy.cjs bisa memakai :80.
 		args := []string{"run", "--rm", "-i", "--name", name, "--memory", cfg.Memory, "--cpus", cfg.CPUs, "--pids-limit", "512",
-			"--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE", "--security-opt", "no-new-privileges",
+			"--user", user, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
+			"--tmpfs", "/tmp:rw,nosuid,nodev,size=512m", "--sysctl", "net.ipv4.ip_unprivileged_port_start=0",
 			"-v", wsDir + ":/workspace", "-v", runDir + ":/run/rakit/cfg"}
 		if cfg.Transport == "tcp" {
 			args = append(args, "--add-host", "host.docker.internal:host-gateway")

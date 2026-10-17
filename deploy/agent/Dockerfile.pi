@@ -4,6 +4,8 @@
 # Konteks build: deploy/agent (docker build -f Dockerfile.pi).
 FROM node:24.11.1-bookworm-slim
 
+# Chromium di luar /root: container berjalan sebagai user non-root.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN apt-get update \
  && apt-get install -y --no-install-recommends bash ca-certificates curl git ripgrep \
  && npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.0.0 playwright@1.56.1 \
@@ -14,5 +16,7 @@ ENV NODE_PATH=/usr/local/lib/node_modules PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0
 COPY rakit-extension.ts cek-halaman.cjs proxy.cjs entrypoint.sh /opt/rakit/
 RUN chmod +x /opt/rakit/cek-halaman.cjs /opt/rakit/entrypoint.sh \
  && ln -s /opt/rakit/cek-halaman.cjs /usr/local/bin/cek-halaman
+# Container dijalankan sebagai user non-root dengan filesystem read-only & /tmp sementara (go/internal/ai/agent.go).
+ENV HOME=/tmp
 WORKDIR /workspace
 ENTRYPOINT ["/opt/rakit/entrypoint.sh"]

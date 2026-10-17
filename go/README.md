@@ -158,12 +158,19 @@ Pi, atau OpenHands di container Docker, untuk semua akun, 1 kredit per prompt se
 Builder (perubahan diterapkan dengan snapshot, Simpan/Batalkan, statistik `ai_requests` dengan action `agent`).
 
 - **Sandbox:** salinan kerja project + `AGENTS.md` (aturan prompt Builder + keadaan project, `agentsmd.go`) di-mount
-  ke container. Container tanpa jaringan (`--network none`, `--cap-drop ALL`, batas memori/CPU/proses); tiga layanan
+  ke container. Container tanpa jaringan (`--network none`), sebagai user server non-root (`--user`, server root →
+  1000:1000), tanpa capability (`--cap-drop ALL`, `no-new-privileges`), filesystem image read-only + `/tmp` sementara,
+  batas memori/CPU/proses; tiga layanan
   host dibuka lewat unix socket dan dipetakan `deploy/agent/proxy.cjs` ke 127.0.0.1 di dalam container:
   website salinan kerja beserta `/api/db` & `/api/fn` project asli (`AgentSite` di `main.go`; chat asisten diblokir
   supaya saldo pemilik tidak terpakai), proxy AI (`agentproxy.go`: kunci provider tidak masuk container, model
   dipaksa ke model Builder, `max_tokens` dibatasi, token dihitung, batas `AI_AGENT_MAX_TOKENS` per prompt), dan
   `create_table` (tabel langsung dibuat supaya bisa diuji; snapshot-nya ikut Batalkan).
+- **Batas kerja (anti-jailbreak):** ditegakkan sandbox, bukan prompt: layanan host terikat ke slug project itu;
+  semua pembacaan salinan kerja di host (website untuk agen, fungsi serverless, selisih file) lewat `os.Root`
+  (`files.OpenRegular`/`ReadRegular`/`ListTree`), jadi symlink buatan agen tidak pernah diikuti ke luar folder kerja
+  (mis. ke project lain), juga bila ditukar di tengah jalan. `AGENTS.md` bagian "Security and scope" meminta agen
+  menolak klaim sebagai owner/admin/sistem dan permintaan di luar project.
 - **Pemeriksaan:** setiap kali agen selesai, `finalProblems` Builder dijalankan atas selisih file dan masalahnya
   dikirim balik (maks. 3 kali). File selain .html/.css/.js yang dibuat agen diabaikan dan disebut di jawaban.
 - **Deploy:** `deploy/agent/build.sh` (butuh Docker, ±6 GB untuk tiga image), lalu `AI_AGENT_ENGINES=claude,pi,openhands`

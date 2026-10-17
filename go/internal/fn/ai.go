@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -481,19 +480,10 @@ func (s *Service) loadImage(ctx context.Context, t Target, ref string) (*fnai.Im
 		if err != nil || !files.IsImageFile(rel) || Hidden(rel) {
 			return nil, fmt.Errorf("gambar %s tidak ada di project", ref)
 		}
-		abs, err := files.ResolveIn(t.Root, rel)
-		if err != nil {
-			return nil, fmt.Errorf("gambar %s tidak ada di project", ref)
-		}
-		info, err := os.Lstat(abs)
-		if err != nil || !info.Mode().IsRegular() {
-			return nil, fmt.Errorf("gambar %s tidak ada di project", ref)
-		}
-		if info.Size() > maxAIImageBytes {
+		if data, err = files.ReadRegular(t.Root, rel, maxAIImageBytes); errors.Is(err, files.ErrTooLarge) {
 			return nil, errors.New("gambar maksimal 5 MB")
-		}
-		if data, err = os.ReadFile(abs); err != nil {
-			return nil, err
+		} else if err != nil {
+			return nil, fmt.Errorf("gambar %s tidak ada di project", ref)
 		}
 	case strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://"):
 		u, err := url.Parse(ref)

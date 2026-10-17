@@ -284,19 +284,15 @@ func (s *Service) loadCode(root, name string) (string, error) {
 	if !NameRE.MatchString(name) {
 		return "", httpx.Errorf(404, "Fungsi tidak ditemukan")
 	}
-	abs, err := files.ResolveIn(root, Dir+"/"+name+".js")
+	// ReadRegular: folder symlink di salinan kerja mode Agen tidak diikuti ke luar root (mis. fungsi project lain).
+	code, err := files.ReadRegular(root, Dir+"/"+name+".js", maxCode)
+	if errors.Is(err, files.ErrTooLarge) {
+		return "", httpx.Errorf(413, "Kode fungsi maksimal 256 KB")
+	}
 	if err != nil {
 		return "", httpx.Errorf(404, "Fungsi tidak ditemukan")
 	}
-	info, err := os.Lstat(abs)
-	if err != nil || !info.Mode().IsRegular() {
-		return "", httpx.Errorf(404, "Fungsi tidak ditemukan")
-	}
-	if info.Size() > maxCode {
-		return "", httpx.Errorf(413, "Kode fungsi maksimal 256 KB")
-	}
-	code, err := os.ReadFile(abs)
-	return string(code), err
+	return string(code), nil
 }
 
 // Outcome: hasil satu eksekusi, juga untuk uji coba di editor.

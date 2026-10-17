@@ -64,11 +64,22 @@ func New(cfg *config.Config, projects Projects) *Handler {
 	return &Handler{cfg: cfg, projects: projects}
 }
 
+// siteFile: file yang akan disajikan. Dibaca lewat open() (files.OpenRegular): symlink tidak pernah disajikan dan
+// folder symlink tidak diikuti ke luar root — salinan kerja mode Agen bisa berisi symlink buatan agen.
 type siteFile struct {
-	abs   string
+	root  string
+	rel   string
+	abs   string // kunci cache minify
 	info  os.FileInfo
 	ctype string
 }
+
+func (f *siteFile) open() (*os.File, error) {
+	file, _, err := files.OpenRegular(f.root, f.rel)
+	return file, err
+}
+
+func (f *siteFile) read() ([]byte, error) { return files.ReadRegular(f.root, f.rel, 0) }
 
 func findFile(root, rel string) *siteFile {
 	clean, err := files.CleanPath(rel)
@@ -83,25 +94,17 @@ func findFile(root, rel string) *siteFile {
 	if err != nil {
 		return nil
 	}
-	// Lstat: symlink tidak pernah disajikan.
-	info, err := os.Lstat(abs)
-	if err != nil || !info.Mode().IsRegular() {
+	f, info, err := files.OpenRegular(root, clean)
+	if err != nil {
 		return nil
 	}
-	return &siteFile{abs: abs, info: info, ctype: ctype}
+	f.Close()
+	return &siteFile{root: root, rel: clean, abs: abs, info: info, ctype: ctype}
 }
 
 func isDir(root, rel string) bool {
 	clean, err := files.CleanPath(rel)
-	if err != nil {
-		return false
-	}
-	abs, err := files.ResolveIn(root, clean)
-	if err != nil {
-		return false
-	}
-	info, err := os.Lstat(abs)
-	return err == nil && info.IsDir()
+	return err == nil && files.IsDirIn(root, clean)
 }
 
 // Pemilih blok untuk preview di editor (lihat picker.js). Hanya disisipkan ke halaman HTML yang dimuat
@@ -216,7 +219,7 @@ func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, target *Targe
 		}
 	}
 	if picker {
-		page, err := os.ReadFile(file.abs)
+		page, err := file.read()
 		if err != nil {
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
@@ -229,7 +232,7 @@ func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, target *Targe
 		}
 		return
 	}
-	f, err := os.Open(file.abs)
+	f, err := file.open()
 	if err != nil {
 		// File terhapus di antara pengecekan dan pembacaan.
 		http.Error(w, "Not found", http.StatusNotFound)

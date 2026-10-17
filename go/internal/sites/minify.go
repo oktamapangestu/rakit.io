@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"container/list"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -123,7 +122,7 @@ func minifiedFile(file *siteFile) ([]byte, bool) {
 	if body, ok := minified.get(k); ok {
 		return body, true
 	}
-	src, err := os.ReadFile(file.abs)
+	src, err := file.read()
 	if err != nil {
 		return nil, false
 	}

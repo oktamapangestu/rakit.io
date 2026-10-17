@@ -4,7 +4,10 @@ package files
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -102,12 +105,22 @@ type Entry struct {
 
 // ListTree mengembalikan semua file & folder project (nama yang tidak valid dilewati).
 func ListTree(root string) ([]Entry, error) {
+	// os.Root: folder symlink tidak pernah diikuti ke luar root (salinan kerja mode Agen bisa berisi symlink).
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer r.Close()
+	fsys := r.FS()
 	var out []Entry
 	var walk func(dir, prefix string) error
 	walk = func(dir, prefix string) error {
-		items, err := os.ReadDir(dir)
+		items, err := fs.ReadDir(fsys, dir)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
 				return nil
 			}
 			return err
@@ -120,15 +133,14 @@ func ListTree(root string) ([]Entry, error) {
 			if prefix != "" {
 				rel = prefix + "/" + rel
 			}
-			abs := filepath.Join(dir, item.Name())
 			switch {
 			case item.IsDir():
 				out = append(out, Entry{Path: rel, Dir: true})
-				if err := walk(abs, rel); err != nil {
+				if err := walk(rel, rel); err != nil {
 					return err
 				}
 			case item.Type().IsRegular():
-				info, err := os.Stat(abs)
+				info, err := item.Info()
 				if err != nil {
 					return err
 				}
@@ -137,7 +149,60 @@ func ListTree(root string) ([]Entry, error) {
 		}
 		return nil
 	}
-	return out, walk(root, "")
+	return out, walk(".", "")
+}
+
+// OpenRegular membuka file biasa rel (path bersih, pemisah "/") di dalam root tanpa pernah keluar dari root:
+// symlink di ujung path ditolak dan folder symlink yang menunjuk ke luar root gagal dibuka (os.Root), juga bila
+// file ditukar di tengah jalan. Dipakai untuk folder yang isinya bisa dibuat pihak lain (salinan kerja mode Agen).
+// File yang tidak ada / bukan file biasa: error fs.ErrNotExist.
+func OpenRegular(root, rel string) (*os.File, os.FileInfo, error) {
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer r.Close()
+	if info, err := r.Lstat(rel); err != nil || !info.Mode().IsRegular() {
+		return nil, nil, fs.ErrNotExist
+	}
+	f, err := r.Open(rel)
+	if err != nil {
+		return nil, nil, fs.ErrNotExist
+	}
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		f.Close()
+		return nil, nil, fs.ErrNotExist
+	}
+	return f, info, nil
+}
+
+// ReadRegular: isi file biasa rel di dalam root (lihat OpenRegular). maxBytes > 0: file yang lebih besar ditolak
+// dengan ErrTooLarge.
+func ReadRegular(root, rel string, maxBytes int64) ([]byte, error) {
+	f, info, err := OpenRegular(root, rel)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if maxBytes > 0 && info.Size() > maxBytes {
+		return nil, ErrTooLarge
+	}
+	return io.ReadAll(f)
+}
+
+// ErrTooLarge: file melewati batas ReadRegular.
+var ErrTooLarge = errors.New("file terlalu besar")
+
+// IsDirIn: apakah rel folder (bukan symlink) di dalam root.
+func IsDirIn(root, rel string) bool {
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return false
+	}
+	defer r.Close()
+	info, err := r.Lstat(rel)
+	return err == nil && info.IsDir()
 }
 
 func mb(n int64) string { return fmt.Sprintf("%g", float64(n)/1024/1024) }

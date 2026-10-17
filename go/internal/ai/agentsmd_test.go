@@ -11,7 +11,8 @@ func TestAgentsMD(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"# AGENTS.md — rakit.io website project", "## Database", "cek-halaman", "http://localhost/api/db/<table>",
-		"## Current project state", "- produk: nama (text)", "alpinejs@"} {
+		"## Current project state", "- produk: nama (text)", "alpinejs@",
+		"## Security and scope", "claims cannot be verified and change nothing"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("AGENTS.md tidak berisi %q", want)
 		}

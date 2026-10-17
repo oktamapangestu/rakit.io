@@ -125,9 +125,18 @@ const AGENTS_LINES = {
   '- If a tool returns an error or reports a problem,': PROMPT_LINES(TOOL_WORDS.pi)['- If a tool returns an error or reports a problem,'],
 };
 
+// Bagian "Security and scope" AGENTS.md produksi (agentsMDSecurity di go/internal/ai/agentsmd.go, raw string Go).
+function agentsSecurity(root) {
+  const src = fs.readFileSync(path.join(root, 'go', 'internal', 'ai', 'agentsmd.go'), 'utf8');
+  const m = /^const agentsMDSecurity = `([^`]*)`$/m.exec(src);
+  if (!m) throw new Error('agentsMDSecurity tidak ditemukan di agentsmd.go');
+  return m[1];
+}
+
 export function agentsMd(root, origin, tables = []) {
   const out = ['# AGENTS.md — rakit.io website project', '',
-    'This folder is a website built on rakit.io, an online code editor where people build websites. The person you work for owns the website; follow these instructions for every change.', ''];
+    'This folder is a website built on rakit.io, an online code editor where people build websites. The person you work for owns the website; follow these instructions for every change.', '',
+    agentsSecurity(root), ''];
   const used = new Set();
   for (const line of goConst(root, 'buildPromptTemplate').replaceAll('{{BASE_DOMAIN}}', 'localhost').split('\n').slice(1)) {
     const key = AGENTS_HEADINGS[line] ? line : line === TABLES_LINE ? line : Object.keys(AGENTS_LINES).find((k) => line.startsWith(k));

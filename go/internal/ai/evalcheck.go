@@ -6,9 +6,9 @@ package ai
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
-	"os"
-	"path/filepath"
+	"io/fs"
 	"sort"
 
 	"rakit.io/server/internal/files"
@@ -39,7 +39,11 @@ func textFilesIn(root string) (map[string]string, error) {
 		if e.Dir || !files.IsTextFile(e.Path) {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(e.Path)))
+		// ReadRegular: salinan kerja mode Agen bisa berisi symlink buatan agen — tidak diikuti ke luar root.
+		raw, err := files.ReadRegular(root, e.Path, 0)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // terhapus atau diganti symlink sesudah didaftar
+		}
 		if err != nil {
 			return nil, err
 		}
