@@ -4,7 +4,7 @@
 -->
 <script>
   import { getContext, untrack } from 'svelte';
-  import { ai, setMode, setInput, send, settle, startAutoFix, cancelAutoFix, scrollToEnd } from './state.svelte.js';
+  import { ai, setMode, send, settle, startAutoFix, cancelAutoFix, scrollToEnd } from './state.svelte.js';
   import { con } from '../console/state.svelte.js';
   import { clipText } from '../handoff.js';
   import AiButton from '../AiButton.svelte';
@@ -23,13 +23,17 @@
     return { update: draw };
   }
 
-  let ran = $state(false);
-  function runPlan() {
-    if (ai.busy) return;
+  // Rencana yang sudah dijalankan: ada permintaan "Jalankan rencana" sesudah jawaban ini (juga setelah muat ulang).
+  const RUN_PLAN = 'Jalankan rencana di atas.';
+  let ran = $state(untrack(() => {
+    const at = ai.messages.findIndex((x) => x.kind === 'reply' && x.m.id === m.id);
+    return at >= 0 && ai.messages.slice(at + 1).some((x) => x.kind === 'user' && x.content === RUN_PLAN);
+  }));
+  async function runPlan() {
+    if (ai.busy || ai.applying) return;
     ran = true;
     setMode('build');
-    setInput('Jalankan rencana di atas.');
-    send();
+    if (!(await send(RUN_PLAN))) ran = false; // gagal (mis. kredit habis): tombol bisa ditekan lagi
   }
 
   const kind = (c) => (c.action === 'table' ? 'table' : c.action === 'delete' ? 'delete' : m.before[c.path] == null ? 'new' : 'edit');

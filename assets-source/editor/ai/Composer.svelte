@@ -5,7 +5,7 @@
 <script>
   import { getContext } from 'svelte';
   import Icon from '../Icon.svelte';
-  import { ai, AI_MODES, AGENT_ENGINES, activeMode, currentEngine, setEngine, canAfford, promptCost, setMode, send, addImages, removeImage } from './state.svelte.js';
+  import { ai, AI_MODES, AGENT_ENGINES, SHOW_AGENT_MODE, activeMode, currentEngine, setEngine, canAfford, promptCost, setMode, send, addImages, removeImage } from './state.svelte.js';
   import { preview, pageName } from '../preview/state.svelte.js';
 
   const { openTopup, autoFocus, icons, pickParent, pickRemove } = getContext('editor');
@@ -81,7 +81,7 @@
     <div class="ai-mode" role="radiogroup" aria-label="Mode AI">
       <button type="button" role="radio" data-ai-mode="build" aria-checked={String(ai.mode === 'build')} title="AI langsung menulis dan mengubah file"
         onclick={() => { setMode('build'); autoFocus(input); }}><svg viewBox="0 0 16 16"><path d="M9.8 1.2a3.8 3.8 0 0 0-4.6 4.9L1 10.3a1.7 1.7 0 0 0 2.4 2.4l4.2-4.2a3.8 3.8 0 0 0 4.9-4.6l-2 2-1.8-.3-.3-1.8zM2.3 11.6l4.5-4.5.1.1.4.4-4.5 4.5a.4.4 0 0 1-.5-.5"/></svg>Builder</button>
-      {#if agents.length}<button type="button" role="radio" data-ai-mode="agent" aria-checked={String(activeMode() === 'agent')} title="Agen AI mengerjakan di sandbox lalu menguji hasilnya sendiri (lebih lama, lebih teliti)"
+      {#if SHOW_AGENT_MODE && agents.length}<button type="button" role="radio" data-ai-mode="agent" aria-checked={String(activeMode() === 'agent')} title="Agen AI mengerjakan di sandbox lalu menguji hasilnya sendiri (lebih lama, lebih teliti)"
         onclick={() => { setMode('agent'); autoFocus(input); }}><svg viewBox="0 0 16 16"><path d="M8 1a1 1 0 0 1 1 1v1h2.5A2.5 2.5 0 0 1 14 5.5v5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 2 10.5v-5A2.5 2.5 0 0 1 4.5 3H7V2a1 1 0 0 1 1-1M4.5 4.5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1zM6 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2m4 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2M0 7h1v3H0zm15 0h1v3h-1z"/></svg>Agen</button>{/if}
       <button type="button" role="radio" data-ai-mode="plan" aria-checked={String(ai.mode === 'plan')} title="Diskusi & susun rencana, tanpa mengubah file"
         onclick={() => { setMode('plan'); autoFocus(input); }}><svg viewBox="0 0 16 16"><path d="M2 3h1.5v1.5H2zm3 .25h9v1H5zM2 7.25h1.5v1.5H2zm3 .25h9v1H5zM2 11.5h1.5V13H2zm3 .25h9v1H5z"/></svg>Plan</button>

@@ -77,9 +77,14 @@ export const AGENT_ENGINES = {
   openhands: { name: 'OpenHands', hint: 'OpenHands — paling banyak menguji, paling lama' },
 };
 export const engineName = (id) => AGENT_ENGINES[id]?.name ?? id;
+// Tombol Agen disembunyikan dulu: selama itu Builder dikerjakan Claude Agent (bila mesinnya aktif di server), selain
+// itu Builder biasa. Pilihan mesin hanya ada bila tombol Agen tampil.
+export const SHOW_AGENT_MODE = false;
+const BUILDER_ENGINE = 'claude';
 // Mesin yang dipakai: pilihan pengguna bila masih tersedia, selain itu mesin pertama di server.
 export function currentEngine() {
   const list = ai.credits?.agents ?? [];
+  if (!SHOW_AGENT_MODE) return list.some((a) => a.id === BUILDER_ENGINE) ? BUILDER_ENGINE : '';
   return list.some((a) => a.id === ai.engine) ? ai.engine : list[0]?.id ?? '';
 }
 export function setEngine(id) {
@@ -88,6 +93,8 @@ export function setEngine(id) {
 }
 // Mode yang benar-benar dipakai: Agen hanya bila server punya mesin agen.
 export const activeMode = () => (ai.mode === 'agent' && !currentEngine() ? 'build' : ai.mode);
+// Mode yang dikirim ke server: Builder lewat Claude Agent selama tombol Agen disembunyikan.
+const requestMode = () => (!SHOW_AGENT_MODE && activeMode() === 'build' && currentEngine() ? 'agent' : activeMode());
 
 // Unlimited menghitung prompt, bukan kredit: selama jatah hari ini masih ada, prompt apa pun (dengan gambar pun)
 // cukup memakai 1 dari jatah itu. Setelah habis, kredit biasa yang dipakai.
@@ -97,7 +104,7 @@ export const canAfford = (c, cost) => unlimitedLeft(c) || c.remaining >= cost;
 export const promptCost = () => (ai.images.length && ai.credits?.images ? ai.credits.images.cost : ai.credits?.costPerPrompt ?? 1);
 
 export function setMode(mode) {
-  ai.mode = mode === 'plan' || mode === 'agent' ? mode : 'build';
+  ai.mode = mode === 'plan' || (mode === 'agent' && SHOW_AGENT_MODE) ? mode : 'build';
   host?.storageSet('rakit.aiMode', ai.mode);
 }
 
@@ -247,21 +254,26 @@ export const removeImage = (i) => { ai.images.splice(i, 1); };
 
 // ---------- Prompt & job ----------
 
-export async function send() {
-  const prompt = ai.input.trim();
-  if (!prompt || ai.busy || ai.applying) return;
+// text: prompt dari tombol (mis. "Jalankan rencana ini"), bukan isi kotak prompt — kotak prompt, lampiran gambar, dan
+// blok pilihan pengguna tidak ikut terkirim dan tidak dikosongkan. Hasil: true bila job dimulai.
+export async function send(text) {
+  const own = text == null;
+  const prompt = (own ? ai.input : text).trim();
+  if (!prompt || ai.busy || ai.applying) return false;
   markKept();
   ai.watch = null;
   cancelAutoFix();
 
-  const mode = activeMode();
+  const mode = requestMode();
   const engine = mode === 'agent' ? currentEngine() : '';
-  const attached = ai.images.map((i) => ({ full: i.full, thumb: i.thumb }));
-  const picked = host.pickedBlocks();
+  const attached = own ? ai.images.map((i) => ({ full: i.full, thumb: i.thumb })) : [];
+  const picked = own ? host.pickedBlocks() : [];
   add({ kind: 'user', mode, engine, content: prompt, images: attached.map((i) => i.thumb), blocks: picked });
   host.endPick(); // halaman akan berubah; pilih ulang untuk permintaan berikutnya
-  ai.images = [];
-  ai.input = '';
+  if (own) {
+    ai.images = [];
+    ai.input = '';
+  }
   scroll();
   ai.busy = true;
 
@@ -278,12 +290,13 @@ export async function send() {
     addError(err.message, err.code);
     if (err.code === 'no_credits') host.loadCredits();
     scroll();
-    return;
+    return false;
   }
   ai.threadId = started.threadId;
   host.storageSet(threadKey(), ai.threadId);
   host.setCredits(started.credits);
   attachJob(started.assistantMessage);
+  return true;
 }
 
 // ---------- Perbaikan otomatis error preview ----------
