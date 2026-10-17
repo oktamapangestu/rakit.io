@@ -24,11 +24,11 @@ const read = (user, rel) => fs.readFileSync(path.join(rootOf(user), rel), 'utf8'
 const exists = (user, rel) => fs.existsSync(path.join(rootOf(user), rel));
 const agent = (user, prompt, engine = 'claude') => user.prompt(prompt, { mode: 'agent', engine });
 
-test('mode Agen: mesin aktif ditampilkan di info kredit; mesin tidak aktif ditolak', { skip: !GO }, async () => {
+test('mode Agen: mesin aktif ditampilkan di info kredit; mesin tidak dikenal diabaikan & ditolak', { skip: !GO }, async () => {
   const user = await stack.register();
   const credits = await user.credits();
-  assert.deepEqual(credits.agents.map((a) => a.id), ['claude', 'pi']);
-  const res = await user.startPrompt('halo', { mode: 'agent', engine: 'openhands' });
+  assert.deepEqual(credits.agents.map((a) => a.id), ['claude'], 'pi (sudah dihapus) tidak dikenal, jadi tidak aktif');
+  const res = await user.startPrompt('halo', { mode: 'agent', engine: 'pi' });
   assert.equal(res.status, 400);
   assert.equal((await user.credits()).remaining, credits.remaining, 'kredit tidak dipotong');
 });

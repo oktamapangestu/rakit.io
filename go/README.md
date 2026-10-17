@@ -93,9 +93,8 @@ Catatan:
   masalah (`ai_requests.checks.left`) beserta isi project sebelum AI bekerja (riwayat versi), riwayat percakapan, dan
   struktur database tanpa isi baris, ke `data/ai-eval/real/`; jalankan dengan `npm run ai:eval -- --real`. Isinya
   data pengguna: jangan dibagikan atau di-commit.
-  `--engine pi`, `openhands`, atau `claude` (dipisah koma untuk membandingkan, mis. `builder,pi,openhands,claude`)
-  mengerjakan kasus yang sama dengan [Pi](https://pi.dev) (mode RPC), [OpenHands SDK](https://docs.openhands.dev/sdk),
-  atau [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) (lewat endpoint Anthropic-compatible
+  `--engine claude` (dipisah koma untuk membandingkan, mis. `builder,claude`) mengerjakan kasus yang sama dengan
+  [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) (lewat endpoint Anthropic-compatible
   provider) di container Docker (`deploy/agent/`, perlu Docker): tool bawaan mesinnya termasuk shell,
   `create_table` dengan skema Builder, dan uji halaman dengan Chromium (`cek-halaman`). Hasilnya dinilai dengan
   pemeriksaan akhir Builder yang sama lewat `rakit ai-check` (`internal/ai/evalcheck.go`), dan masalahnya dikirim
@@ -153,8 +152,8 @@ dicatat di statistik pemeriksaan (`found.page` = masalah dari `check_page`). Mat
 
 ## Mode Agen
 
-Selain Builder dan Plan, editor punya mode **Agen** (`internal/ai/agent.go`): prompt dikerjakan Claude Agent SDK,
-Pi, atau OpenHands di container Docker, untuk semua akun, 1 kredit per prompt seperti Builder. Hasilnya lewat jalur
+Selain Builder dan Plan, editor punya mode **Agen** (`internal/ai/agent.go`): prompt dikerjakan Claude Agent SDK
+di container Docker, untuk semua akun, 1 kredit per prompt seperti Builder. Hasilnya lewat jalur
 Builder (perubahan diterapkan dengan snapshot, Simpan/Batalkan, statistik `ai_requests` dengan action `agent`).
 
 - **Sandbox:** salinan kerja project + `AGENTS.md` (aturan prompt Builder + keadaan project, `agentsmd.go`) di-mount
@@ -173,14 +172,13 @@ Builder (perubahan diterapkan dengan snapshot, Simpan/Batalkan, statistik `ai_re
   menolak klaim sebagai owner/admin/sistem dan permintaan di luar project.
 - **Pemeriksaan:** setiap kali agen selesai, `finalProblems` Builder dijalankan atas selisih file dan masalahnya
   dikirim balik (maks. 3 kali). File selain .html/.css/.js yang dibuat agen diabaikan dan disebut di jawaban.
-- **Deploy:** `deploy/agent/build.sh` (butuh Docker, ±6 GB untuk tiga image), lalu `AI_AGENT_ENGINES=claude,pi,openhands`
-  di `.env` dan restart. Server mencatat di log mesin mana yang aktif; mesin tanpa image tidak ditampilkan. Mesin
-  Claude memakai format Anthropic Messages (`<AI_BASE_URL>/messages`), jadi provider harus mendukungnya; Pi &
-  OpenHands memakai Chat Completions seperti Builder.
+- **Deploy:** `deploy/agent/build.sh` (butuh Docker), lalu `AI_AGENT_ENGINES=claude` di `.env` dan restart. Server
+  mencatat di log apakah mesinnya aktif; tanpa image, mode Agen tidak ditampilkan. Claude memakai format Anthropic
+  Messages (`<AI_BASE_URL>/messages`), jadi provider harus mendukungnya.
 - **Pengembangan di macOS:** Docker Desktop tidak bisa membagi unix socket ke container — pakai
   `AI_AGENT_TRANSPORT=tcp` (tanpa isolasi jaringan, jangan untuk produksi).
 - **Test:** `tests/agent.test.mjs` memakai mesin tiruan (`AI_AGENT_CMD`, `tests/helpers/fake-agent.mjs`) tanpa Docker;
-  evaluasi dengan mesin sungguhan: `npm run ai:eval -- --engine agent:claude,agent:pi,agent:openhands`
+  evaluasi dengan mesin sungguhan: `npm run ai:eval -- --engine agent:claude`
   (`--runtime` membuka setiap halaman hasil di Chromium dan menghitung error-nya).
 
 ## Deploy tahap ini

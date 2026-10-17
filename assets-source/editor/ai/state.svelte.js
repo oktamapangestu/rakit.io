@@ -48,7 +48,7 @@ export const ai = $state({
   jobId: null, // id pesan AI yang sedang berjalan
   threadId: null, // percakapan yang sedang dibuka
   mode: 'build', // 'build' (Builder) | 'agent' (Agen) | 'plan' (Plan)
-  engine: '', // mesin mode Agen: 'claude' | 'pi' | 'openhands' (yang tersedia di server: credits.agents)
+  engine: '', // mesin mode Agen: 'claude' (yang tersedia di server: credits.agents)
   images: [], // lampiran prompt berikutnya: [{ full, thumb }] (data URL JPEG)
   applying: false, // sedang Simpan/Batalkan
   input: '',
@@ -73,8 +73,6 @@ export function connect(editor) {
 // Mesin mode Agen (id dari server, lihat go/internal/ai/agent.go).
 export const AGENT_ENGINES = {
   claude: { name: 'Claude Agent', hint: 'Claude Agent SDK — teliti, menguji hasilnya sendiri' },
-  pi: { name: 'Pi', hint: 'Pi — ringan dan cepat' },
-  openhands: { name: 'OpenHands', hint: 'OpenHands — paling banyak menguji, paling lama' },
 };
 export const engineName = (id) => AGENT_ENGINES[id]?.name ?? id;
 // Tombol Agen disembunyikan dulu: selama itu Builder dikerjakan Claude Agent (bila mesinnya aktif di server), selain

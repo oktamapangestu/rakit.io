@@ -87,10 +87,10 @@ type Browser struct {
 	NoSandbox     bool   // AI_BROWSER_NO_SANDBOX=1: wajib bila server menjalankan rakit sebagai root
 }
 
-// Agent: mode Agen di editor (internal/ai/agent.go) — Claude Agent SDK, Pi, atau OpenHands mengerjakan prompt di
+// Agent: mode Agen di editor (internal/ai/agent.go) — Claude Agent SDK mengerjakan prompt di
 // container Docker (image deploy/agent, dibangun deploy/agent/build.sh).
 type Agent struct {
-	Engines       []string      // mesin yang aktif (AI_AGENT_ENGINES, mis. "claude,pi,openhands"); kosong = mode Agen mati
+	Engines       []string      // mesin yang aktif (AI_AGENT_ENGINES, mis. "claude"); kosong = mode Agen mati
 	Docker        string        // perintah docker
 	ImagePrefix   string        // image = prefix + mesin, mis. rakit-agent-claude
 	MaxTokens     int           // batas token (input+output) per prompt; lewat batas, AI dihentikan

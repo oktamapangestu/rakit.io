@@ -800,7 +800,7 @@ type jobInput struct {
 	messageID, userMessageID int64
 	threadID                 int64
 	prompt, mode, activePath string
-	engine                   string // mode Agen: claude | pi | openhands
+	engine                   string // mode Agen: claude
 	reservation              *credits.Reservation
 	images, thumbs           []string
 	blocks                   []blocks.Block

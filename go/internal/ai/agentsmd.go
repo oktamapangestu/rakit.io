@@ -2,7 +2,7 @@ package ai
 
 // AGENTS.md (https://agents.md) untuk mode Agen: aturan yang sama dengan prompt Builder, disusun per bagian dan tanpa
 // nama tool Builder, ditambah keadaan project saat ini (file, gambar, tabel, rahasia, provider AI, jadwal & error
-// fungsi). Ditaruh di root salinan kerja agen; Claude Code, Pi, dan OpenHands memuatnya sendiri. Di evaluasi, mode
+// fungsi). Ditaruh di root salinan kerja agen; Claude Code memuatnya sendiri. Di evaluasi, mode
 // AGENTS.md membuat mesin agen jauh lebih patuh daripada aturan yang ditambahkan ke prompt sistem (2026-10).
 // Padanan agentsMd di scripts/ai-eval/sandbox-engines.mjs.
 

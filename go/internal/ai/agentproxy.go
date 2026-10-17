@@ -6,7 +6,7 @@ package ai
 // dan menolak request begitu batas token satu prompt tercapai.
 //
 // Format yang diteruskan: Anthropic Messages (/v1/messages — Claude Agent SDK) dan OpenAI Chat Completions
-// (/v1/chat/completions — Pi, OpenHands). Path diteruskan relatif ke base URL provider (yang berakhiran /v1).
+// (/v1/chat/completions). Path diteruskan relatif ke base URL provider (yang berakhiran /v1).
 
 import (
 	"bufio"

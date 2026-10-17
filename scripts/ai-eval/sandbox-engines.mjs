@@ -1,21 +1,20 @@
-// Mesin AI lain untuk evaluasi, di sandbox Docker: Pi (pi.dev, mode RPC), OpenHands SDK (docs.openhands.dev/sdk), dan
-// Claude Agent SDK (code.claude.com/docs/en/agent-sdk, lewat endpoint Anthropic-compatible provider). Kasus yang sama
-// dikerjakan dengan model yang sama, supaya hasilnya bisa dibandingkan dengan AI Builder:
-//   npm run ai:eval -- --engine builder,pi,openhands,claude
+// Mesin AI lain untuk evaluasi, di sandbox Docker: Claude Agent SDK (code.claude.com/docs/en/agent-sdk, lewat endpoint
+// Anthropic-compatible provider). Kasus yang sama dikerjakan dengan model yang sama, supaya hasilnya bisa dibandingkan
+// dengan AI Builder:
+//   npm run ai:eval -- --engine builder,claude
 //
-// Susunannya sama untuk kedua mesin:
+// Susunannya:
 //   - container per kasus (image dari deploy/agent/Dockerfile.<mesin>, sama dengan mode Agen di editor), folder
 //     website project di server evaluasi di-mount sebagai /workspace — perubahan langsung terlihat di <slug>.localhost (juga http://localhost/
 //     di dalam container), termasuk /api/db dan /api/fn;
-//   - tool bawaan mesin (Pi: read, write, edit, bash; OpenHands: terminal, file_editor, task_tracker; Claude: Bash, Read,
-//     Write, Edit, Glob, Grep, TodoWrite) ditambah
+//   - tool bawaan mesin (Claude: Bash, Read, Write, Edit, Glob, Grep, TodoWrite) ditambah
 //     create_table dengan skema yang sama dengan Builder, dijalankan lewat bridge HTTP di sini ke API database editor;
 //   - prompt sistem bawaan mesin + aturan rakit dari prompt Builder (baris khusus tool Builder diganti, lihat
 //     PROMPT_LINES); model bisa menguji hasilnya sendiri: cek-halaman (Chromium headless), curl, node --check;
 //   - setelah mesin selesai, pemeriksaan otomatis Builder (`rakit ai-check`) dijalankan atas selisih file; masalahnya
 //     dikirim balik sebagai prompt lanjutan, seperti pemeriksaan akhir di runBuilder (maks. MAX_FIXES kali).
 //
-// Riwayat percakapan kasus (history) dikirim sebagai teks di awal prompt (kedua mesin tidak bisa diisi pesan lama).
+// Riwayat percakapan kasus (history) dikirim sebagai teks di awal prompt (mesin tidak bisa diisi pesan lama).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -23,8 +22,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 
-export const SANDBOX_ENGINES = ['pi', 'openhands', 'claude'];
-const IMAGES = { pi: 'rakit-agent-pi', openhands: 'rakit-agent-openhands', claude: 'rakit-agent-claude' };
+export const SANDBOX_ENGINES = ['claude'];
+const IMAGES = { claude: 'rakit-agent-claude' };
 const MAX_FIXES = 3; // putaran "perbaiki masalah ini" setelah mesin selesai (Builder: sampai batas 10 putaran)
 const CASE_TIMEOUT_MS = 20 * 60_000;
 
@@ -46,20 +45,10 @@ function goConst(root, name) {
 // Baris prompt Builder yang menyebut tool Builder atau cara konteks dikirim → versi untuk mesin lain. Kunci = awal
 // baris; kalau prompt Builder berubah dan barisnya tidak ketemu lagi, evaluasi berhenti (supaya tidak diam-diam basi).
 const TOOL_WORDS = {
-  pi: {
-    read: 'ls, rg, read',
-    change: 'Make file changes with the edit and write tools (write: a new file, or a complete rewrite — never a snippet, a diff, or "..." placeholders); delete a file with `rm`.',
-    prefer: "To change an existing file, prefer edit: copy each oldText exactly from the file's current content. Use write for new files or when most of a file changes;",
-  },
   claude: {
     read: 'ls, Glob, Grep, Read',
     change: 'Make file changes with the Edit and Write tools (Write: a new file, or a complete rewrite — never a snippet, a diff, or "..." placeholders); delete a file with `rm`.',
     prefer: "To change an existing file, prefer Edit: copy old_string exactly from the file's current content, with enough surrounding lines to match only once. Use Write for new files or when most of a file changes;",
-  },
-  openhands: {
-    read: 'ls, rg, or file_editor view',
-    change: 'Make file changes with the file_editor tool (create: a new file with its complete content — never a snippet, a diff, or "..." placeholders; create cannot overwrite, so for a complete rewrite delete the file with `rm` first; str_replace: a targeted change); delete a file with `rm` in the terminal.',
-    prefer: "To change an existing file, prefer file_editor str_replace: copy old_str exactly from the file's current content, with enough surrounding lines to match only once. Use create for new files, or `rm` + create when most of a file changes;",
   },
 };
 
@@ -99,7 +88,7 @@ export function sandboxPrompt(root, engine, origin, tables = []) {
 }
 
 // AGENTS.md (https://agents.md) untuk project rakit: aturan yang sama dengan prompt Builder, disusun per bagian yang
-// disarankan agents.md dan tanpa nama tool mesin tertentu — Pi, OpenHands, dan Claude Code memuatnya sendiri dari
+// disarankan agents.md dan tanpa nama tool mesin tertentu — Claude Code memuatnya sendiri dari
 // root project (mode --agents-md di run.mjs), sebagai ganti tambahan prompt sistem.
 const AGENTS_HEADINGS = {
   'Environment:': '## Project overview',
@@ -122,7 +111,7 @@ const AGENTS_LINES = {
     '- Edit the files in this folder directly: targeted edits for existing files; write a whole file only when it is new or rewritten completely — never a snippet, a diff, or "..." placeholders. Delete a file with `rm`. Create database tables with the create_table tool.',
   '- To change an existing file, prefer edit_file:':
     '- When changing an existing file, keep every part you are not changing exactly as it is — same text, order, attributes, scripts, links, and comments. If a file gets too big, move CSS or JS into separate files.',
-  '- If a tool returns an error or reports a problem,': PROMPT_LINES(TOOL_WORDS.pi)['- If a tool returns an error or reports a problem,'],
+  '- If a tool returns an error or reports a problem,': PROMPT_LINES(TOOL_WORDS.claude)['- If a tool returns an error or reports a problem,'],
 };
 
 // Bagian "Security and scope" AGENTS.md produksi (agentsMDSecurity di go/internal/ai/agentsmd.go, raw string Go).
@@ -153,32 +142,6 @@ export function agentsMd(root, origin, tables = []) {
 
 function createTableDef(root) {
   return JSON.parse(goConst(root, 'toolsJSON')).find((t) => t.function.name === 'create_table').function;
-}
-
-// Konfigurasi provider untuk Pi: endpoint OpenAI-compatible yang sama dengan Builder (AI_BASE_URL/AI_MODEL).
-function modelsConfig(env) {
-  const deepseek = /deepseek/i.test(env.AI_MODEL);
-  return {
-    providers: {
-      rakit: {
-        baseUrl: env.AI_BASE_URL,
-        api: 'openai-completions',
-        apiKey: '${RAKIT_AI_KEY}',
-        models: [{
-          id: env.AI_MODEL,
-          input: ['text'],
-          contextWindow: deepseek ? 1_000_000 : 200_000,
-          maxTokens: Number(env.AI_MAX_TOKENS) || 64_000,
-          // Sama dengan katalog Pi untuk DeepSeek V4 (reasoning_content dikirim balik di pesan assistant).
-          ...(deepseek ? {
-            reasoning: true,
-            thinkingLevelMap: { minimal: null, low: null, medium: null, high: 'high', max: 'max' },
-            compat: { supportsStore: false, supportsDeveloperRole: false, maxTokensField: 'max_tokens', requiresReasoningContentOnAssistantMessages: true, thinkingFormat: 'deepseek' },
-          } : { compat: { supportsStore: false, maxTokensField: 'max_tokens' } }),
-        }],
-      },
-    },
-  };
 }
 
 // ---------- Bridge create_table → API database editor ----------
@@ -248,35 +211,6 @@ export async function aiCheck(root, client, before, after) {
   return JSON.parse(res.stdout);
 }
 
-// ---------- Sesi RPC ----------
-
-function rpc(child) {
-  const listeners = new Set();
-  let buf = '';
-  child.stdout.setEncoding('utf8');
-  child.stdout.on('data', (chunk) => {
-    buf += chunk;
-    let i;
-    while ((i = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, i).replace(/\r$/, '');
-      buf = buf.slice(i + 1);
-      if (!line.trim()) continue;
-      let event;
-      try { event = JSON.parse(line); } catch { continue; }
-      for (const fn of listeners) fn(event);
-    }
-  });
-  let n = 0;
-  return {
-    on: (fn) => listeners.add(fn),
-    send: (cmd) => {
-      const id = `c${++n}`;
-      child.stdin.write(`${JSON.stringify({ id, ...cmd })}\n`);
-      return id;
-    },
-  };
-}
-
 function historyText(history) {
   if (!history?.length) return '';
   const lines = history.map((m) => {
@@ -290,7 +224,7 @@ function historyText(history) {
   return `[Percakapan sebelumnya di project ini — konteks, bukan permintaan baru]\n${lines.join('\n\n')}\n\n[Permintaan sekarang]\n`;
 }
 
-// Semua file (bukan hanya .html/.css/.js) beserta hash isinya: Pi bisa menulis file jenis apa pun.
+// Semua file (bukan hanya .html/.css/.js) beserta hash isinya: mesin bisa menulis file jenis apa pun.
 function fileHashes(dir, prefix = '', out = {}) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const rel = `${prefix}${e.name}`;
@@ -306,7 +240,6 @@ function changedFiles(before, after) {
   return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((rel) => a[rel] !== b[rel]).sort();
 }
 
-const textOf = (message) => (message?.content ?? []).filter((p) => p.type === 'text').map((p) => p.text).join('').trim();
 const SELF_TEST = /cek-halaman|curl|node --check/;
 
 // ---------- Adapter per mesin ----------
@@ -314,58 +247,6 @@ const SELF_TEST = /cek-halaman|curl|node --check/;
 // env: variabel tambahan · attach: baca keluaran proses, isi stats/transcript, panggil settled() saat mesin berhenti.
 
 const ADAPTERS = {
-  pi: {
-    setup(run, env) {
-      fs.mkdirSync(path.join(run, 'agent'), { recursive: true });
-      fs.writeFileSync(path.join(run, 'agent', 'models.json'), JSON.stringify(modelsConfig(env), null, 2));
-    },
-    env: () => ({ PI_CODING_AGENT_DIR: '/run/rakit/agent' }),
-    // Mode AGENTS.md: Pi memuat /workspace/AGENTS.md sendiri (context files); ~/.pi tidak berisi AGENTS.md lain.
-    skillDir: '/opt/skills',
-    command: (env, useAgentsMd, useSkill) => [
-      'pi', '--mode', 'rpc', '--no-session', '--no-extensions', '--extension', '/opt/rakit/rakit-extension.ts',
-      ...(useAgentsMd ? [] : ['--no-context-files']), '--no-skills', ...(useSkill ? ['--skill', '/opt/skills/rakit'] : []),
-      '--no-prompt-templates', '--no-themes', '--no-approve', '--offline',
-      '--provider', 'rakit', '--model', env.AI_MODEL, ...(/deepseek/i.test(env.AI_MODEL) ? ['--thinking', 'high'] : []),
-      ...(useAgentsMd ? [] : ['--append-system-prompt', '/run/rakit/prompt.md']),
-    ],
-    attach(child, { stats, transcript, settled }) {
-      const session = rpc(child);
-      session.on((e) => {
-        if (e.type === 'message_end' && e.message?.role === 'assistant') {
-          const u = e.message.usage ?? {};
-          stats.inTokens += (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
-          stats.outTokens += u.output ?? 0;
-          if (e.message.stopReason === 'error') stats.errors.push(e.message.errorMessage ?? 'error');
-          const text = textOf(e.message);
-          if (text) stats.lastText = text;
-          transcript.push({ role: 'assistant', text, tools: (e.message.content ?? []).filter((p) => p.type === 'toolCall').map((p) => ({ name: p.name, args: p.arguments })) });
-        }
-        if (e.type === 'turn_end') stats.turns++;
-        if (e.type === 'tool_execution_start') stats.tool(e.toolName, e.toolName === 'bash' ? e.args?.command : null);
-        if (e.type === 'tool_execution_end') transcript.push({ role: 'tool', name: e.toolName, error: e.isError, result: JSON.stringify(e.result ?? '').slice(0, 2000) });
-        if (e.type === 'auto_retry_end' && !e.success) stats.errors.push(e.finalError ?? 'retry gagal');
-        if (e.type === 'response' && !e.success) stats.errors.push(`${e.command}: ${e.error}`);
-        if (e.type === 'agent_settled') settled();
-      });
-      return (message) => session.send({ type: 'prompt', message });
-    },
-  },
-
-  openhands: {
-    setup() {},
-    // LiteLLM: awalan provider menentukan format request; deepseek/ juga membuat OpenHands mengirim balik
-    // reasoning_content (fitur model DeepSeek V4), sama seperti Builder dan Pi.
-    env: (env) => ({
-      RAKIT_LLM_MODEL: `${/deepseek/i.test(env.AI_MODEL) ? 'deepseek' : 'openai'}/${env.AI_MODEL}`,
-      RAKIT_LLM_BASE_URL: env.AI_BASE_URL,
-      RAKIT_MAX_TOKENS: String(Number(env.AI_MAX_TOKENS) || 64_000),
-    }),
-    skillDir: '/opt/skills', // dimuat driver dengan load_skills_from_dir
-    command: () => ['python3', '/opt/rakit/openhands_driver.py'],
-    attach: driverAttach('terminal'),
-  },
-
   claude: {
     setup() {},
     // Endpoint Anthropic-compatible provider yang sama (AI_BASE_URL tanpa /v1); semua alias model Claude Code
@@ -378,7 +259,7 @@ const ADAPTERS = {
   },
 };
 
-// Keluaran driver (openhands_driver.py, claude_driver.mjs): baris "@@RAKIT {...}" di stdout, sisanya diabaikan.
+// Keluaran driver (claude_driver.mjs): baris "@@RAKIT {...}" di stdout, sisanya diabaikan.
 function driverAttach(shellTool) {
   return (child, { stats, transcript, settled }) => {
     const responses = new Set();
@@ -417,7 +298,7 @@ function driverAttach(shellTool) {
 }
 
 /**
- * Jalankan satu kasus dengan mesin sandbox (pi | openhands). stack/client dari harness, root = folder website
+ * Jalankan satu kasus dengan mesin sandbox (claude). stack/client dari harness, root = folder website
  * project di server evaluasi. Mengembalikan metrik yang sama bentuknya dengan hasil Builder di run.mjs.
  */
 export async function runSandboxCase(engine, { repoRoot, stack, client, root, prompt, history, env, useAgentsMd = false, useSkill = false }) {

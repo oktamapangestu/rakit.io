@@ -1,5 +1,5 @@
 // Gabungkan hasil beberapa run evaluasi (report.json dari run.mjs) jadi satu perbandingan per mesin dan per kasus,
-// mis. Builder & Pi dari satu run dan OpenHands dari run lain dengan model yang sama.
+// mis. Builder dari satu run dan Claude dari run lain dengan model yang sama.
 //
 //   node scripts/ai-eval/compare.mjs data/ai-eval/<run-1> data/ai-eval/<run-2> …
 //

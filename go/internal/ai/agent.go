@@ -1,7 +1,6 @@
 package ai
 
-// Mode Agen: prompt dikerjakan mesin agen — Claude Agent SDK, Pi, atau OpenHands — di container Docker, sebagai
-// pilihan selain Builder. Hasilnya melewati jalur yang sama dengan Builder: perubahan file diterapkan dengan
+// Mode Agen: prompt dikerjakan mesin agen Claude Agent SDK di container Docker, sebagai pilihan selain Builder. Hasilnya melewati jalur yang sama dengan Builder: perubahan file diterapkan dengan
 // snapshot, pengguna memilih Simpan/Batalkan, kredit & statistik sama.
 //
 // Susunan satu job:
@@ -11,7 +10,7 @@ package ai
 //     proxy.cjs di container ke 127.0.0.1: site (:80, website dari salinan kerja + /api/db & /api/fn asli project —
 //     AgentSite di main.go), ai (:8001, agentproxy.go — kunci provider tidak masuk container, token dibatasi),
 //     tools (:8002, create_table — tabel langsung dibuat supaya bisa diuji, snapshot-nya ikut Batalkan);
-//   - mesin melapor lewat stdout (Pi: mode RPC; Claude & OpenHands: driver deploy/agent/*_driver, baris "@@RAKIT");
+//   - mesin melapor lewat stdout (driver deploy/agent/claude_driver.mjs, baris "@@RAKIT");
 //     langkahnya ditampilkan di editor seperti langkah Builder;
 //   - setiap kali mesin selesai, pemeriksaan akhir Builder (finalProblems) dijalankan atas selisih file; masalahnya
 //     dikirim balik ke mesin (maks. agentMaxFixes kali).
@@ -50,8 +49,6 @@ type agentEngine struct {
 
 var agentEngineList = []agentEngine{
 	{"claude", "Claude Agent", "Claude Agent SDK — teliti, menguji hasilnya sendiri"},
-	{"pi", "Pi", "Pi — ringan dan cepat"},
-	{"openhands", "OpenHands", "OpenHands — paling banyak menguji, paling lama"},
 }
 
 // AgentEngines: mesin mode Agen yang siap dipakai (dikonfigurasi dan image-nya ada), untuk editor.
@@ -81,7 +78,7 @@ func (s *Service) checkAgentEngines() {
 	for _, id := range cfg.Engines {
 		known := slices.ContainsFunc(agentEngineList, func(e agentEngine) bool { return e.ID == id })
 		if !known {
-			log.Printf("ai: mesin agen %q tidak dikenal (pilihan: claude, pi, openhands)", id)
+			log.Printf("ai: mesin agen %q tidak dikenal (pilihan: claude)", id)
 			continue
 		}
 		if cfg.Command == "" {
@@ -295,8 +292,7 @@ type agentSession struct {
 	lastText string
 	errs     []string
 	turns    int
-	open     map[string]int // id tool call → id langkah editor (Pi)
-	fifo     []int          // langkah yang belum selesai, urut (driver)
+	fifo     []int // langkah yang belum selesai, urut
 	shell    int
 	tests    int
 }
@@ -315,22 +311,13 @@ func agentStep(name string, args map[string]any) (tool, target string) {
 	}
 	clean := func(p string) string { return strings.TrimPrefix(strings.TrimPrefix(p, "/workspace/"), "./") }
 	switch name {
-	case "write", "Write":
-		return "write_file", clean(str("path", "file_path"))
-	case "edit", "Edit", "MultiEdit":
-		return "edit_file", clean(str("path", "file_path"))
-	case "read", "Read", "Glob", "Grep", "ls", "find", "grep":
-		return "read_file", clean(str("path", "file_path", "pattern"))
-	case "file_editor":
-		path := clean(str("path"))
-		switch str("command") {
-		case "create":
-			return "write_file", path
-		case "view":
-			return "read_file", path
-		}
-		return "edit_file", path
-	case "bash", "Bash", "terminal":
+	case "Write":
+		return "write_file", clean(str("file_path", "path"))
+	case "Edit", "MultiEdit":
+		return "edit_file", clean(str("file_path", "path"))
+	case "Read", "Glob", "Grep":
+		return "read_file", clean(str("file_path", "path", "pattern"))
+	case "Bash":
 		cmd := strings.TrimSpace(strings.SplitN(str("command"), "\n", 2)[0])
 		if len([]rune(cmd)) > 90 {
 			cmd = string([]rune(cmd)[:90]) + "…"
@@ -338,15 +325,15 @@ func agentStep(name string, args map[string]any) (tool, target string) {
 		return "bash", cmd
 	case "create_table":
 		return "create_table", str("name")
-	case "TodoWrite", "task_tracker":
+	case "TodoWrite":
 		return "todo", ""
-	case "finish", "think", "Skill":
+	case "Skill":
 		return "", ""
 	}
 	return name, ""
 }
 
-func (a *agentSession) stepStart(name string, args map[string]any, callID string) {
+func (a *agentSession) stepStart(name string, args map[string]any) {
 	tool, target := agentStep(name, args)
 	if tool == "" {
 		return
@@ -359,25 +346,16 @@ func (a *agentSession) stepStart(name string, args map[string]any, callID string
 	}
 	a.act.seq++
 	id := a.act.seq
-	if callID != "" {
-		a.open[callID] = id
-	} else {
-		a.fifo = append(a.fifo, id)
-	}
+	a.fifo = append(a.fifo, id)
 	a.act.emit(event{"type": "step", "id": id, "tool": tool, "target": target, "state": "run"})
 }
 
-func (a *agentSession) stepEnd(callID string, failed bool, text string) {
-	var id int
-	if callID != "" {
-		id = a.open[callID]
-		delete(a.open, callID)
-	} else if len(a.fifo) > 0 {
-		id, a.fifo = a.fifo[0], a.fifo[1:]
-	}
-	if id == 0 {
+func (a *agentSession) stepEnd(failed bool, text string) {
+	if len(a.fifo) == 0 {
 		return
 	}
+	id := a.fifo[0]
+	a.fifo = a.fifo[1:]
 	state, note := "ok", ""
 	if failed {
 		state = "error"
@@ -396,7 +374,7 @@ func (a *agentSession) settle() {
 	}
 }
 
-// readDriver: protokol driver (claude_driver.mjs, openhands_driver.py) — baris "@@RAKIT {json}".
+// readDriver: protokol driver (claude_driver.mjs) — baris "@@RAKIT {json}".
 func (a *agentSession) readDriver(r io.Reader) {
 	responses := map[string]bool{}
 	sc := bufio.NewScanner(r)
@@ -421,9 +399,9 @@ func (a *agentSession) readDriver(r io.Reader) {
 				responses[e.Response] = true
 				a.turns++
 			}
-			a.stepStart(e.Name, e.Args, "")
+			a.stepStart(e.Name, e.Args)
 		case "result":
-			a.stepEnd("", e.Error, e.Text)
+			a.stepEnd(e.Error, e.Text)
 		case "error":
 			a.errs = append(a.errs, e.Message)
 		case "settled":
@@ -431,76 +409,6 @@ func (a *agentSession) readDriver(r io.Reader) {
 			if strings.TrimSpace(e.Text) != "" {
 				a.lastText = strings.TrimSpace(e.Text)
 			}
-			a.settle()
-		}
-		a.mu.Unlock()
-	}
-}
-
-// readPi: mode RPC Pi — event JSON per baris, akhir ditandai agent_settled.
-func (a *agentSession) readPi(r io.Reader) {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 64<<10), 16<<20)
-	for sc.Scan() {
-		var e struct {
-			Type       string         `json:"type"`
-			ToolCallID string         `json:"toolCallId"`
-			ToolName   string         `json:"toolName"`
-			Args       map[string]any `json:"args"`
-			IsError    bool           `json:"isError"`
-			Result     any            `json:"result"`
-			Success    *bool          `json:"success"`
-			Error      string         `json:"error"`
-			FinalError string         `json:"finalError"`
-			Message    struct {
-				Role         string `json:"role"`
-				StopReason   string `json:"stopReason"`
-				ErrorMessage string `json:"errorMessage"`
-				Content      []struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"content"`
-			} `json:"message"`
-		}
-		if json.Unmarshal(sc.Bytes(), &e) != nil {
-			continue
-		}
-		a.mu.Lock()
-		switch e.Type {
-		case "message_end":
-			if e.Message.Role == "assistant" {
-				var text strings.Builder
-				for _, p := range e.Message.Content {
-					if p.Type == "text" {
-						text.WriteString(p.Text)
-					}
-				}
-				if t := strings.TrimSpace(text.String()); t != "" {
-					a.lastText = t
-				}
-				if e.Message.StopReason == "error" && e.Message.ErrorMessage != "" {
-					a.errs = append(a.errs, e.Message.ErrorMessage)
-				}
-			}
-		case "turn_end":
-			a.turns++
-		case "tool_execution_start":
-			a.stepStart(e.ToolName, e.Args, e.ToolCallID)
-		case "tool_execution_end":
-			text := ""
-			if raw, err := json.Marshal(e.Result); err == nil {
-				text = string(raw)
-			}
-			a.stepEnd(e.ToolCallID, e.IsError, text)
-		case "auto_retry_end":
-			if e.Success != nil && !*e.Success && e.FinalError != "" {
-				a.errs = append(a.errs, e.FinalError)
-			}
-		case "response":
-			if e.Success != nil && !*e.Success {
-				a.errs = append(a.errs, e.Error)
-			}
-		case "agent_settled":
 			a.settle()
 		}
 		a.mu.Unlock()
@@ -529,41 +437,10 @@ func agentPrompt(history []message, ask string) string {
 	return b.String()
 }
 
-func piModels(model string, maxTokens int) map[string]any {
-	entry := map[string]any{"id": model, "input": []string{"text"}, "contextWindow": 200000, "maxTokens": maxTokens,
-		"compat": map[string]any{"supportsStore": false, "maxTokensField": "max_tokens"}}
-	if strings.Contains(strings.ToLower(model), "deepseek") {
-		entry["contextWindow"] = 1000000
-		entry["reasoning"] = true
-		entry["thinkingLevelMap"] = map[string]any{"minimal": nil, "low": nil, "medium": nil, "high": "high", "max": "max"}
-		entry["compat"] = map[string]any{"supportsStore": false, "supportsDeveloperRole": false, "maxTokensField": "max_tokens",
-			"requiresReasoningContentOnAssistantMessages": true, "thinkingFormat": "deepseek"}
-	}
-	return map[string]any{"providers": map[string]any{"rakit": map[string]any{
-		"baseUrl": "http://127.0.0.1:8001/v1", "api": "openai-completions", "apiKey": "agent", "models": []any{entry}}}}
-}
-
-// agentCommand: env & perintah container untuk mesin.
-func agentCommand(engine, model string, maxTokens int) (env map[string]string, cmd []string) {
-	deepseek := strings.Contains(strings.ToLower(model), "deepseek")
-	switch engine {
-	case "claude":
-		return map[string]string{"ANTHROPIC_BASE_URL": "http://127.0.0.1:8001", "ANTHROPIC_API_KEY": "agent", "RAKIT_MODEL": model},
-			[]string{"node", "/opt/rakit/claude_driver.mjs"}
-	case "openhands":
-		provider := "openai"
-		if deepseek {
-			provider = "deepseek" // LiteLLM: juga mengirim balik reasoning_content (DeepSeek V4)
-		}
-		return map[string]string{"RAKIT_LLM_MODEL": provider + "/" + model, "RAKIT_LLM_BASE_URL": "http://127.0.0.1:8001/v1",
-			"RAKIT_AI_KEY": "agent", "RAKIT_MAX_TOKENS": fmt.Sprint(maxTokens)}, []string{"python3", "/opt/rakit/openhands_driver.py"}
-	}
-	cmd = []string{"pi", "--mode", "rpc", "--no-session", "--no-extensions", "--extension", "/opt/rakit/rakit-extension.ts",
-		"--no-skills", "--no-prompt-templates", "--no-themes", "--no-approve", "--offline", "--provider", "rakit", "--model", model}
-	if deepseek {
-		cmd = append(cmd, "--thinking", "high")
-	}
-	return map[string]string{"PI_CODING_AGENT_DIR": "/run/rakit/cfg/agent"}, cmd
+// agentCommand: env & perintah container untuk mesin (Claude Agent SDK lewat driver).
+func agentCommand(model string) (env map[string]string, cmd []string) {
+	return map[string]string{"ANTHROPIC_BASE_URL": "http://127.0.0.1:8001", "ANTHROPIC_API_KEY": "agent", "RAKIT_MODEL": model},
+		[]string{"node", "/opt/rakit/claude_driver.mjs"}
 }
 
 // agentDiff: perubahan file .html/.css/.js salinan kerja dibanding isi awal, plus file lain yang dibuat agen
@@ -671,7 +548,7 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 		return nil, err
 	}
 	defer os.RemoveAll(sockDir)
-	for _, d := range []string{before, wsDir, filepath.Join(runDir, "agent")} {
+	for _, d := range []string{before, wsDir, runDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, err
 		}
@@ -699,12 +576,10 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 		}
 	}
 	rawTable, _ := json.Marshal(createTable)
-	rawModels, _ := json.MarshalIndent(piModels(endpoint.Model, s.cfg.AI.MaxTokens), "", "  ")
 	for path, content := range map[string][]byte{
-		filepath.Join(wsDir, agentsMDFile):            []byte(md),
-		filepath.Join(runDir, "create_table.json"):    rawTable,
-		filepath.Join(runDir, "prompt.md"):            nil,
-		filepath.Join(runDir, "agent", "models.json"): rawModels,
+		filepath.Join(wsDir, agentsMDFile):         []byte(md),
+		filepath.Join(runDir, "create_table.json"): rawTable,
+		filepath.Join(runDir, "prompt.md"):         nil,
 	} {
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			return nil, err
@@ -732,7 +607,7 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	defer stopServers()
 
 	// Proses mesin: container Docker, atau AI_AGENT_CMD (test) dengan path host.
-	engineEnv, engineCmd := agentCommand(in.engine, endpoint.Model, s.cfg.AI.MaxTokens)
+	engineEnv, engineCmd := agentCommand(endpoint.Model)
 	name := fmt.Sprintf("rakit-agent-%d", in.messageID)
 	var cmd *exec.Cmd
 	if cfg.Command != "" {
@@ -810,23 +685,12 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 		}
 	}()
 
-	session := &agentSession{engine: in.engine, act: act, settled: make(chan struct{}, 1), open: map[string]int{}}
-	n := 0
-	if in.engine == "pi" {
-		go session.readPi(stdout)
-		session.send = func(message string) error {
-			n++
-			raw, _ := json.Marshal(map[string]any{"id": fmt.Sprintf("c%d", n), "type": "prompt", "message": message})
-			_, err := stdin.Write(append(raw, '\n'))
-			return err
-		}
-	} else {
-		go session.readDriver(stdout)
-		session.send = func(message string) error {
-			raw, _ := json.Marshal(map[string]string{"type": "prompt", "message": message})
-			_, err := stdin.Write(append(raw, '\n'))
-			return err
-		}
+	session := &agentSession{engine: in.engine, act: act, settled: make(chan struct{}, 1)}
+	go session.readDriver(stdout)
+	session.send = func(message string) error {
+		raw, _ := json.Marshal(map[string]string{"type": "prompt", "message": message})
+		_, err := stdin.Write(append(raw, '\n'))
+		return err
 	}
 	ask1 := func(message string) error {
 		if err := session.send(message); err != nil {

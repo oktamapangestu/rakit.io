@@ -1,6 +1,6 @@
 package ai
 
-// Pemeriksaan akhir Builder untuk hasil kerja mesin AI lain (evaluasi Pi di scripts/ai-eval): isi folder before
+// Pemeriksaan akhir Builder untuk hasil kerja mesin AI lain (evaluasi mesin sandbox di scripts/ai-eval): isi folder before
 // dianggap isi disk, selisih folder after terhadapnya dianggap perubahan yang disiapkan — lalu finalProblems
 // dijalankan seperti di akhir runBuilder. Dipanggil lewat `rakit ai-check` (JSON di stdin, hasil di stdout).
 

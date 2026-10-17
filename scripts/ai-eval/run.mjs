@@ -4,11 +4,11 @@
 // perubahan prompt atau model dengan angka. Memakai kredit/biaya provider sungguhan.
 //
 //   npm run ai:eval -- [--only id,id] [--model nama] [--parallel 3] [--repeat 1] [--out folder] [--real [folder]]
-//                      [--engine builder|pi|openhands|claude|agent:claude|agent:pi|agent:openhands|…] [--agents-md] [--skill]
+//                      [--engine builder|claude|agent:claude|…] [--agents-md] [--skill]
 //   (sama dengan: npm run build:go && node scripts/ai-eval/run.mjs …)
 //
-// --engine: mesin yang mengerjakan kasus. builder (default) = AI Builder; pi = Pi (pi.dev), openhands = OpenHands
-// SDK — keduanya di container Docker dengan shell & uji halaman sendiri (lihat sandbox-engines.mjs; perlu Docker).
+// --engine: mesin yang mengerjakan kasus. builder (default) = AI Builder; claude = Claude Agent SDK di container Docker
+// dengan shell & uji halaman sendiri (lihat sandbox-engines.mjs; perlu Docker).
 // agent:<mesin> = mode Agen di editor (go/internal/ai/agent.go) lewat /api/ai/prompt — jalur produksi lengkap (perlu
 // image deploy/agent/build.sh). Beberapa mesin dipisah koma: semuanya mengerjakan kasus yang sama, lalu dibandingkan.
 // --agents-md: untuk mesin sandbox, aturan rakit ditaruh di AGENTS.md (https://agents.md) di root project dan dimuat
@@ -43,7 +43,7 @@ const parallel = Math.max(1, Number(opt('parallel', 3)) || 1);
 const repeat = Math.max(1, Number(opt('repeat', 1)) || 1);
 const outDir = path.resolve(ROOT, opt('out', path.join('data', 'ai-eval', new Date().toISOString().replace(/[:.]/g, '-'))));
 const engines = opt('engine', 'builder').split(',').filter(Boolean);
-const ENGINES = ['builder', 'pi', 'openhands', 'claude', 'agent:claude', 'agent:pi', 'agent:openhands'];
+const ENGINES = ['builder', 'claude', 'agent:claude'];
 if (!engines.length || engines.some((e) => !ENGINES.includes(e))) {
   console.error(`--engine harus salah satu atau gabungan dari: ${ENGINES.join(', ')}`);
   process.exit(1);
@@ -149,7 +149,7 @@ async function register(stack, name) {
 }
 
 async function runCase(stack, c, run, engine) {
-  const tag = { builder: '', pi: 'p', openhands: 'o', claude: 'c', 'agent:claude': 'ac', 'agent:pi': 'ap', 'agent:openhands': 'ao' }[engine];
+  const tag = { builder: '', claude: 'c', 'agent:claude': 'ac' }[engine];
   const user = await register(stack, `eval${tag}${run}${c.id.replace(/[^a-z0-9]/g, '').slice(0, 20)}`);
   const root = path.join(stack.dataDir, 'sites', user.username);
   if (c.siteDir) {
@@ -243,7 +243,7 @@ function runtimeCheck(stack, user, files) {
   const pages = files.filter((f) => f.endsWith('.html') && !f.startsWith('functions/')).map((f) => `/${f}`);
   if (!pages.length) return { pages: 0, problems: 0, details: [] };
   const res = spawnSync('docker', ['run', '--rm', '--add-host', 'host.docker.internal:host-gateway',
-    '-e', `RAKIT_PORT=${new URL(stack.origin).port}`, '-e', `RAKIT_SLUG=${user.username}`, 'rakit-agent-pi', 'cek-halaman', ...pages],
+    '-e', `RAKIT_PORT=${new URL(stack.origin).port}`, '-e', `RAKIT_SLUG=${user.username}`, 'rakit-agent-claude', 'cek-halaman', ...pages],
   { encoding: 'utf8', timeout: 180_000 });
   const details = (res.stdout ?? '').split('\n').filter((l) => l.startsWith('  - ')).map((l) => l.slice(4));
   return { pages: pages.length, problems: details.length, details: details.slice(0, 15) };
@@ -253,7 +253,7 @@ function runtimeCheck(stack, user, files) {
 let runSandboxCase;
 if (engines.some((e) => e !== 'builder')) {
   const sandbox = await import('./sandbox-engines.mjs');
-  // Image yang sama untuk mesin sandbox evaluasi (pi) dan mode Agen (agent:pi).
+  // Image yang sama untuk mesin sandbox evaluasi (claude) dan mode Agen (agent:claude).
   for (const e of new Set(engines.filter((x) => x !== 'builder').map((x) => x.replace(/^agent:/, '')))) {
     console.log(`Menyiapkan image Docker ${e}…`);
     sandbox.ensureImage(ROOT, e);
