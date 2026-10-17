@@ -26,6 +26,7 @@ type Config struct {
 	portSuffix  string
 
 	TemplateDir string // file awal project baru (templates/default)
+	SiteMinify  bool   // website publik dikirim dengan .html/.css/.js versi minify (SITE_MINIFY=0 mematikan)
 	MaxProjects int    // jumlah project (subdomain) maksimal per akun
 
 	// Login dengan Google (OAuth client tipe "Web application").
@@ -297,6 +298,7 @@ func Load() (*Config, error) {
 	if c.TemplateDir, err = filepath.Abs(envOr("TEMPLATE_DIR", "templates/default")); err != nil {
 		return nil, err
 	}
+	c.SiteMinify = os.Getenv("SITE_MINIFY") != "0"
 	c.MaxProjects = 5
 	if n, convErr := strconv.Atoi(os.Getenv("MAX_PROJECTS")); convErr == nil && n != 0 {
 		c.MaxProjects = max(1, n)

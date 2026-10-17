@@ -35,6 +35,7 @@ type Target struct {
 	Dev     bool   // <slug>--dev: versi dev project dengan publikasi manual
 	Root    string // folder file yang disajikan
 	DBKey   string // kunci database untuk /api/db
+	Minify  bool   // kirim .html/.css/.js versi minify (lihat minify.go)
 }
 
 // Resolve menerjemahkan subdomain ("toko" atau "toko--dev") menjadi versi website yang disajikan.
@@ -47,11 +48,11 @@ func (h *Handler) Resolve(sub string) (*Target, error) {
 	}
 	switch {
 	case dev:
-		return &Target{p, true, h.cfg.SiteRoot(slug), slug}, nil
+		return &Target{Project: p, Dev: true, Root: h.cfg.SiteRoot(slug), DBKey: slug}, nil
 	case p.Manual():
-		return &Target{p, false, h.cfg.PublishedRoot(slug), userdb.ProdKey(slug)}, nil
+		return &Target{Project: p, Root: h.cfg.PublishedRoot(slug), DBKey: userdb.ProdKey(slug), Minify: h.cfg.SiteMinify}, nil
 	}
-	return &Target{p, false, h.cfg.SiteRoot(slug), slug}, nil
+	return &Target{Project: p, Root: h.cfg.SiteRoot(slug), DBKey: slug, Minify: h.cfg.SiteMinify}, nil
 }
 
 type Handler struct {
@@ -182,9 +183,13 @@ func (h *Handler) withPicker(page []byte) []byte {
 	return append(out, page[body:]...)
 }
 
-func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, file *siteFile, status int) {
+func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, target *Target, file *siteFile, status int) {
 	picker := strings.HasPrefix(file.ctype, "text/html") && inFrame(r)
+	small := !picker && wantMinify(r, target, file)
 	etag := pageETag(file.info, picker)
+	if small {
+		etag = strings.TrimSuffix(etag, `"`) + `-m"`
+	}
 	hd := w.Header()
 	hd.Set("Content-Type", file.ctype)
 	hd.Set("Cache-Control", "no-cache") // selalu revalidasi, supaya preview langsung ter-update
@@ -193,9 +198,22 @@ func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, file *siteFil
 	if strings.HasPrefix(file.ctype, "text/html") {
 		hd.Set("Vary", "Sec-Fetch-Dest") // versi iframe (dengan pemilih blok) beda dari versi biasa
 	}
+	if picker && target.Minify {
+		setPreviewCookie(w)
+	}
 	if status == http.StatusOK && r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
 		return
+	}
+	if small {
+		if body, ok := minifiedFile(file); ok {
+			hd.Set("Content-Length", strconv.Itoa(len(body)))
+			w.WriteHeader(status)
+			if r.Method != http.MethodHead {
+				w.Write(body)
+			}
+			return
+		}
 	}
 	if picker {
 		page, err := os.ReadFile(file.abs)
@@ -311,7 +329,7 @@ func (h *Handler) ServeTarget(w http.ResponseWriter, r *http.Request, target *Ta
 		file = findFile(root, rel+".html")
 	}
 	if file != nil {
-		h.sendFile(w, r, file, http.StatusOK)
+		h.sendFile(w, r, target, file, http.StatusOK)
 		return
 	}
 
@@ -321,7 +339,7 @@ func (h *Handler) ServeTarget(w http.ResponseWriter, r *http.Request, target *Ta
 		return
 	}
 	if custom := findFile(root, "404.html"); custom != nil {
-		h.sendFile(w, r, custom, http.StatusNotFound)
+		h.sendFile(w, r, target, custom, http.StatusNotFound)
 		return
 	}
 	h.notFoundPage(w, r, "Halaman tidak ditemukan", "File <code>"+stripUnsafe.Replace(pathname)+"</code> tidak ada.")

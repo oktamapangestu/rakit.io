@@ -22,6 +22,7 @@ go/bin/rakit --env-file .env              # dari folder repo (PUBLIC_DIR & TEMPL
 | `TEMPLATE_DIR` | `templates/default` | File awal project baru, relatif ke folder kerja. |
 | `MAX_PROJECTS`, `GOOGLE_*`, `AI_*`, `KASERA_*`, `CREDIT_PACKAGES`, `ASSISTANT_PACKAGES`, `PLAN_*` | sama dengan Node | |
 | `MAIL_API_URL` | `https://mail-api.flaz.id/v1/messages` | API pengirim email (lupa password). Hanya di server Go. |
+| `SITE_MINIFY` | `1` | Website publik dikirim dengan .html/.css/.js versi minify (`internal/sites/minify.go`); versi dev, preview editor & sandbox agen tetap asli. `0` mematikan. Hanya di server Go. |
 
 ## Test
 
