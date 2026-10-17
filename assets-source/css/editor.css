@@ -365,6 +365,8 @@ a.chip-btn svg { width: 14px; height: 14px; }
 }
 .panel-title { font-weight: 600; font-size: 13px; color: var(--white); }
 .panel-actions { display: flex; gap: 2px; }
+/* Nama project: di desktop sudah tampil di header, jadi hanya ditampilkan di HP (header tanpa chip project). */
+@media (min-width: 761px) { .project { display: none; } }
 .project {
   margin: 0 10px 6px;
   padding: 6px 10px;
@@ -489,7 +491,9 @@ a.chip-btn svg { width: 14px; height: 14px; }
 .usage-bar div { height: 100%; border-radius: 4px; background: var(--grad); }
 
 /* ---------- Editor ---------- */
-.editor-area { flex: 1; min-width: 240px; }
+/* Rel tab mode di kiri, isi mode (.editor-main) di kanan. */
+.editor-area { flex: 1; min-width: 240px; flex-direction: row; }
+.editor-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 
 .editor-top {
   display: flex;
@@ -875,34 +879,41 @@ body:has(#modal:not([hidden])) .release-dot { animation-play-state: paused; }
 }
 
 
-/* ---------- Asisten AI ---------- */
+/* ---------- Tab mode (Code … Console) ---------- */
+/* Desktop: rel vertikal di sisi kiri panel editor (ikon + label kecil), supaya baris atas lega untuk tab file. */
 .mode-switch {
   display: flex;
+  flex-direction: column;
   gap: 2px;
-  margin-left: auto;
-  padding: 3px;
-  border: 1px solid var(--line-2);
-  border-radius: 11px;
-  background: var(--bg);
+  width: 58px;
+  padding: 8px 6px;
+  border-right: 1px solid var(--line);
+  background: var(--panel-2);
   flex-shrink: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
+.mode-switch::-webkit-scrollbar { display: none; }
 .mode-switch button {
-  display: inline-flex;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 12px;
+  gap: 4px;
+  padding: 8px 2px 7px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: none;
   color: var(--muted);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 10.5px;
+  line-height: 1.1;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.mode-switch button svg { width: 14px; height: 14px; }
-.mode-switch button:hover { color: var(--white); }
+.mode-switch button svg { width: 18px; height: 18px; }
+.mode-switch button:hover { background: var(--hover); color: var(--white); }
+.mode-switch button:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
 .editor-area[data-mode="code"] .mode-switch [data-mode="code"] { background: var(--raised); color: var(--white); box-shadow: 0 1px 3px var(--shadow); }
 .editor-area[data-mode="ai"] .mode-switch [data-mode="ai"] { background: var(--grad); color: var(--on-accent); box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 40%, transparent); }
 .mode-switch [data-mode="ai"] svg { color: var(--accent-text); }
@@ -1522,9 +1533,13 @@ button.credit-badge:disabled { cursor: default; }
 .mode-switch [data-mode="data"] svg { color: var(--ok-text); }
 .editor-area[data-mode="data"] .mode-switch [data-mode="data"] svg { color: var(--on-accent); }
 .editor-area[data-mode="data"] .tabs { display: none; }
+/* Judul panel untuk mode selain Code & AI (Database, Diagram, Fungsi, Riwayat, Console). */
 .data-head { display: none; flex: 1; align-items: center; min-width: 0; padding-left: 8px; }
-.editor-area[data-mode="data"] .data-head { display: flex; }
-.data-title svg { color: var(--ok-text); }
+.editor-area:not([data-mode="code"], [data-mode="ai"]) .data-head { display: flex; }
+.editor-area[data-mode="data"] .view-title svg { color: var(--ok-text); }
+.editor-area[data-mode="diagram"] .view-title svg { color: var(--warn-text); }
+.editor-area:is([data-mode="fn"], [data-mode="history"]) .view-title svg { color: var(--info-text); }
+.editor-area[data-mode="console"] .view-title svg { color: var(--muted); }
 
 .data-view { flex: 1; display: flex; min-height: 0; border-top: 1px solid var(--line); margin-top: 8px; }
 .db-sidebar { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
@@ -1776,16 +1791,23 @@ button.credit-badge:disabled { cursor: default; }
   .row { height: 38px; }
   .tree { padding: 4px 6px 12px; }
 
-  /* Area editor */
-  .editor-top { gap: 6px; min-height: 44px; padding: 6px 10px 0 6px; flex-wrap: wrap; }
-  /* Tab mode (Code … Console) di baris sendiri di bawah tab file / judul panel, bersama tombol info. */
-  .tabs, .ai-head, .data-head { flex-basis: 100%; }
-  .mode-switch { order: 2; flex: 1; margin-left: 0; }
-  .mode-switch button { flex: 1; justify-content: center; }
-  .editor-top .feature-info-btn { order: 3; }
+  /* Area editor: tab mode jadi baris ikon di atas, isi mode di bawahnya. */
+  .editor-area { flex-direction: column; }
+  .mode-switch {
+    flex-direction: row;
+    width: auto;
+    margin: 8px 8px 0;
+    padding: 3px;
+    border: 1px solid var(--line-2);
+    border-radius: 11px;
+    background: var(--bg);
+  }
+  .mode-switch button { flex: 1; height: 32px; padding: 0; justify-content: center; font-size: 0; gap: 0; border-radius: 8px; }
+  .mode-switch button svg { width: 16px; height: 16px; }
+  .console-badge { top: -4px; right: 0; }
+  .editor-top { gap: 6px; min-height: 44px; padding: 6px 10px 0 6px; }
   .ai-head { padding-left: 4px; }
   .ai-head .ai-title { display: none; }
-  .mode-switch button { padding: 0 10px; }
   .breadcrumbs, #statusUser, #statusCursor { display: none; }
   .editor-foot { padding: 0 10px; }
 
@@ -1853,21 +1875,14 @@ button.credit-badge:disabled { cursor: default; }
 .modal input[type="checkbox"] { width: auto; height: auto; margin: 0; padding: 0; }
 
 /* Bar atas area editor menyesuaikan lebar kolomnya sendiri (bukan lebar layar). */
-.editor-area { container-type: inline-size; }
+.editor-main { container-type: inline-size; }
 .ai-head, .data-head { overflow: hidden; }
 .ai-title { white-space: nowrap; }
-@container (max-width: 460px) {
+@container (max-width: 400px) {
   .ai-head .ai-title { display: none; }
 }
-/* Panel sempit: label tab cukup untuk tab yang aktif, sisanya ikon; sangat sempit: semua ikon. */
-@container (max-width: 680px) {
-  .mode-switch button:not([aria-selected="true"]) { font-size: 0; gap: 0; padding: 0 11px; }
-}
-@container (max-width: 380px) {
-  .mode-switch button { font-size: 0; gap: 0; padding: 0 11px; }
-}
-@container (max-width: 340px) {
-  .data-head .data-title { display: none; }
+@container (max-width: 220px) {
+  .data-head .view-title { display: none; }
 }
 @container (max-width: 300px) {
   #aiReset { display: none; }
@@ -1906,11 +1921,6 @@ button.credit-badge:disabled { cursor: default; }
 .mode-switch [data-mode="diagram"] svg { color: var(--warn-text); }
 .editor-area[data-mode="diagram"] .mode-switch [data-mode="diagram"] svg { color: #fff; }
 .editor-area[data-mode="diagram"] .tabs { display: none; }
-.diagram-head { display: none; }
-.editor-area[data-mode="diagram"] .diagram-head { display: flex; }
-.editor-area[data-mode="data"] .diagram-head { display: none; }
-.editor-area[data-mode="diagram"] .data-head:not(.diagram-head) { display: none; }
-.diagram-title svg { color: var(--warn-text); }
 
 .diagram-view { flex: 1; display: flex; flex-direction: column; min-height: 0; margin-top: 8px; border-top: 1px solid var(--line); }
 .diagram-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 12px; }
@@ -2066,9 +2076,8 @@ button.credit-badge:disabled { cursor: default; }
 .editor-area[data-mode="console"] .mode-switch [data-mode="console"] svg { color: #fff; }
 .editor-area[data-mode="console"] .tabs { display: none; }
 .editor-area[data-mode="console"] .editor-top { justify-content: flex-end; }
-.mode-switch [data-mode="console"] { position: relative; }
 .console-badge {
-  position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  position: absolute; top: 3px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
   background: var(--danger); color: #fff; font: 700 10px/16px var(--ui); text-align: center;
 }
 .console-view { flex: 1; display: flex; flex-direction: column; min-height: 0; margin-top: 8px; border-top: 1px solid var(--line); }
