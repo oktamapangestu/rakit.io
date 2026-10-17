@@ -26,6 +26,7 @@ import (
 	"rakit.io/server/internal/files"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
+	"rakit.io/server/internal/pagecheck"
 	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/store"
 	"rakit.io/server/internal/userdb"
@@ -63,6 +64,10 @@ type Service struct {
 	http     *http.Client
 
 	buildPrompt, planPrompt string
+	// Tool Builder: toolsJSON + tool uji (lab.go) bila aktif, dan tambahan prompt untuk tool uji.
+	builderTools, labPrompt string
+	// pages: Chromium bersama untuk check_page; nil = tidak ada browser.
+	pages *pagecheck.Checker
 
 	// ResolvePage: file HTML untuk pathname halaman di website project (dari paket sites), dipakai
 	// untuk blok terpilih. Dipasang di main.go.
@@ -99,6 +104,16 @@ func New(cfg *config.Config, db *store.Store, c *credits.Service, p *plans.Plans
 		explaining:  map[int64]bool{},
 		agentSlots:  make(chan struct{}, cfg.AI.Agent.MaxConcurrent),
 	}
+	s.builderTools = toolsJSON
+	if cfg.AI.Tests {
+		b := cfg.AI.Browser
+		s.pages = pagecheck.New(pagecheck.Options{Path: b.Path, MaxConcurrent: b.MaxConcurrent, NoSandbox: b.NoSandbox})
+		var base, extra []json.RawMessage
+		json.Unmarshal([]byte(toolsJSON), &base)
+		json.Unmarshal([]byte(labToolsJSON(s.pages != nil)), &extra)
+		raw, _ := json.Marshal(append(base, extra...))
+		s.builderTools, s.labPrompt = string(raw), labPrompt(s.pages != nil)
+	}
 	// AI_BUILD_PROMPT_APPEND: file yang isinya ditambahkan ke prompt Builder — untuk eksperimen evaluasi
 	// (scripts/ai-eval/run.mjs --skill menambahkan skills/rakit/SKILL.md), bukan pengaturan produksi.
 	if path := os.Getenv("AI_BUILD_PROMPT_APPEND"); path != "" {
@@ -115,6 +130,13 @@ func New(cfg *config.Config, db *store.Store, c *credits.Service, p *plans.Plans
 // Start: pemulihan setelah restart dan pembersihan berkala. Dipanggil sekali saat server menyala.
 func (s *Service) Start() {
 	s.checkAgentEngines()
+	switch {
+	case !s.cfg.AI.Tests:
+	case s.pages != nil:
+		log.Printf("ai: tool uji Builder aktif; check_page memakai %s", s.pages.Exec())
+	default:
+		log.Printf("ai: tool uji Builder aktif tanpa check_page (tidak ada Chromium; pasang dengan `npx playwright install chromium-headless-shell` atau isi AI_BROWSER)")
+	}
 	// Job yang terputus karena server mati/restart: tandai gagal dan kembalikan kreditnya.
 	rows, err := s.db.Query("SELECT id, user_id, credit FROM ai_messages WHERE role = 'assistant' AND status IN ('queued', 'running')")
 	if err != nil {
@@ -909,12 +931,26 @@ func (s *Service) runJob(j *job, in jobInput) {
 		system := s.buildPrompt
 		if in.mode == "plan" {
 			system = s.planPrompt
+		} else if in.mode != "agent" {
+			system += s.labPrompt
 		}
 		convo := append([]message{{"role": "system", "content": system}}, merged...)
 
 		var text string
 		var changes []change
 		var agentRes *agentResult // mode Agen: tabel yang sudah dibuat agen, untuk snapshot & pembatalan
+		var lb *lab               // Builder: tabel yang sudah dibuat tool uji, untuk snapshot & pembatalan
+		// Tabel yang dibuat selama job (agen / tool uji) dihapus lagi kecuali masuk snapshot pesan yang diterapkan.
+		tablesKept := false
+		defer func() {
+			if !tablesKept {
+				if agentRes != nil {
+					agentRes.tools.revert()
+				}
+				lb.revert()
+			}
+			lb.close()
+		}()
 		if in.mode == "agent" {
 			result, err := s.runAgent(j.ctx, in, ask, history, h, act)
 			if err != nil {
@@ -969,7 +1005,8 @@ func (s *Service) runJob(j *job, in jobInput) {
 			ws := newWorkspace(s.cfg.SiteRoot(slug), existing)
 			ws.columns = columns
 			ws.request = in.prompt
-			result, err := s.runBuilder(convo, ws, h)
+			lb = s.newLab(slug, ws, in.messageID)
+			result, err := s.runBuilder(convo, ws, lb, h)
 			if err != nil {
 				return err
 			}
@@ -1006,15 +1043,16 @@ func (s *Service) runJob(j *job, in jobInput) {
 			}
 			snap, err := s.applyChanges(context.Background(), slug, apply)
 			if err != nil {
-				if agentRes != nil {
-					agentRes.tools.revert()
-				}
 				applyState = "failed"
 				applyError = "Gagal menerapkan perubahan: " + err.Error() + ". File dikembalikan seperti semula."
 			} else {
 				if agentRes != nil {
 					snap.Tables = append(slices.Clone(agentRes.tables), snap.Tables...)
 				}
+				if lb != nil {
+					snap.Tables = append(slices.Clone(lb.tables), snap.Tables...)
+				}
+				tablesKept = true
 				raw, _ := marshal(snap)
 				applyState, snapJSON = "pending", string(raw)
 				touched = touchedPaths(changes)

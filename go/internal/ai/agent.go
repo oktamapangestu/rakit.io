@@ -416,7 +416,7 @@ func (a *agentSession) readDriver(r io.Reader) {
 	}
 }
 
-// readPi: mode RPC Pi — event JSON per baris.
+// readPi: mode RPC Pi — event JSON per baris, akhir ditandai agent_settled.
 func (a *agentSession) readPi(r io.Reader) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64<<10), 16<<20)
@@ -680,9 +680,9 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	rawTable, _ := json.Marshal(createTable)
 	rawModels, _ := json.MarshalIndent(piModels(endpoint.Model, s.cfg.AI.MaxTokens), "", "  ")
 	for path, content := range map[string][]byte{
-		filepath.Join(wsDir, agentsMDFile):              []byte(md),
-		filepath.Join(runDir, "create_table.json"):      rawTable,
-		filepath.Join(runDir, "prompt.md"):              nil,
+		filepath.Join(wsDir, agentsMDFile):            []byte(md),
+		filepath.Join(runDir, "create_table.json"):    rawTable,
+		filepath.Join(runDir, "prompt.md"):            nil,
 		filepath.Join(runDir, "agent", "models.json"): rawModels,
 	} {
 		if err := os.WriteFile(path, content, 0o644); err != nil {

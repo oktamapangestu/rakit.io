@@ -113,11 +113,7 @@ func (a *activity) toolDelta(index int, name, args string) {
 	}
 	d.args += args
 	if !d.started {
-		key := "path"
-		if d.name == "create_table" {
-			key = "name"
-		}
-		value, done := jsonField(d.args, key)
+		value, done := jsonField(d.args, stepKey(d.name))
 		if !done || d.name == "" {
 			return
 		}
@@ -130,6 +126,17 @@ func (a *activity) toolDelta(index int, name, args string) {
 			a.add("draft", d.id, text)
 		}
 	}
+}
+
+// stepKey: argumen yang ditampilkan sebagai target langkah.
+func stepKey(tool string) string {
+	switch tool {
+	case "create_table":
+		return "name"
+	case "search_files":
+		return "pattern"
+	}
+	return "path"
 }
 
 // toolResult: hasil stageToolCall untuk tool call ke-n (urut index stream, sama dengan reply.ToolCalls).
@@ -147,7 +154,7 @@ func (a *activity) toolResult(n int, call toolCall, result string) {
 		// Nama/path tidak terbaca selama stream (argumen rusak): tetap tampilkan langkahnya.
 		a.seq++
 		d = &toolDraft{id: a.seq, name: call.Name, started: true}
-		d.target, _ = jsonField(call.Arguments, map[bool]string{true: "name", false: "path"}[call.Name == "create_table"])
+		d.target, _ = jsonField(call.Arguments, stepKey(call.Name))
 		a.emit(event{"type": "step", "id": d.id, "tool": d.name, "target": d.target, "state": "run"})
 	}
 	state, note := "ok", ""
@@ -158,6 +165,13 @@ func (a *activity) toolResult(n int, call toolCall, result string) {
 		state, note = "warn", result
 		if _, problem, found := strings.Cut(result, ": "); found {
 			note = strings.TrimSuffix(strings.TrimSpace(strings.SplitN(problem, ". Perbaiki", 2)[0]), ".")
+		}
+	case strings.HasPrefix(result, "Ditemukan "): // check_page
+		state, note = "warn", strings.SplitN(result, ".", 2)[0]
+	case call.Name == "test_api":
+		note = strings.SplitN(result, "\n", 2)[0] // "HTTP 200 OK"
+		if code, _ := strconv.Atoi(strings.Fields(note + " 0 0")[1]); code >= 500 {
+			state = "warn"
 		}
 	}
 	d.started = false // sudah selesai: tidak dibatalkan oleh start()

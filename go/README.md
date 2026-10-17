@@ -132,6 +132,24 @@ Catatan:
   (`password_resets`); dipakai = semua sesi lama keluar. Email dikirim di latar (jawaban API sama, ada akunnya atau
   tidak), jadi kegagalan kirim hanya tercatat di log — pakai tombol "Kirim tes" di dashboard untuk memeriksa pengaturan.
 
+## Tool uji Builder
+
+Builder punya tool uji yang meniru cara mesin agen menguji hasilnya sendiri (`internal/ai/lab.go`), tanpa container —
+dari eval, ±60% perintah shell Claude Agent SDK adalah uji mandiri (`cek-halaman`, `curl` ke API, `node --check`):
+
+- `test_api`: request HTTP ke website project (in-process lewat `AgentSite`): `/api/db` & `/api/fn` sungguhan,
+  fungsi dijalankan dari salinan kerja job (file asli + perubahan yang sudah dicatat model; hard link, jadi murah).
+- `check_page`: halaman dibuka di Chromium headless bersama (`internal/pagecheck`, chromedp) dengan layar HP 390 px:
+  error JS/Alpine/console, request gagal, HTTP ≥ 400, dan halaman yang melebar. Satu proses browser untuk semua job,
+  tab dibatasi `AI_BROWSER_MAX_CONCURRENT`, mati sendiri setelah menganggur. Jaringan browser lewat proxy penolak:
+  hanya server lokal pemeriksaan & CDN umum yang bisa dijangkau (bukan 127.0.0.1 port lain atau jaringan internal).
+  Tanpa browser (`AI_BROWSER=off` atau tidak ditemukan), tool ini tidak ditawarkan ke model.
+- `search_files`: cari teks/regex di file terbaru.
+
+Tabel yang dicatat model dibuat lebih awal saat tool uji pertama dipanggil (supaya bisa diuji); snapshot-nya ikut
+pesan (Batalkan menghapusnya) dan dihapus lagi bila job gagal/dihentikan atau tidak ada yang diterapkan. Pemakaiannya
+dicatat di statistik pemeriksaan (`found.page` = masalah dari `check_page`). Matikan dengan `AI_BUILDER_TESTS=0`.
+
 ## Mode Agen
 
 Selain Builder dan Plan, editor punya mode **Agen** (`internal/ai/agent.go`): prompt dikerjakan Claude Agent SDK,
@@ -154,7 +172,8 @@ Builder (perubahan diterapkan dengan snapshot, Simpan/Batalkan, statistik `ai_re
 - **Pengembangan di macOS:** Docker Desktop tidak bisa membagi unix socket ke container — pakai
   `AI_AGENT_TRANSPORT=tcp` (tanpa isolasi jaringan, jangan untuk produksi).
 - **Test:** `tests/agent.test.mjs` memakai mesin tiruan (`AI_AGENT_CMD`, `tests/helpers/fake-agent.mjs`) tanpa Docker;
-  evaluasi dengan mesin sungguhan: `npm run ai:eval -- --engine agent:claude,agent:pi,agent:openhands`.
+  evaluasi dengan mesin sungguhan: `npm run ai:eval -- --engine agent:claude,agent:pi,agent:openhands`
+  (`--runtime` membuka setiap halaman hasil di Chromium dan menghitung error-nya).
 
 ## Deploy tahap ini
 

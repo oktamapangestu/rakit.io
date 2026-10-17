@@ -20,9 +20,10 @@ import (
 )
 
 const (
-	maxBuildRounds     = 10
+	maxBuildRounds     = 30
 	maxTruncatedRounds = 3
 	truncatedNote      = "\n\n_(Jawaban terpotong karena terlalu panjang.)_"
+	roundsNote         = "⚠️ AI berhenti karena mencapai batas langkah untuk satu prompt, jadi sebagian pekerjaan mungkin belum selesai. Cek hasilnya, lalu kirim \"lanjutkan\" untuk meneruskan."
 )
 
 // change: satu perubahan dari mode Builder — tulis/hapus file, atau buat/perluas tabel.
@@ -332,6 +333,12 @@ func stageToolCall(call toolCall, ws *workspace, truncated bool) (result string,
 	switch call.Name {
 	case "read_file":
 		return readFile(args, ws), nil
+	case "search_files":
+		text, err := searchFiles(args, ws)
+		if err != nil {
+			return "Error: " + err.Error(), []problem{{"tool", err.Error()}}
+		}
+		return text, nil
 	case "write_file":
 		valid, err = validateFile("write", args)
 	case "edit_file":
@@ -567,6 +574,7 @@ type buildStats struct {
 	Found  map[string]int `json:"found,omitempty"`
 	Left   map[string]int `json:"left,omitempty"`
 	Rounds int            `json:"rounds"`
+	Tools  map[string]int `json:"tools,omitempty"` // berapa kali tiap tool dipanggil
 }
 
 func (b *buildStats) count(target *map[string]int, list []problem) {
@@ -610,8 +618,16 @@ func withText(m message, content string) message {
 	return out
 }
 
+func debugCut(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
+}
+
 // runBuilder: mode Builder — ulangi permintaan sampai model selesai memanggil tool dan menulis ringkasan.
-func (s *Service) runBuilder(messages []message, ws *workspace, h hooks) (*buildResult, error) {
+// lb: tool uji (test_api, check_page); nil = tidak aktif.
+func (s *Service) runBuilder(messages []message, ws *workspace, lb *lab, h hooks) (*buildResult, error) {
 	convo := append([]message(nil), messages...)
 	// Pesan terakhir berisi konteks project + permintaan. Konteks penuh hanya dikirim di
 	// putaran pertama; putaran lanjut memakai versi ringkas. Pesan setelahnya (jawaban &
@@ -623,6 +639,7 @@ func (s *Service) runBuilder(messages []message, ws *workspace, h hooks) (*build
 	truncatedRounds := 0
 	lastNudge := "" // masalah yang terakhir dikembalikan di pemeriksaan akhir
 	claimNudged := false
+	finished := false // model menyatakan selesai (bukan berhenti karena batas putaran)
 
 	for round := 0; round < maxBuildRounds; round++ {
 		out.stats.Rounds = round + 1
@@ -684,6 +701,7 @@ func (s *Service) runBuilder(messages []message, ws *workspace, h hooks) (*build
 			problems := problemList(byFile)
 			nudge := strings.Join(problems, "\n")
 			if len(problems) == 0 || round >= maxBuildRounds-1 || nudge == lastNudge {
+				finished = true
 				break
 			}
 			lastNudge = nudge
@@ -721,13 +739,26 @@ func (s *Service) runBuilder(messages []message, ws *workspace, h hooks) (*build
 		}
 		convo = append(convo, assistant)
 		for n, c := range r.ToolCalls {
-			result, found := stageToolCall(c, ws, truncated)
+			result, found, tested := lb.run(h.ctx, c)
+			if !tested {
+				result, found = stageToolCall(c, ws, truncated)
+			}
+			if out.stats.Tools == nil {
+				out.stats.Tools = map[string]int{}
+			}
+			out.stats.Tools[c.Name]++
+			if os.Getenv("AI_DEBUG") != "" {
+				log.Printf("----- tool %s %s\n%s", c.Name, debugCut(c.Arguments, 300), debugCut(result, 1500))
+			}
 			out.stats.count(&out.stats.Found, found)
 			if h.onToolResult != nil {
 				h.onToolResult(n, c, result)
 			}
 			convo = append(convo, message{"role": "tool", "tool_call_id": c.ID, "content": result})
 		}
+	}
+	if !finished {
+		text = strings.TrimSpace(text + "\n\n" + roundsNote)
 	}
 	byFile, images := ws.finalProblems()
 	for _, list := range byFile {
@@ -867,6 +898,59 @@ func (s *Service) revertTable(ctx context.Context, slug string, entry tableSnaps
 	return err
 }
 
+// applyTables membuat/memperluas tabel. Fase 1: tabel + kolom biasa. Fase 2: kolom relasi, setelah semua tabel
+// tujuan ada. Snapshot yang sudah terkumpul ikut dikembalikan walau gagal di tengah (untuk dikembalikan).
+func (s *Service) applyTables(ctx context.Context, slug string, tableChanges []change) ([]tableSnapshot, error) {
+	var snaps []tableSnapshot
+	for _, c := range tableChanges {
+		var plain []userdb.Column
+		for _, col := range c.Columns {
+			if col.Type != "reference" {
+				plain = append(plain, col)
+			}
+		}
+		entry, err := s.applyTable(ctx, slug, c, plain)
+		if err != nil {
+			return snaps, err
+		}
+		snaps = append(snaps, entry)
+	}
+	for _, c := range tableChanges {
+		existing, err := s.findTable(ctx, slug, c.Name)
+		if err != nil {
+			return snaps, err
+		}
+		var missing []userdb.Column
+		for _, col := range c.Columns {
+			if col.Type != "reference" {
+				continue
+			}
+			found := false
+			if existing != nil {
+				for _, e := range existing.Columns {
+					found = found || e.Name == col.Name
+				}
+			}
+			if !found {
+				missing = append(missing, col)
+			}
+		}
+		if len(missing) == 0 {
+			continue
+		}
+		if _, err := s.userdb.UpdateTable(ctx, slug, c.Name, map[string]any{"addColumns": columnInputs(missing)}); err != nil {
+			return snaps, err
+		}
+		// existed: true → revert cukup menghapus kolom relasi yang barusan ditambahkan.
+		names := []string{}
+		for _, col := range missing {
+			names = append(names, col.Name)
+		}
+		snaps = append(snaps, tableSnapshot{Table: c.Name, Existed: true, AddedColumns: names})
+	}
+	return snaps, nil
+}
+
 // applyChanges menerapkan perubahan. Bila gagal di tengah jalan, semuanya dikembalikan lalu
 // kesalahannya dikembalikan ke pemanggil.
 func (s *Service) applyChanges(ctx context.Context, slug string, changes []change) (*snapshot, error) {
@@ -901,52 +985,10 @@ func (s *Service) applyChanges(ctx context.Context, slug string, changes []chang
 
 	apply := func() error {
 		// Tabel dulu, supaya halaman yang memakai datanya langsung berfungsi di preview.
-		// Fase 1: tabel + kolom biasa. Fase 2: kolom relasi, setelah semua tabel tujuan ada.
-		for _, c := range tableChanges {
-			var plain []userdb.Column
-			for _, col := range c.Columns {
-				if col.Type != "reference" {
-					plain = append(plain, col)
-				}
-			}
-			entry, err := s.applyTable(ctx, slug, c, plain)
-			if err != nil {
-				return err
-			}
-			snap.Tables = append(snap.Tables, entry)
-		}
-		for _, c := range tableChanges {
-			existing, err := s.findTable(ctx, slug, c.Name)
-			if err != nil {
-				return err
-			}
-			var missing []userdb.Column
-			for _, col := range c.Columns {
-				if col.Type != "reference" {
-					continue
-				}
-				found := false
-				if existing != nil {
-					for _, e := range existing.Columns {
-						found = found || e.Name == col.Name
-					}
-				}
-				if !found {
-					missing = append(missing, col)
-				}
-			}
-			if len(missing) == 0 {
-				continue
-			}
-			if _, err := s.userdb.UpdateTable(ctx, slug, c.Name, map[string]any{"addColumns": columnInputs(missing)}); err != nil {
-				return err
-			}
-			// existed: true → revert cukup menghapus kolom relasi yang barusan ditambahkan.
-			names := []string{}
-			for _, col := range missing {
-				names = append(names, col.Name)
-			}
-			snap.Tables = append(snap.Tables, tableSnapshot{Table: c.Name, Existed: true, AddedColumns: names})
+		tables, err := s.applyTables(ctx, slug, tableChanges)
+		snap.Tables = append(snap.Tables, tables...)
+		if err != nil {
+			return err
 		}
 		limits := s.plans.StorageFor(slug)
 		for _, c := range fileChanges {

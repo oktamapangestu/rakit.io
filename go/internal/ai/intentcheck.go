@@ -140,6 +140,38 @@ func (ws *workspace) unsavedForms(page, content, original string) []problem {
 	return out
 }
 
+// siteAPIRE: alamat /api/... relatif di kode halaman (diawali tanda kutip), mis. fetch('/api/upload'). fnFileRE:
+// alamat file fungsi, mis. fetch('/functions/kirim') — folder functions/ tidak pernah disajikan ke browser.
+var (
+	siteAPIRE = regexp.MustCompile("[\"'`](/api/([A-Za-z0-9_-]+)[^\"'`\\s?]*)")
+	fnFileRE  = regexp.MustCompile("[\"'`]\\.?/?functions/([A-Za-z0-9_-]+)(\\.js)?[\"'`?/]")
+)
+
+// unknownAPIProblems: pemanggilan /api/... di website yang tidak ada di rakit. Website project hanya punya
+// /api/db/<tabel> (termasuk /upload), /api/fn/<nama>, dan /api/ai/... (asisten) — yang lain selalu 404. Alamat
+// "/api/<tabel>" tanpa db sudah dilaporkan apiPathProblems.
+func unknownAPIProblems(content string, tables map[string]bool) []problem {
+	var out []problem
+	seen := map[string]bool{}
+	for _, m := range fnFileRE.FindAllStringSubmatch(content, -1) {
+		if !seen[m[0]] {
+			seen[m[0]] = true
+			out = append(out, problem{"api", fmt.Sprintf(`memanggil file "functions/%s" langsung, padahal folder functions/ tidak pernah disajikan ke browser — panggil fungsinya lewat /api/fn/%s`, m[1], m[1])})
+		}
+	}
+	for _, m := range siteAPIRE.FindAllStringSubmatch(content, -1) {
+		first := m[2]
+		if first == "db" || first == "fn" || first == "ai" || tables[first] || seen[m[1]] {
+			continue
+		}
+		seen[m[1]] = true
+		out = append(out, problem{"api", fmt.Sprintf(`memanggil "%s", tapi alamat itu tidak ada di rakit (selalu 404). Yang ada: `+
+			`/api/db/<tabel> (dan /api/db/<tabel>/upload?column=<kolom> untuk gambar), /api/fn/<nama> untuk fungsi `+
+			`functions/<nama>.js, dan widget /api/ai/widget.js`, m[1])})
+	}
+	return out
+}
+
 // Permintaan chatbot untuk pengunjung — dan permintaan yang memang ingin memakai provider/API key sendiri.
 var (
 	chatbotAskRE = regexp.MustCompile(`(?i)chat\s*bot|\bbot\s+(ai|cs|customer)|asisten\s+(ai|virtual|chat)|ai\s+assistant|virtual\s+assistant|customer\s+service\s+(bot|ai|otomatis)|\bcs\s+(bot|ai|otomatis)|live\s*chat\s+ai|chat\s+(ai|dengan\s+ai)`)
@@ -189,4 +221,22 @@ func (ws *workspace) chatbotProblems() (string, []problem) {
 		`<script src="/api/ai/widget.js" defer></script> tepat sebelum </body> di halaman yang perlu. Jangan membuat chat ` +
 		`sendiri: hapus UI chat, CSS/JS chat, dan fungsi chat buatan sendiri bila sudah dibuat. Tidak perlu API key; di ` +
 		`ringkasan, minta pemilik mengaktifkan asisten di menu avatar → "Asisten AI website"`}}
+}
+
+// scratchNameRE: nama fungsi yang biasanya dibuat model hanya untuk mencoba runtime (lihat tool uji, lab.go).
+var scratchNameRE = regexp.MustCompile(`^(?:zz[-_]?)?(?:diag|diagnos\w*|debug|dbg|probe|tmp|temp|scratch|tes|test|coba)(?:[-_].*)?$`)
+
+// scratchFunction: fungsi baru bernama seperti fungsi uji sementara yang tidak dipanggil halaman mana pun —
+// sisa percobaan model yang tidak boleh ikut masuk project.
+func (ws *workspace) scratchFunction(path string) []problem {
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "functions/"), ".js")
+	if !scratchNameRE.MatchString(name) {
+		return nil
+	}
+	for _, content := range ws.textFiles() {
+		if strings.Contains(content, "/api/fn/"+name) {
+			return nil
+		}
+	}
+	return []problem{{"scratch", fmt.Sprintf(`fungsi "%s" tidak dipanggil halaman mana pun dan sepertinya hanya untuk mencoba — hapus dengan delete_file kalau memang sementara`, name)}}
 }

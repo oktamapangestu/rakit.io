@@ -6,6 +6,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { startStack, TINY_PNG } from './helpers/harness.mjs';
 
+const GO = /go\/bin\/rakit/.test(process.env.RAKIT_SERVER_CMD ?? '');
 let stack;
 before(async () => { stack = await startStack({ AI_BONUS_CREDITS: '50', AI_DAILY_CREDITS: '0' }); });
 after(() => stack?.stop());
@@ -63,7 +64,10 @@ test('Builder: menulis, menghapus file dan membuat tabel; hasilnya menunggu konf
 
   // Request pertama membawa tool, konteks file, dan prompt sistem Builder.
   const first = sent(2);
-  assert.deepEqual(first.tools.map((t) => t.function.name), ['write_file', 'edit_file', 'read_file', 'delete_file', 'create_table']);
+  const names = first.tools.map((t) => t.function.name);
+  assert.deepEqual(names.slice(0, 5), ['write_file', 'edit_file', 'read_file', 'delete_file', 'create_table']);
+  // Server Go: tool uji (go/internal/ai/lab.go); check_page hanya bila ada Chromium.
+  assert.deepEqual(names.slice(5).filter((n) => n !== 'check_page'), GO ? ['test_api', 'search_files'] : []);
   assert.equal(first.model, 'mock-main');
   assert.equal(first.stream, true);
   assert.equal(first.messages[0].role, 'system');
@@ -257,7 +261,7 @@ test('Builder: edit_file, read_file, cek sintaks & rujukan file, catatan gambar,
   assert.equal(read(user, 'js/tambahan.js'), 'console.log(1);');
 
   const row = stack.db().prepare("SELECT checks FROM ai_requests WHERE user_id = ? AND action = 'build'").get(user.userId);
-  assert.deepEqual(JSON.parse(row.checks), { found: { js: 1, ref: 1 }, rounds: 5 });
+  assert.deepEqual(JSON.parse(row.checks), { found: { js: 1, ref: 1 }, rounds: 5, tools: { edit_file: 1, read_file: 1, write_file: 3 } });
 });
 
 test('Builder: masalah yang sama tidak dikembalikan berulang-ulang', { skip: goOnly }, async () => {
@@ -272,7 +276,7 @@ test('Builder: masalah yang sama tidak dikembalikan berulang-ulang', { skip: goO
   assert.equal(final.message.content, 'Sengaja, file itu akan dibuat nanti.');
   assert.equal(stack.ai.requests.length - before, 3);
   const row = stack.db().prepare("SELECT checks FROM ai_requests WHERE user_id = ? AND action = 'build'").get(user.userId);
-  assert.deepEqual(JSON.parse(row.checks), { found: { ref: 1 }, left: { ref: 1 }, rounds: 3 });
+  assert.deepEqual(JSON.parse(row.checks), { found: { ref: 1 }, left: { ref: 1 }, rounds: 3, tools: { write_file: 1 } });
 });
 
 test('Builder: ringkasan yang menyebut perubahan tanpa memanggil tool diminta dikerjakan', { skip: goOnly }, async () => {
@@ -288,7 +292,7 @@ test('Builder: ringkasan yang menyebut perubahan tanpa memanggil tool diminta di
   assert.equal(final.message.content, 'Tombol pesan sudah diperbaiki.');
   assert.equal(read(user, 'js/core.js'), 'console.log(1);');
   const row = stack.db().prepare("SELECT checks FROM ai_requests WHERE user_id = ? AND action = 'build'").get(user.userId);
-  assert.deepEqual(JSON.parse(row.checks), { found: { claim: 1 }, rounds: 3 });
+  assert.deepEqual(JSON.parse(row.checks), { found: { claim: 1 }, rounds: 3, tools: { write_file: 1 } });
 });
 
 test('Builder: kode yang hilang saat file ditimpa dikembalikan ke model', { skip: goOnly }, async () => {
@@ -339,7 +343,7 @@ test('Builder: cek ekspresi Alpine, struktur CSS, dan nama kolom database', { sk
   assert.match(css, /^Ditulis, TAPI ada masalah di "buku\.css": kurung \{ untuk "\.a" di baris 1 tidak pernah ditutup/);
   assert.match(sent(2).messages.at(-1).content, /- buku\.html: data yang dikirim ke \/api\/db\/tamu berisi "pesan", tapi tabel tamu tidak punya kolom itu \(kolomnya: nama, ucapan\)/);
   const row = stack.db().prepare("SELECT checks FROM ai_requests WHERE user_id = ? AND action = 'build'").get(user.userId);
-  assert.deepEqual(JSON.parse(row.checks), { found: { alpine: 2, css: 2, column: 1 }, rounds: 4 });
+  assert.deepEqual(JSON.parse(row.checks), { found: { alpine: 2, css: 2, column: 1 }, rounds: 4, tools: { create_table: 1, write_file: 4 } });
 });
 
 test('Builder: perbaikan otomatis error preview gratis, sekali per jawaban', { skip: goOnly }, async () => {

@@ -48,7 +48,7 @@ func textFilesIn(root string) (map[string]string, error) {
 	return out, nil
 }
 
-func sortedKeys(m map[string]string) []string {
+func sortedKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

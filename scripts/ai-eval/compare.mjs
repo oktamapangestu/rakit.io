@@ -49,6 +49,7 @@ for (const engine of engines) {
     'tanpa tabel': ok.filter((r) => r.missingTable).length,
     'luar lingkup': ok.filter((r) => r.outOfScope?.length).length,
     'uji sendiri (kasus)': list[0]?.sandbox ? ok.filter((r) => r.sandbox?.selfTests).length : '-',
+    'masalah runtime': list.some((r) => r.runtime) ? ok.reduce((a, r) => a + (r.runtime?.problems ?? 0), 0) : '-',
     'rata-rata token': Math.round(avg((r) => r.inTokens + r.outTokens)),
     'rata-rata waktu': `${Math.round(avg((r) => r.secs))} dtk`,
   });

@@ -1158,5 +1158,8 @@
   "Mesin agen": "Agent engine",
   "Claude Agent SDK — teliti, menguji hasilnya sendiri": "Claude Agent SDK — thorough, tests its own result",
   "OpenHands — paling banyak menguji, paling lama": "OpenHands — tests the most, takes the longest",
-  "Agen · ${engineName(item.engine)}": "Agent · ${engineName(item.engine)}"
+  "Agen · ${engineName(item.engine)}": "Agent · ${engineName(item.engine)}",
+  "Menguji API": "Testing API",
+  "Membuka halaman": "Opening page",
+  "Mencari": "Searching"
 }

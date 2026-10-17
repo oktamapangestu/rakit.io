@@ -74,6 +74,16 @@ type AI struct {
 	// Baca Alur Kode (internal/ai/explain.go): gratis, dibatasi permintaan per akun per hari (0 = fitur mati).
 	ExplainDailyLimit int
 	Agent             Agent
+	// Tool uji Builder (internal/ai/lab.go): test_api & search_files, dan check_page bila ada browser.
+	Tests   bool // AI_BUILDER_TESTS (default nyala)
+	Browser Browser
+}
+
+// Browser: Chromium bersama untuk tool check_page Builder (internal/pagecheck).
+type Browser struct {
+	Path          string // AI_BROWSER: file browser; kosong = cari otomatis (headless shell Playwright, Chrome); "off" = mati
+	MaxConcurrent int    // AI_BROWSER_MAX_CONCURRENT: tab yang boleh terbuka bersamaan
+	NoSandbox     bool   // AI_BROWSER_NO_SANDBOX=1: wajib bila server menjalankan rakit sebagai root
 }
 
 // Agent: mode Agen di editor (internal/ai/agent.go) — Claude Agent SDK, Pi, atau OpenHands mengerjakan prompt di
@@ -187,6 +197,12 @@ func (c *Config) loadServices() {
 		CPUs:          envOr("AI_AGENT_CPUS", "1"),
 		Transport:     envOr("AI_AGENT_TRANSPORT", "unix"),
 		Command:       os.Getenv("AI_AGENT_CMD"),
+	}
+	c.AI.Tests = os.Getenv("AI_BUILDER_TESTS") != "0" && os.Getenv("AI_BUILDER_TESTS") != "off"
+	c.AI.Browser = Browser{
+		Path:          os.Getenv("AI_BROWSER"),
+		MaxConcurrent: max(1, envInt("AI_BROWSER_MAX_CONCURRENT", 2)),
+		NoSandbox:     os.Getenv("AI_BROWSER_NO_SANDBOX") == "1",
 	}
 	for _, e := range strings.Split(os.Getenv("AI_AGENT_ENGINES"), ",") {
 		if e = strings.TrimSpace(strings.ToLower(e)); e != "" && !slices.Contains(c.AI.Agent.Engines, e) {

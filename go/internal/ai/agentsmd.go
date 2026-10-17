@@ -15,8 +15,8 @@ import (
 const agentsMDFile = "AGENTS.md"
 
 var agentsMDHeadings = map[string]string{
-	"Environment:":           "## Project overview",
-	"Frontend (Alpine.js):":  "## Code style: frontend (Alpine.js)",
+	"Environment:":          "## Project overview",
+	"Frontend (Alpine.js):": "## Code style: frontend (Alpine.js)",
 	"AI assistant for the website (chatbot for visitors):": "## AI assistant for visitors (chatbot)",
 	"Serverless functions (server-side code):":             "## Serverless functions (server-side code)",
 	"Database:":                  "## Database",

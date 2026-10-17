@@ -25,6 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { spawnSync } from 'node:child_process';
 import { CASES } from './cases.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -49,6 +50,9 @@ if (!engines.length || engines.some((e) => !ENGINES.includes(e))) {
 }
 const useAgentsMd = args.includes('--agents-md');
 const useSkill = args.includes('--skill');
+// --runtime: setiap halaman hasil dibuka di Chromium headless (cek-halaman, image deploy/agent) selagi server evaluasi
+// hidup — error JavaScript/Alpine, request gagal, dan file hilang dihitung per kasus.
+const useRuntime = args.includes('--runtime');
 const realIndex = args.indexOf('--real');
 const realDir = realIndex < 0 ? null
   : path.resolve(ROOT, args[realIndex + 1] && !args[realIndex + 1].startsWith('--') ? args[realIndex + 1] : path.join('data', 'ai-eval', 'real'));
@@ -190,6 +194,7 @@ async function runCase(stack, c, run, engine) {
       rounds: checks.rounds ?? 0,
       found: checks.found ?? {},
       left: checks.left ?? {},
+      tools: checks.tools,
       touched: (final.message?.changes ?? []).filter((x) => x.path).map((x) => x.path),
       message: final.message?.content ?? final.error ?? '',
     };
@@ -203,6 +208,8 @@ async function runCase(stack, c, run, engine) {
     const targets = where === '*' ? files : files.filter((f) => matchesPath(where, f));
     return { where, pattern: String(re), ok: targets.some((f) => re.test(read(f))) };
   });
+  for (const re of c.mustFiles ?? []) must.push({ where: 'file', pattern: String(re), ok: files.some((f) => re.test(f)) });
+  const runtime = useRuntime ? runtimeCheck(stack, user, files) : undefined;
   let tables = [];
   const dbFile = path.join(stack.dataDir, 'db', `${user.username}.db`);
   if (fs.existsSync(dbFile)) {
@@ -226,8 +233,20 @@ async function runCase(stack, c, run, engine) {
     must,
     tables,
     missingTable: Boolean(c.needsTable && !tables.length),
+    runtime,
     originalLeft: c.original?.checks?.left,
   };
+}
+
+// Buka semua halaman HTML project di Chromium headless (cek-halaman di image agen, mode proxy evaluasi).
+function runtimeCheck(stack, user, files) {
+  const pages = files.filter((f) => f.endsWith('.html') && !f.startsWith('functions/')).map((f) => `/${f}`);
+  if (!pages.length) return { pages: 0, problems: 0, details: [] };
+  const res = spawnSync('docker', ['run', '--rm', '--add-host', 'host.docker.internal:host-gateway',
+    '-e', `RAKIT_PORT=${new URL(stack.origin).port}`, '-e', `RAKIT_SLUG=${user.username}`, 'rakit-agent-pi', 'cek-halaman', ...pages],
+  { encoding: 'utf8', timeout: 180_000 });
+  const details = (res.stdout ?? '').split('\n').filter((l) => l.startsWith('  - ')).map((l) => l.slice(4));
+  return { pages: pages.length, problems: details.length, details: details.slice(0, 15) };
 }
 
 // ---------- Main ----------
@@ -264,6 +283,8 @@ try {
         r.outOfScope?.length ? `di luar lingkup: ${r.outOfScope.join(', ')}` : '',
         r.must?.some((m) => !m.ok) ? `cek isi gagal: ${r.must.filter((m) => !m.ok).map((m) => `${m.where} ${m.pattern}`).join('; ')}` : '',
         r.missingTable ? 'tidak membuat tabel' : '',
+        r.runtime?.problems ? `runtime: ${r.runtime.problems} masalah di ${r.runtime.pages} halaman — ${r.runtime.details.slice(0, 3).join(' | ')}` : '',
+        r.tools && !r.sandbox ? `tool: ${Object.entries(r.tools).map(([k, v]) => `${k} ${v}`).join(', ')}` : '',
         r.originalLeft ? `jawaban asli: tersisa ${JSON.stringify(r.originalLeft)}` : '',
         r.sandbox ? `${r.engine}: ${r.sandbox.shell} perintah shell (${r.sandbox.selfTests} uji sendiri) · ${r.sandbox.fixes} putaran perbaikan dari pemeriksaan server${r.sandbox.errors.length ? ` · error: ${r.sandbox.errors.join(' | ')}` : ''}` : '',
       ].filter(Boolean);
@@ -272,6 +293,7 @@ try {
     }
   }));
 } finally {
+  fs.writeFileSync(path.join(outDir, 'server.log'), stack.log());
   await stack.stop();
 }
 
@@ -289,6 +311,7 @@ function summarize(list) {
     outOfScope: ok.filter((r) => r.outOfScope.length).length,
     mustFailed: ok.filter((r) => r.must.some((m) => !m.ok)).length,
     missingTable: ok.filter((r) => r.missingTable).length,
+    runtimeProblems: useRuntime ? ok.reduce((a, r) => a + (r.runtime?.problems ?? 0), 0) : undefined,
     avgRounds: avg((r) => r.rounds),
     avgTokens: Math.round(avg((r) => r.inTokens + r.outTokens)),
     avgSeconds: Math.round(avg((r) => r.secs)),
@@ -307,6 +330,7 @@ const rows = [
   ['mengubah file di luar lingkup', (s) => pct(s.outOfScope, s.cases)],
   ['cek isi gagal', (s) => pct(s.mustFailed, s.cases)],
   ['tidak membuat tabel', (s) => String(s.missingTable)],
+  ...(useRuntime ? [['masalah runtime (Chromium)', (s) => String(s.runtimeProblems)]] : []),
   ...(realDir ? [['kasus nyata kini tanpa sisa', (s) => `${s.realCleaned}/${s.cases}`]] : []),
   ['rata-rata putaran', (s) => s.avgRounds.toFixed(1)],
   ['rata-rata token', (s) => String(s.avgTokens)],

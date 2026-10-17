@@ -5,6 +5,7 @@
 //               (path berakhiran "/" = seluruh folder)
 //   must:       [file, regex] yang harus cocok di hasil akhir — pemeriksaan kasar "sesuai permintaan"
 //   needsTable: permintaan ini seharusnya membuat tabel database
+//   mustFiles:  regex path yang harus ada di hasil akhir (mis. halaman admin)
 //   history:    percakapan sebelum prompt — [{ role, content, changes? }]; changes = perubahan yang dibuat jawaban itu
 //               (dimasukkan langsung ke database, tanpa memanggil AI)
 
@@ -229,6 +230,24 @@ export const CASES = [
     prompt: 'Buat katalog produk toko kue dari database (nama, harga, foto) dengan keranjang belanja dan total harga.',
     needsTable: true,
     must: [['*', /Alpine\.data\(/]],
+  },
+  {
+    // Aplikasi lengkap: katalog dari database, keranjang, checkout, dan admin yang dilindungi lewat fungsi + rahasia
+    // (pengunjung anonim; operasi pemilik tidak bisa dari halaman publik).
+    id: 'toko-online-admin',
+    prompt: 'Buat web toko online mobile-first (tampilan utama untuk HP) untuk toko kue "Dapur Bunda": halaman katalog produk ' +
+      'dari database (foto, nama, harga, kategori, filter kategori), keranjang belanja, dan checkout (nama, no HP, alamat) yang ' +
+      'menyimpan pesanan. Buat juga halaman admin terpisah untuk menambah, mengubah, dan menghapus produk serta melihat pesanan ' +
+      'dan mengubah statusnya (baru, diproses, selesai). Halaman admin harus dilindungi kata sandi admin.',
+    needsTable: true,
+    mustFiles: [/admin[^/]*\.html$|admin\/index\.html$/],
+    must: [
+      ['*', /width=device-width/],
+      ['*', /\/api\/db\//],
+      ['*', /\/api\/fn\//],
+      ['functions/', /export default/],
+      ['functions/', /env\.[A-Z_]+/],
+    ],
   },
   {
     id: 'halaman-tentang',

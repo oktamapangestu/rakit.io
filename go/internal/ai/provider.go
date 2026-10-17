@@ -127,7 +127,7 @@ func (s *Service) chatCompletion(req request, h hooks) (*reply, error) {
 		"messages":       req.messages,
 	}
 	if req.tools {
-		body["tools"] = json.RawMessage(toolsJSON)
+		body["tools"] = json.RawMessage(s.builderTools)
 	}
 	if req.temperature != nil {
 		body["temperature"] = *req.temperature

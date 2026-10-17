@@ -495,6 +495,11 @@ func (ws *workspace) finalProblems() (byFile map[string][]problem, images []stri
 		for _, p := range apiPathProblems(c.Content, tables) {
 			add(c.Path, problem{"api", p})
 		}
+		if !isFunctionFile(c.Path) {
+			add(c.Path, unknownAPIProblems(c.Content, tables)...)
+		} else if !ws.disk[c.Path] {
+			add(c.Path, ws.scratchFunction(c.Path)...)
+		}
 		for _, m := range fnCallRE.FindAllStringSubmatch(c.Content, -1) {
 			switch {
 			case !fnNameRE.MatchString(m[1]):

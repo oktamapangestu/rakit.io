@@ -30,12 +30,12 @@ func TestUnsavedForms(t *testing.T) {
 
 	ws = testWorkspace(t, nil)
 	for name, html := range map[string]string{
-		"pencarian":        `<form role="search"><input type="search" name="q"></form>`,
-		"method get":       `<form method="get"><input name="q"><input name="kota"></form>`,
-		"action ke luar":   `<form action="https://formspree.io/f/x"><input name="a"><textarea name="b"></textarea></form>`,
-		"satu isian teks":  `<form><input name="kode"></form>`,
-		"filter checkbox":  `<form><input type="checkbox" name="a"><input type="range" name="b"></form>`,
-		"form lama sama":   "",
+		"pencarian":       `<form role="search"><input type="search" name="q"></form>`,
+		"method get":      `<form method="get"><input name="q"><input name="kota"></form>`,
+		"action ke luar":  `<form action="https://formspree.io/f/x"><input name="a"><textarea name="b"></textarea></form>`,
+		"satu isian teks": `<form><input name="kode"></form>`,
+		"filter checkbox": `<form><input type="checkbox" name="a"><input type="range" name="b"></form>`,
+		"form lama sama":  "",
 	} {
 		original := ""
 		if name == "form lama sama" {
@@ -87,5 +87,14 @@ func TestEffectiveChanges(t *testing.T) {
 	got := ws.effectiveChanges()
 	if len(got) != 1 || got[0].Path != "app.js" {
 		t.Errorf("effectiveChanges = %+v", got)
+	}
+}
+
+func TestUnknownAPIProblems(t *testing.T) {
+	code := `fetch('/api/functions/admin-login'); fetch("/api/upload", {}); fetch('/api/db/produk'); fetch('/api/fn/kontak');
+		fetch('/api/ai/chat'); fetch('https://contoh.com/api/v1/x'); fetch('/api/produk'); fetch('/functions/admin-masuk', {})`
+	got := unknownAPIProblems(code, map[string]bool{"produk": true})
+	if len(got) != 3 || !strings.Contains(got[0].text, `/api/fn/admin-masuk`) || !strings.Contains(got[1].text, `"/api/functions/admin-login"`) || !strings.Contains(got[2].text, `"/api/upload"`) {
+		t.Errorf("unknownAPIProblems = %v", got)
 	}
 }
