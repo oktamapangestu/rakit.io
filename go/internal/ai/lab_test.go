@@ -89,3 +89,18 @@ func TestScratchFunction(t *testing.T) {
 		t.Errorf("fungsi percobaan = %v", got)
 	}
 }
+
+func TestLabAPICallLimit(t *testing.T) {
+	// Batas sudah habis: tool tidak dijalankan (sync tidak dipanggil, jadi lab kosong ini aman) dan model diminta berhenti menguji.
+	l := &lab{apiCalls: labMaxAPICalls}
+	result, found, ok := l.run(t.Context(), toolCall{Name: "test_api", Arguments: `{"method":"GET","path":"/api/db/produk"}`})
+	if !ok || len(found) > 0 || !strings.HasPrefix(result, "Not run") {
+		t.Errorf("ok=%v found=%v result=%q", ok, found, result)
+	}
+	if l.apiCalls != labMaxAPICalls {
+		t.Errorf("apiCalls = %d", l.apiCalls)
+	}
+	if !strings.Contains(labPrompt(false), "at most 12 times") {
+		t.Error("prompt tidak menyebut batas test_api")
+	}
+}

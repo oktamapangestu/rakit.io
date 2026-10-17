@@ -22,8 +22,11 @@ import (
 const (
 	maxBuildRounds     = 30
 	maxTruncatedRounds = 3
-	truncatedNote      = "\n\n_(Jawaban terpotong karena terlalu panjang.)_"
-	roundsNote         = "⚠️ AI berhenti karena mencapai batas langkah untuk satu prompt, jadi sebagian pekerjaan mungkin belum selesai. Cek hasilnya, lalu kirim \"lanjutkan\" untuk meneruskan."
+	wrapUpRounds       = 3 // sisa putaran saat model diminta mulai menyelesaikan (lihat wrapUpNote)
+	wrapUpNote         = "\n\n(Note from the server: only %d turns are left for this answer. Finish the most important remaining " +
+		"change now, skip further testing, and write the summary — mention anything that is still unfinished.)"
+	truncatedNote = "\n\n_(Jawaban terpotong karena terlalu panjang.)_"
+	roundsNote    = "⚠️ AI berhenti karena mencapai batas langkah untuk satu prompt, jadi sebagian pekerjaan mungkin belum selesai. Cek hasilnya, lalu kirim \"lanjutkan\" untuk meneruskan."
 )
 
 // change: satu perubahan dari mode Builder — tulis/hapus file, atau buat/perluas tabel.
@@ -755,6 +758,12 @@ func (s *Service) runBuilder(messages []message, ws *workspace, lb *lab, h hooks
 				h.onToolResult(n, c, result)
 			}
 			convo = append(convo, message{"role": "tool", "tool_call_id": c.ID, "content": result})
+		}
+		// Jatah putaran hampir habis: ingatkan model lewat hasil tool terakhir (pesan user di antara hasil tool
+		// dan giliran asisten ditolak sebagian provider), supaya ia sempat menulis ringkasan sendiri.
+		if left := maxBuildRounds - 1 - round; left == wrapUpRounds {
+			last := convo[len(convo)-1]
+			convo[len(convo)-1] = withText(last, messageText(last)+fmt.Sprintf(wrapUpNote, left))
 		}
 	}
 	if !finished {

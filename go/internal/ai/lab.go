@@ -34,6 +34,9 @@ const (
 	labResultMax  = 4000 // karakter hasil tool yang dikirim ke model
 	labAPITimeout = 30 * time.Second
 	labMaxPages   = 5
+	// labMaxAPICalls: batas test_api per job. Tanpa batas, model bisa menguji puluhan kali dan menghabiskan
+	// jatah putaran Builder (maxBuildRounds) sebelum menulis ringkasan.
+	labMaxAPICalls = 12
 )
 
 // labToolsJSON: definisi tool uji (format function calling OpenAI). check_page hanya bila ada browser.
@@ -90,7 +93,10 @@ func labPrompt(browser bool) string {
 		}, func(s string) bool { return s == "" }), ", and ") + ". Fix what the tests report, then test again.\n" +
 		"- Skip testing for changes to text, colors or layout only.\n" +
 		"- Trust the documented function format above instead of probing the runtime with experiments. Delete any file or function you created only for testing before you finish.\n" +
-		"- Use search_files to find where something is defined or used instead of reading many files."
+		"- Use search_files to find where something is defined or used instead of reading many files.\n" +
+		fmt.Sprintf("- Each answer has a limited number of turns, and test_api can be called at most %d times. ", labMaxAPICalls) +
+		"Put independent tool calls in the same turn: write all the files first, then send every test you need together in one turn " +
+		"instead of one test per turn. Test the main path of each page; skip edge cases that cannot break what the user asked for."
 }
 
 // lab: salinan kerja satu job Builder untuk tool uji.
@@ -100,9 +106,10 @@ type lab struct {
 	ws    *workspace
 	jobID int64
 
-	dir     string            // salinan kerja; "" = belum dibuat (dibuat saat tool uji pertama dipanggil)
-	applied map[string]change // tabel yang sudah dibuat lebih awal, versi terakhir yang diterapkan
-	tables  []tableSnapshot   // snapshot tabel itu (masuk snapshot pesan; dikembalikan bila job gagal)
+	dir      string            // salinan kerja; "" = belum dibuat (dibuat saat tool uji pertama dipanggil)
+	applied  map[string]change // tabel yang sudah dibuat lebih awal, versi terakhir yang diterapkan
+	tables   []tableSnapshot   // snapshot tabel itu (masuk snapshot pesan; dikembalikan bila job gagal)
+	apiCalls int               // jumlah test_api yang sudah dipanggil (lihat labMaxAPICalls)
 }
 
 func (s *Service) newLab(slug string, ws *workspace, jobID int64) *lab {
@@ -225,6 +232,13 @@ func (l *lab) run(ctx context.Context, call toolCall) (result string, found []pr
 	args := map[string]any{}
 	if err := json.Unmarshal([]byte(cmpOr(call.Arguments, "{}")), &args); err != nil {
 		return "Error: argumen bukan JSON yang valid. Panggil tool ini lagi dengan JSON yang benar.", []problem{{"tool", "json"}}, true
+	}
+	if call.Name == "test_api" {
+		if l.apiCalls >= labMaxAPICalls {
+			return fmt.Sprintf("Not run: the limit of %d test_api calls for this answer is used up. Do not call test_api again. "+
+				"Fix what earlier tests reported if needed, then write the summary and mention anything you could not test.", labMaxAPICalls), nil, true
+		}
+		l.apiCalls++
 	}
 	if err := l.sync(ctx); err != nil {
 		if ctx.Err() != nil {

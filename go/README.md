@@ -139,6 +139,8 @@ dari eval, ±60% perintah shell Claude Agent SDK adalah uji mandiri (`cek-halama
 
 - `test_api`: request HTTP ke website project (in-process lewat `AgentSite`): `/api/db` & `/api/fn` sungguhan,
   fungsi dijalankan dari salinan kerja job (file asli + perubahan yang sudah dicatat model; hard link, jadi murah).
+  Maksimal `labMaxAPICalls` (12) kali per job; model diminta mengirim beberapa uji sekaligus dalam satu putaran.
+  Tiga putaran sebelum `maxBuildRounds` habis, model diingatkan untuk menyelesaikan dan menulis ringkasan.
 - `check_page`: halaman dibuka di Chromium headless bersama (`internal/pagecheck`, chromedp) dengan layar HP 390 px:
   error JS/Alpine/console, request gagal, HTTP ≥ 400, dan halaman yang melebar. Satu proses browser untuk semua job,
   tab dibatasi `AI_BROWSER_MAX_CONCURRENT`, mati sendiri setelah menganggur. Jaringan browser lewat proxy penolak:
