@@ -32,7 +32,7 @@ func TestCheck(t *testing.T) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Write([]byte(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/app.js"></script><script src="/hilang.js"></script></head>
-<body><div class="lebar" style="width:900px">x</div>
+<body><div class="lebar" style="width:900px">x</div><img src="/images/belum.jpg" alt="">
 <script>fetch('` + internal.URL + `/x').catch(() => {}); fetch('/api/db/produk').then(r => r.json()); localStorage.setItem('a', '1')</script></body></html>`))
 		case "/app.js":
 			w.Header().Set("Content-Type", "text/javascript")
@@ -57,6 +57,9 @@ func TestCheck(t *testing.T) {
 		if !strings.Contains(all, want) {
 			t.Errorf("tidak ada %q di:\n%s", want, all)
 		}
+	}
+	if strings.Contains(all, "belum.jpg") || strings.Contains(all, "Failed to load resource") || strings.Join(reps[0].Missing, ",") != "/images/belum.jpg" {
+		t.Errorf("gambar yang belum ada: problems %v, missing %v", reps[0].Problems, reps[0].Missing)
 	}
 	if hits.Load() != 0 {
 		t.Errorf("halaman bisa menjangkau layanan lain di 127.0.0.1")

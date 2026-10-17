@@ -357,6 +357,7 @@ func (l *lab) checkPage(ctx context.Context, args map[string]any) (string, []pro
 	var b strings.Builder
 	var found []problem
 	blocked := map[string]bool{}
+	var missing []string
 	total := 0
 	for _, r := range reports {
 		total += len(r.Problems)
@@ -375,10 +376,19 @@ func (l *lab) checkPage(ctx context.Context, args map[string]any) (string, []pro
 		for _, h := range r.Blocked {
 			blocked[h] = true
 		}
+		for _, m := range r.Missing {
+			if !slices.Contains(missing, m) {
+				missing = append(missing, m)
+			}
+		}
 	}
 	if len(blocked) > 0 {
 		fmt.Fprintf(&b, "Catatan: request ke %s diblokir selama pemeriksaan (bukan kesalahan kodemu); error yang hanya akibat itu boleh diabaikan.\n",
 			strings.Join(sortedKeys(blocked), ", "))
+	}
+	if len(missing) > 0 {
+		fmt.Fprintf(&b, "Gambar yang belum ada (kamu tidak bisa membuat gambar; bukan masalah kode — sebutkan di ringkasan supaya pengguna mengunggahnya): %s\n",
+			strings.Join(missing, ", "))
 	}
 	text := strings.TrimSpace(b.String())
 	if total > 0 {

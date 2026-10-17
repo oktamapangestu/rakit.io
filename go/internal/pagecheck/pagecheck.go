@@ -67,6 +67,7 @@ type Report struct {
 	Problems []string // error JS/Alpine/console, request gagal, HTTP ≥ 400, halaman melebar
 	Blocked  []string // host luar yang tidak dimuat saat pemeriksaan (bukan masalah)
 	Dialogs  []string // alert/confirm/prompt yang muncul (ditutup otomatis)
+	Missing  []string // gambar website sendiri yang tidak ada (404) — diunggah pengguna, bukan masalah kode
 }
 
 type Checker struct {
@@ -307,6 +308,7 @@ type pageState struct {
 	problems []string
 	blocked  map[string]bool
 	dialogs  []string
+	missing  []string
 	requests map[network.RequestID]string // id → "METHOD url"
 	inflight map[network.RequestID]bool
 	lastNet  time.Time
@@ -375,6 +377,10 @@ func (s *pageState) listen(ev any) {
 			}
 		}
 		text := strings.Join(parts, " ")
+		// Pesan bawaan browser untuk setiap HTTP ≥ 400 — sudah dilaporkan beserta URL-nya (EventResponseReceived).
+		if strings.HasPrefix(text, "Failed to load resource") {
+			return
+		}
 		if e.Type == runtime.APITypeWarning && !strings.Contains(strings.ToLower(text), "alpine") {
 			return
 		}
@@ -387,6 +393,12 @@ func (s *pageState) listen(ev any) {
 		s.inflight[e.RequestID] = true
 		s.lastNet = time.Now()
 	case *network.EventResponseReceived:
+		if e.Response.Status == 404 && e.Type == network.ResourceTypeImage && strings.HasPrefix(e.Response.URL, s.origin+"/") {
+			if p := s.short(e.Response.URL); !slices.Contains(s.missing, p) {
+				s.missing = append(s.missing, p)
+			}
+			return
+		}
 		if e.Response.Status >= 400 {
 			method, _, _ := strings.Cut(s.requests[e.RequestID], " ")
 			s.add(fmt.Sprintf("HTTP %d: %s %s", int(e.Response.Status), method, s.short(e.Response.URL)))
@@ -515,7 +527,7 @@ func (c *Checker) checkPage(ctx context.Context, browser context.Context, origin
 		st.problems = slices.DeleteFunc(st.problems, func(p string) bool { return strings.HasSuffix(p, " "+path) })
 		st.problems = append([]string{fmt.Sprintf("halaman %s → HTTP %d", path, rep.Status)}, st.problems...)
 	}
-	rep.Problems, rep.Dialogs = st.problems, st.dialogs
+	rep.Problems, rep.Dialogs, rep.Missing = st.problems, st.dialogs, st.missing
 	for host := range st.blocked {
 		rep.Blocked = append(rep.Blocked, host)
 	}
