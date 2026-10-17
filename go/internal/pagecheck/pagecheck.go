@@ -393,6 +393,13 @@ func (s *pageState) listen(ev any) {
 		s.inflight[e.RequestID] = true
 		s.lastNet = time.Now()
 	case *network.EventResponseReceived:
+		// favicon 404 bukan masalah halaman: Chromium memintanya sendiri meski HTML tidak
+		// merujuknya, dan project rakit jarang punya favicon. Dicatat sebagai missing (jika
+		// gambar) atau diabaikan, tidak pernah masuk Problems.
+		isFavicon := strings.HasSuffix(strings.ToLower(e.Response.URL), "/favicon.ico")
+		if e.Response.Status == 404 && isFavicon && strings.HasPrefix(e.Response.URL, s.origin+"/") {
+			return
+		}
 		if e.Response.Status == 404 && e.Type == network.ResourceTypeImage && strings.HasPrefix(e.Response.URL, s.origin+"/") {
 			if p := s.short(e.Response.URL); !slices.Contains(s.missing, p) {
 				s.missing = append(s.missing, p)
