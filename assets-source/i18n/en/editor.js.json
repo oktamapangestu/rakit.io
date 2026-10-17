@@ -1159,5 +1159,16 @@
   "Agen · ${engineName(item.engine)}": "Agent · ${engineName(item.engine)}",
   "Menguji API": "Testing API",
   "Membuka halaman": "Opening page",
-  "Mencari": "Searching"
+  "Mencari": "Searching",
+  "Jawab": "Answer",
+  "Atau tulis jawabanmu sendiri…": "Or write your own answer…",
+  "AI menunggu jawabanmu. Tanpa jawaban dalam 10 menit, AI memilih yang paling aman sendiri.": "The AI is waiting for your answer. Without an answer within 10 minutes, it picks the safest option itself.",
+  "Kamu menjawab: ${ev.answer}": "You answered: ${ev.answer}",
+  "Tidak dijawab — AI memilih sendiri": "Not answered — the AI chose itself",
+  "AI bertanya": "AI asks",
+  "Bertanya": "Asking",
+  "Nanti": "Later",
+  "Mengirim…": "Sending…",
+  "AI menunggu jawabanmu…": "The AI is waiting for your answer…",
+  "Pilihan jawaban": "Answer choices"
 }

@@ -42,6 +42,8 @@ var agentsMDLines = [][2]string{
 			"  - the website is at http://localhost/: `curl -s http://localhost/api/db/<table>` and `curl -s -X POST http://localhost/api/fn/<name> -H 'Content-Type: application/json' -d '{}'` reach the real database API (with visitor permissions) and your serverless functions;\n" +
 			"  - `node --check file.js` checks JavaScript syntax.\n" +
 			"  If a tool or a test reports a problem, fix it. When you finish, the server also runs its automatic checks and sends back anything left to fix."},
+	{"- If the request can be read several ways,",
+		"- If the request can be read several ways, pick the most likely and least destructive reading and name it in your summary. When a wrong guess would destroy the user's work, or the readings lead to very different results, ask with the ask_user tool (one short question, 2–4 options, the one you recommend first) and continue with the answer — never end your turn with a question in text."},
 	{"- The current tables are listed in the user's message.", "- The current tables are listed under \"Current project state\" below."},
 }
 

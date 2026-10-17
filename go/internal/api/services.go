@@ -88,6 +88,15 @@ func (h *Handler) ai(q *request) error {
 	case q.is("GET", "jobs", ":", "events"):
 		return svc.Events(q.w, q.r, q.user, q.rest[1])
 
+	case q.is("POST", "jobs", ":", "answer"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		if err := svc.Answer(q.user, q.rest[1], q.body); err != nil {
+			return err
+		}
+		return q.json(200, map[string]bool{"ok": true})
+
 	case q.is("POST", "jobs", ":", "cancel"):
 		if err := svc.Cancel(q.user, q.rest[1]); err != nil {
 			return err

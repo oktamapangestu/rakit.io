@@ -6,10 +6,12 @@
 // selesai. Model lewat endpoint Anthropic-compatible provider (ANTHROPIC_BASE_URL), model dari RAKIT_MODEL.
 //
 // Agen: tool bawaan Claude Code (Bash, Read, Write, Edit, Glob, Grep, TodoWrite) + create_table (MCP dalam proses,
-// skema sama dengan Builder dari $RAKIT_RUN/create_table.json), dijalankan lewat bridge HTTP di host. Aturan rakit
+// skema sama dengan Builder dari $RAKIT_RUN/create_table.json) dan ask_user (pertanyaan pilihan ganda ke pemilik
+// website, ditampilkan sebagai dialog di editor; lihat go/internal/ai/askuser.go), dijalankan lewat bridge HTTP di host. Aturan rakit
 // ditambahkan ke prompt sistem bawaan Claude Code (preset claude_code + append), atau — mode AGENTS.md — dimuat
 // Claude Code sendiri dari /workspace/AGENTS.md.
 import fs from 'node:fs';
+import http from 'node:http';
 import readline from 'node:readline';
 import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
@@ -43,6 +45,37 @@ const createTable = tool('create_table', spec.description, {
   });
   return { content: [{ type: 'text', text: await res.text() }], isError: !res.ok };
 });
+
+// ask_user menunggu jawaban pengguna (bisa beberapa menit): node:http tanpa batas waktu, bukan fetch (undici memutus
+// request yang belum dijawab setelah 5 menit).
+function bridgePost(urlPath, body) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(new URL(urlPath, process.env.RAKIT_BRIDGE), { method: 'POST', headers: { 'Content-Type': 'application/json' } }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { text += c; });
+      res.on('end', () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, text }));
+    });
+    req.on('error', reject);
+    req.end(JSON.stringify(body));
+  });
+}
+
+const askUser = tool('ask_user',
+  'Ask the website owner ONE multiple-choice question and wait for their answer (shown to them as a dialog in the editor). ' +
+  'Use it only when you cannot continue well without their decision: a wrong guess would destroy or overwrite their work, ' +
+  'or the request has several readings that lead to very different results. Do not ask about details you can decide yourself, ' +
+  'and never end your turn with a question in text instead. Write the question and options in the language the owner writes in. ' +
+  'The answer is one of the option labels, or the owner\'s own words.', {
+    question: z.string().describe('One short, concrete question.'),
+    options: z.array(z.object({
+      label: z.string().describe('The choice in 1–5 words.'),
+      description: z.string().optional().describe('What happens if this is chosen, in one short sentence.'),
+    })).min(2).max(4).describe('2 to 4 distinct choices; put the one you recommend first.'),
+  }, async (args) => {
+    const res = await bridgePost('/ask_user', args);
+    return { content: [{ type: 'text', text: res.text }], isError: !res.ok };
+  });
 
 // Antrean pesan pengguna untuk streaming input.
 const pending = [];
@@ -79,8 +112,8 @@ try {
       tools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', ...(skill ? ['Skill'] : [])],
       // Mode skill (RAKIT_SKILL=1): ~/.claude/skills/rakit/SKILL.md (skill pengguna) diaktifkan.
       ...(skill ? { skills: ['rakit'] } : {}),
-      mcpServers: { rakit: createSdkMcpServer({ name: 'rakit', version: '1.0.0', tools: [createTable] }) },
-      allowedTools: ['mcp__rakit__create_table'],
+      mcpServers: { rakit: createSdkMcpServer({ name: 'rakit', version: '1.0.0', tools: [createTable, askUser] }) },
+      allowedTools: ['mcp__rakit__create_table', 'mcp__rakit__ask_user'],
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       // Mode AGENTS.md (RAKIT_AGENTS_MD=1): Claude Code memuat /workspace/AGENTS.md sendiri sebagai instruksi project
@@ -89,7 +122,8 @@ try {
       settingSources: [...(skill ? ['user'] : []), ...(agentsMd ? ['project'] : [])],
       persistSession: false,
       maxTurns: 100,
-      env: { ...process.env, ANTHROPIC_DEFAULT_HAIKU_MODEL: model, ANTHROPIC_DEFAULT_SONNET_MODEL: model, ANTHROPIC_DEFAULT_OPUS_MODEL: model, CLAUDE_CODE_SUBAGENT_MODEL: model },
+      // MCP_TOOL_TIMEOUT: ask_user menunggu jawaban pengguna (server membatasinya 10 menit).
+      env: { ...process.env, MCP_TOOL_TIMEOUT: '900000', ANTHROPIC_DEFAULT_HAIKU_MODEL: model, ANTHROPIC_DEFAULT_SONNET_MODEL: model, ANTHROPIC_DEFAULT_OPUS_MODEL: model, CLAUDE_CODE_SUBAGENT_MODEL: model },
       stderr: (data) => process.stderr.write(data),
     },
   })) {

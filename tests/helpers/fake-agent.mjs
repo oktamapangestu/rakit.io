@@ -4,7 +4,8 @@
 //
 // Prompt pertama: memanggil proxy AI, membuat tabel "tamu", menulis index.html (form buku tamu) + app.js, membuka
 // halaman lewat layanan site, lalu selesai. Prompt berisi "[form-rusak]": form tidak menyimpan (app.js tanpa fetch) —
-// pemeriksaan server harus mengembalikannya, dan prompt berikutnya memperbaikinya.
+// pemeriksaan server harus mengembalikannya, dan prompt berikutnya memperbaikinya. Prompt berisi "[tanya]": agen
+// bertanya lewat ask_user (sekali dengan argumen salah, lalu benar), menunggu jawaban, dan menulis judul sesuai jawaban.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -41,6 +42,25 @@ rl.on('line', async (line) => {
   const cmd = JSON.parse(line);
   if (cmd.type !== 'prompt') return;
   turn++;
+  if (turn === 1 && cmd.message.includes('[tanya]')) {
+    emit({ type: 'tool', name: 'mcp__rakit__ask_user', args: { question: 'Satu pilihan saja?' }, response: 'q1' });
+    const bad = await call('tools', 'POST', '/ask_user', { question: 'Satu pilihan saja?', options: [{ label: 'Ya' }] });
+    emit({ type: 'result', name: '', error: bad.status !== 200, text: bad.text });
+    emit({ type: 'tool', name: 'mcp__rakit__ask_user', args: { question: 'Judulnya mau apa?' }, response: 'q2' });
+    const ask = await call('tools', 'POST', '/ask_user', { question: 'Judulnya mau apa?', options: [{ label: 'Halo Dunia', description: 'Sapaan singkat' }, { label: 'Selamat Datang' }] });
+    emit({ type: 'result', name: '', error: ask.status !== 200, text: ask.text });
+    if (ask.status !== 200) {
+      emit({ type: 'settled', text: `Gagal bertanya: ${ask.status} ${ask.text}`, usage: { prompt: 0, completion: 0 } });
+      return;
+    }
+    const title = /"(.*)"/.exec(ask.text)?.[1] ?? 'Tanpa jawaban';
+    emit({ type: 'tool', name: 'Edit', args: { file_path: '/workspace/index.html' }, response: 'q3' });
+    const html = fs.readFileSync(path.join(ws, 'index.html'), 'utf8').replace(/<h1>[\s\S]*?<\/h1>/, `<h1>${title}</h1>`);
+    fs.writeFileSync(path.join(ws, 'index.html'), html);
+    emit({ type: 'result', name: '', error: false, text: 'ok' });
+    emit({ type: 'settled', text: `Judul diganti jadi "${title}". (${bad.status}: ${bad.text})`, usage: { prompt: 0, completion: 0 } });
+    return;
+  }
   if (turn === 1) {
     const ai = await call('ai', 'POST', '/v1/chat/completions', { model: 'model-dari-container', stream: true, messages: [{ role: 'user', content: cmd.message.slice(0, 200) }] });
     emit({ type: 'tool', name: 'Bash', args: { command: 'curl ai' }, response: 'r1' });

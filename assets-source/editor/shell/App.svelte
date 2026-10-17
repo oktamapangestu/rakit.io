@@ -149,13 +149,13 @@
 
   <main class="panel editor-area" id="editorArea" data-mode={ui.mode}>
     <div class="mode-switch" role="tablist" aria-label="Mode editor">
-      <button role="tab" data-mode="code" aria-selected={String(ui.mode === 'code')} onclick={() => actions.setMode('code')} title="Editor kode">
-        <svg viewBox="0 0 16 16"><path d="M5.3 4.3 1.6 8l3.7 3.7-.7.7L.2 8l4.4-4.4zm5.4 0 .7-.7L15.8 8l-4.4 4.4-.7-.7L14.4 8z"/></svg>
-        Code
-      </button>
       <button role="tab" data-mode="ai" aria-selected={String(ui.mode === 'ai')} onclick={() => actions.setMode('ai')} title="Asisten AI (Ctrl+I)">
         <svg viewBox="0 0 16 16"><path d="M8 0l1.6 4.4L14 6l-4.4 1.6L8 12 6.4 7.6 2 6l4.4-1.6zM13 10l.8 2.2L16 13l-2.2.8L13 16l-.8-2.2L10 13l2.2-.8z"/></svg>
         AI
+      </button>
+      <button role="tab" data-mode="code" aria-selected={String(ui.mode === 'code')} onclick={() => actions.setMode('code')} title="Editor kode">
+        <svg viewBox="0 0 16 16"><path d="M5.3 4.3 1.6 8l3.7 3.7-.7.7L.2 8l4.4-4.4zm5.4 0 .7-.7L15.8 8l-4.4 4.4-.7-.7L14.4 8z"/></svg>
+        Code
       </button>
       <button role="tab" data-mode="data" aria-selected={String(ui.mode === 'data')} onclick={() => actions.setMode('data')} title="Database">
         <svg viewBox="0 0 16 16"><path d="M8 1C4.7 1 2 2.1 2 3.5v9C2 13.9 4.7 15 8 15s6-1.1 6-2.5v-9C14 2.1 11.3 1 8 1m0 1c2.9 0 5 .9 5 1.5S10.9 5 8 5 3 4.1 3 3.5 5.1 2 8 2M3 5c1.1.6 2.9 1 5 1s3.9-.4 5-1v3.5C13 9.1 10.9 10 8 10s-5-.9-5-1.5zm0 5c1.1.6 2.9 1 5 1s3.9-.4 5-1v2.5c0 .6-2.1 1.5-5 1.5s-5-.9-5-1.5z"/></svg>

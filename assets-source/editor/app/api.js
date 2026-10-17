@@ -21,6 +21,7 @@ export async function api(method, url, body) {
   if (!res.ok) {
     const err = new Error(data.error || `Gagal (${res.status})`);
     err.code = data.code;
+    err.status = res.status;
     throw err;
   }
   return data;

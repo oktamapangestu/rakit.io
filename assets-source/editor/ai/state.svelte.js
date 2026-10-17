@@ -2,6 +2,7 @@
 // dan editor.js (kredit di header, tombol "Tanya AI" dari fitur lain, menu riwayat). connect() dipanggil editor.js
 // sebelum panel dipasang.
 import { createActivity } from './activity.svelte.js';
+import QuestionDialog from './QuestionDialog.svelte';
 
 export const AI_MODES = {
   build: {
@@ -363,6 +364,28 @@ export function setInput(text) {
   ai.input = text;
 }
 
+// Pertanyaan agen (event "question", lihat go/internal/ai/askuser.go): dialog pilihan jawaban. Ditutup tanpa jawaban
+// ("Nanti", Esc), AI tetap menunggu dan dialognya bisa dibuka lagi dari tombol Jawab di kartu job.
+let closeQuestion = null;
+export function openQuestion(item) {
+  const q = item.question;
+  if (!q) return;
+  closeQuestion = host.openDialog(QuestionDialog, { question: q, onAnswer: (text) => answerQuestion(item, q, text) }, {
+    onClose: () => { closeQuestion = null; },
+  });
+}
+
+async function answerQuestion(item, q, answer) {
+  try {
+    await host.api('POST', `/api/ai/jobs/${item.id}/answer`, { question: q.id, answer });
+    return true;
+  } catch (err) {
+    host.toast(err.message, 'error');
+    if (item.question?.id === q.id && err.status === 409) item.question = null;
+    return err.status === 409; // sudah tidak menunggu: dialog ditutup saja
+  }
+}
+
 export async function stopJob(item) {
   item.stopping = true;
   await host.api('POST', `/api/ai/jobs/${item.id}/cancel`).catch((err) => host.toast(err.message, 'error'));
@@ -373,7 +396,7 @@ async function attachJob(message) {
   ai.busy = true;
   ai.jobId = message.id;
   const activity = createActivity(() => document.getElementById('aiMessages'));
-  const item = add({ kind: 'job', id: message.id, status: 'Menyiapkan…', stopping: false, activity });
+  const item = add({ kind: 'job', id: message.id, status: 'Menyiapkan…', stopping: false, activity, question: null });
   scroll();
 
   // Status diperbarui tiap detik sesuai fase: antre → berpikir → menulis (atau menunggu coba ulang).
@@ -388,6 +411,7 @@ async function attachJob(message) {
       thinking: () => `AI sedang berpikir… ${secs} dtk`,
       writing: () => `Menulis kode… ${(phase.chars / 1000).toFixed(1)}k karakter`,
       retry: () => `AI sedang sibuk, mencoba lagi (${phase.attempt}/${phase.max})…`,
+      waiting: () => 'AI menunggu jawabanmu…',
     }[phase.kind]();
   };
   const statusTimer = setInterval(renderStatus, 1000);
@@ -404,6 +428,7 @@ async function attachJob(message) {
       }
       if (!res.ok) throw new Error(`Gagal (${res.status})`);
       activity.reset(); // server mengirim ulang semua event sejak awal job
+      item.question = null;
       for await (const event of host.readEvents(res)) {
         activity.handle(event);
         if (event.credits) host.setCredits(event.credits);
@@ -412,13 +437,27 @@ async function attachJob(message) {
         else if (event.type === 'running' || (event.type === 'thinking' && phase.kind !== 'writing')) setPhase({ kind: 'thinking' });
         else if (event.type === 'retry') setPhase({ kind: 'retry', attempt: event.attempt, max: event.max });
         else if (event.type === 'progress') setPhase({ kind: 'writing', chars: event.chars });
-        else if (event.type === 'done' || event.type === 'error') final = event;
+        else if (event.type === 'question') {
+          item.question = { id: event.id, question: event.question, options: event.options };
+          setPhase({ kind: 'waiting' });
+          // Saat menyambung ulang, pertanyaan yang sudah dijawab ikut terkirim ulang beserta "answered"-nya: dialog
+          // baru dibuka setelah event yang sudah ada selesai dibaca, bila pertanyaannya masih menunggu.
+          const id = event.id;
+          setTimeout(() => { if (item.question?.id === id && !closeQuestion && ai.jobId === item.id) openQuestion(item); }, 50);
+        } else if (event.type === 'answered') {
+          if (item.question?.id === event.id) {
+            item.question = null;
+            closeQuestion?.();
+            setPhase({ kind: 'thinking' });
+          }
+        } else if (event.type === 'done' || event.type === 'error') final = event;
       }
     } catch { /* koneksi putus: sambung lagi di bawah */ }
     if (!final) await new Promise((r) => setTimeout(r, Math.min(1000 * (attempt + 1), 5000)));
   }
 
   clearInterval(statusTimer);
+  if (item.question) closeQuestion?.();
   // Status job hilang; ringkasan proses AI tetap di tempatnya (dibuang bila kosong).
   activity.finish();
   const at = ai.messages.findIndex((x) => x.key === item.key);

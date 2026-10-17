@@ -87,8 +87,9 @@ type Service struct {
 	agentSlots chan struct{}
 
 	mu      sync.Mutex
-	jobs    map[int64]*job // id pesan AI -> job
-	running map[int64]bool // user yang sedang punya job, pelindung dari klik ganda
+	jobs    map[int64]*job        // id pesan AI -> job
+	asks    map[int64]*pendingAsk // id pesan AI -> pertanyaan agen yang menunggu jawaban (askuser.go)
+	running map[int64]bool        // user yang sedang punya job, pelindung dari klik ganda
 	// explaining: user yang sedang menunggu Baca Alur Kode (lihat explain.go).
 	explaining map[int64]bool
 }
@@ -100,6 +101,7 @@ func New(cfg *config.Config, db *store.Store, c *credits.Service, p *plans.Plans
 		buildPrompt: strings.ReplaceAll(buildPromptTemplate, "{{BASE_DOMAIN}}", cfg.BaseDomain),
 		planPrompt:  strings.ReplaceAll(planPromptTemplate, "{{BASE_DOMAIN}}", cfg.BaseDomain),
 		jobs:        map[int64]*job{},
+		asks:        map[int64]*pendingAsk{},
 		running:     map[int64]bool{},
 		explaining:  map[int64]bool{},
 		agentSlots:  make(chan struct{}, cfg.AI.Agent.MaxConcurrent),

@@ -84,3 +84,78 @@ test('mode Agen: form yang tidak menyimpan dikembalikan pemeriksaan server, agen
   assert.deepEqual(checks.found, { form: 1 });
   assert.equal(checks.left, undefined);
 });
+
+// Baca event job satu per satu (stream tetap terbuka selama job berjalan).
+async function* jobStream(user, jobId) {
+  const res = await user.raw('GET', `/api/ai/jobs/${jobId}/events`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (line) yield JSON.parse(line);
+    }
+  }
+}
+
+async function untilQuestion(events) {
+  for (;;) {
+    const { value, done } = await events.next();
+    assert.ok(!done, 'job selesai tanpa bertanya');
+    assert.notEqual(value.type, 'error', JSON.stringify(value));
+    if (value.type === 'question') return value;
+  }
+}
+
+test('mode Agen: agen bertanya lewat ask_user, jawaban pengguna diteruskan ke agen', { skip: !GO }, async () => {
+  const user = await stack.register();
+  const started = await user.startPrompt('Ganti judul halaman [tanya]', { mode: 'agent', engine: 'claude' });
+  assert.equal(started.status, 201);
+  const jobId = started.body.assistantMessage.id;
+  const events = jobStream(user, jobId);
+  const q = await untilQuestion(events);
+  assert.equal(q.question, 'Judulnya mau apa?');
+  assert.deepEqual(q.options, [{ label: 'Halo Dunia', description: 'Sapaan singkat' }, { label: 'Selamat Datang' }]);
+
+  // Hanya pemilik job, untuk pertanyaan yang sedang menunggu, dengan jawaban berisi.
+  const other = await stack.register();
+  assert.equal((await other.post(`/api/ai/jobs/${jobId}/answer`, { question: q.id, answer: 'Halo Dunia' })).status, 409);
+  assert.equal((await user.post(`/api/ai/jobs/${jobId}/answer`, { question: q.id + 1, answer: 'Halo Dunia' })).status, 409);
+  assert.equal((await user.post(`/api/ai/jobs/${jobId}/answer`, { question: q.id, answer: '  ' })).status, 400);
+  assert.equal((await user.post(`/api/ai/jobs/${jobId}/answer`, { question: q.id, answer: 'Halo Dunia' })).status, 200);
+  assert.equal((await user.post(`/api/ai/jobs/${jobId}/answer`, { question: q.id, answer: 'Halo Dunia' })).status, 409, 'sudah dijawab');
+
+  const rest = [];
+  for await (const ev of events) rest.push(ev);
+  assert.deepEqual(rest.find((e) => e.type === 'answered'), { type: 'answered', id: q.id, answer: 'Halo Dunia', timeout: false });
+  const final = rest.at(-1);
+  assert.equal(final.type, 'done', JSON.stringify(final));
+  assert.match(final.message.content, /Judul diganti jadi "Halo Dunia"/);
+  assert.match(final.message.content, /400: options harus berisi 2 sampai 4 pilihan/, 'argumen salah ditolak ke agen');
+  assert.match(read(user, 'index.html'), /<h1>Halo Dunia<\/h1>/);
+  assert.equal(final.credits.remaining, 19, 'tetap 1 kredit');
+
+  // Saat menyambung ulang, pertanyaan & jawabannya ikut terkirim ulang (editor tidak membuka dialog lagi).
+  const replay = await user.jobEvents(jobId);
+  assert.ok(replay.some((e) => e.type === 'question') && replay.some((e) => e.type === 'answered'));
+});
+
+test('mode Agen: Stop saat agen menunggu jawaban menghentikan job', { skip: !GO }, async () => {
+  const user = await stack.register();
+  const started = await user.startPrompt('Ganti judul halaman [tanya]', { mode: 'agent', engine: 'claude' });
+  const jobId = started.body.assistantMessage.id;
+  const events = jobStream(user, jobId);
+  const q = await untilQuestion(events);
+  assert.equal((await user.post(`/api/ai/jobs/${jobId}/cancel`)).status, 200);
+  const rest = [];
+  for await (const ev of events) rest.push(ev);
+  assert.equal(rest.at(-1).type, 'error', JSON.stringify(rest.at(-1)));
+  assert.equal((await user.post(`/api/ai/jobs/${jobId}/answer`, { question: q.id, answer: 'Halo Dunia' })).status, 409);
+  assert.equal((await user.credits()).remaining, 20, 'kredit dikembalikan');
+});

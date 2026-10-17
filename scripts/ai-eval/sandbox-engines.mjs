@@ -112,6 +112,8 @@ const AGENTS_LINES = {
   '- To change an existing file, prefer edit_file:':
     '- When changing an existing file, keep every part you are not changing exactly as it is — same text, order, attributes, scripts, links, and comments. If a file gets too big, move CSS or JS into separate files.',
   '- If a tool returns an error or reports a problem,': PROMPT_LINES(TOOL_WORDS.claude)['- If a tool returns an error or reports a problem,'],
+  '- If the request can be read several ways,':
+    "- If the request can be read several ways, pick the most likely and least destructive reading and name it in your summary. When a wrong guess would destroy the user's work, or the readings lead to very different results, ask with the ask_user tool (one short question, 2–4 options, the one you recommend first) and continue with the answer — never end your turn with a question in text.",
 };
 
 // Bagian "Security and scope" AGENTS.md produksi (agentsMDSecurity di go/internal/ai/agentsmd.go, raw string Go).
@@ -180,7 +182,10 @@ function startBridge(handle) {
     req.on('end', async () => {
       let status = 404;
       let text = 'tidak ada';
-      if (req.method === 'POST' && req.url === '/create_table') {
+      // ask_user: tidak ada orang yang menjawab di evaluasi — sama dengan pertanyaan yang tidak dijawab di editor.
+      if (req.method === 'POST' && req.url === '/ask_user') {
+        [status, text] = [200, 'The owner did not answer. Continue with the safest reasonable choice and state the assumption you made in your summary.'];
+      } else if (req.method === 'POST' && req.url === '/create_table') {
         try {
           [status, text] = await handle(JSON.parse(body || '{}'));
         } catch (err) {

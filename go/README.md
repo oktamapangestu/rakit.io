@@ -170,6 +170,10 @@ Builder (perubahan diterapkan dengan snapshot, Simpan/Batalkan, statistik `ai_re
   (`files.OpenRegular`/`ReadRegular`/`ListTree`), jadi symlink buatan agen tidak pernah diikuti ke luar folder kerja
   (mis. ke project lain), juga bila ditukar di tengah jalan. `AGENTS.md` bagian "Security and scope" meminta agen
   menolak klaim sebagai owner/admin/sistem dan permintaan di luar project.
+- **Pertanyaan ke pengguna:** agen yang butuh keputusan pemilik memanggil tool `ask_user` (satu pertanyaan, 2–4
+  pilihan; `askuser.go`). Job berhenti sejenak dan editor menampilkan dialog (event `question`); jawabannya lewat
+  `POST /api/ai/jobs/:id/answer` diteruskan ke agen, yang melanjutkan di job yang sama (tanpa kredit tambahan).
+  Selama menunggu, batas waktu job tidak berjalan; tanpa jawaban dalam 10 menit agen memilih yang paling aman sendiri.
 - **Pemeriksaan:** setiap kali agen selesai, `finalProblems` Builder dijalankan atas selisih file dan masalahnya
   dikirim balik (maks. 3 kali). File selain .html/.css/.js yang dibuat agen diabaikan dan disebut di jawaban.
 - **Deploy:** `deploy/agent/build.sh` (butuh Docker), lalu `AI_AGENT_ENGINES=claude` di `.env` dan restart. Server

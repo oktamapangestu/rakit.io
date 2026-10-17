@@ -5,7 +5,7 @@
   import Activity from './Activity.svelte';
   import Reply from './Reply.svelte';
   import Composer from './Composer.svelte';
-  import { ai, AI_MODES, SHOW_AGENT_MODE, activeMode, engineName, setInput, send, stopJob } from './state.svelte.js';
+  import { ai, AI_MODES, SHOW_AGENT_MODE, activeMode, engineName, setInput, send, stopJob, openQuestion } from './state.svelte.js';
   import { SPARK } from '../icons.js';
 
   const { openTopup, icons, pageName } = getContext('editor');
@@ -45,7 +45,7 @@
       <div class="msg error">{item.text}{#if item.code === 'no_credits' && ai.credits?.topupEnabled}<button type="button" class="ai-topup-btn inline" onclick={() => openTopup()}>Isi ulang kredit</button>{/if}</div>
     {:else if item.kind === 'job'}
       <Activity activity={item.activity} />
-      <div class="msg loading"><span class="dots"><i></i><i></i><i></i></span><span>{item.status}</span><button class="stop" type="button" disabled={item.stopping} onclick={() => stopJob(item)}>{item.stopping ? 'Menghentikan…' : 'Stop'}</button></div>
+      <div class="msg loading" class:asking={item.question}><span class="dots"><i></i><i></i><i></i></span><span>{item.status}</span>{#if item.question}<button class="answer" type="button" onclick={() => openQuestion(item)}>Jawab</button>{/if}<button class="stop" type="button" disabled={item.stopping} onclick={() => stopJob(item)}>{item.stopping ? 'Menghentikan…' : 'Stop'}</button></div>
     {:else if item.kind === 'activity'}
       <Activity activity={item.activity} />
     {:else if item.kind === 'notice'}

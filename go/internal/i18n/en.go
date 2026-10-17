@@ -146,6 +146,8 @@ var en = map[string]string{
 	"Masih ada prompt yang sedang diproses":                          "A prompt is still being processed",
 	"Lampiran gambar belum tersedia di server ini":                   "Image attachments aren't available on this server",
 	"Job tidak ditemukan":                                            "Job not found",
+	"Jawaban tidak boleh kosong":                                     "The answer can't be empty",
+	"Pertanyaan ini sudah tidak menunggu jawaban":                    "This question is no longer waiting for an answer",
 	"Job tidak berjalan lagi. Silakan kirim ulang.":                  "The job is no longer running. Please send it again.",
 	"Pesan tidak ditemukan":                                          "Message not found",
 	"Perbaikan otomatis tidak tersedia untuk jawaban ini":            "Automatic fix is not available for this reply",

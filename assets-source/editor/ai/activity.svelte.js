@@ -3,7 +3,7 @@
 // selesai diringkas jadi "Lihat proses AI". Ditampilkan Activity.svelte; dipakai panel AI dan kanvas Diagram.
 import { DIAGRAM_NAMES } from '../diagram/info.js';
 
-export const STEP_LABEL = { write_file: 'Menulis', edit_file: 'Mengubah', read_file: 'Membaca', delete_file: 'Menghapus', create_table: 'Tabel', diagram: 'Menggambar diagram', bash: 'Menjalankan', todo: 'Menyusun rencana kerja', test_api: 'Menguji API', check_page: 'Membuka halaman', search_files: 'Mencari' };
+export const STEP_LABEL = { write_file: 'Menulis', edit_file: 'Mengubah', read_file: 'Membaca', delete_file: 'Menghapus', create_table: 'Tabel', diagram: 'Menggambar diagram', bash: 'Menjalankan', todo: 'Menyusun rencana kerja', test_api: 'Menguji API', check_page: 'Membuka halaman', search_files: 'Mencari', ask_user: 'Bertanya' };
 
 // scroller: fungsi yang mengembalikan elemen yang digulir mengikuti isi baru (daftar pesan AI, atau panel proses di
 // kanvas diagram) — hanya bila pengguna tidak sedang menggulir ke atas membaca.
@@ -71,6 +71,9 @@ export function createActivity(scroller) {
     } else if (ev.type === 'note') {
       ensureList();
       a.items.push({ key: `n${a.items.length}`, kind: 'note', text: ev.text });
+    } else if (ev.type === 'answered' && (ev.answer || ev.timeout)) {
+      ensureList();
+      a.items.push({ key: `n${a.items.length}`, kind: 'note', text: ev.answer ? `Kamu menjawab: ${ev.answer}` : 'Tidak dijawab — AI memilih sendiri' });
     }
     a.version += 1;
   }

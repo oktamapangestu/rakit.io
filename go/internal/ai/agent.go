@@ -9,7 +9,8 @@ package ai
 //   - container tanpa jaringan (--network none). Tiga layanan host dibuka lewat unix socket dan dipetakan
 //     proxy.cjs di container ke 127.0.0.1: site (:80, website dari salinan kerja + /api/db & /api/fn asli project —
 //     AgentSite di main.go), ai (:8001, agentproxy.go — kunci provider tidak masuk container, token dibatasi),
-//     tools (:8002, create_table — tabel langsung dibuat supaya bisa diuji, snapshot-nya ikut Batalkan);
+//     tools (:8002, create_table — tabel langsung dibuat supaya bisa diuji, snapshot-nya ikut Batalkan; ask_user —
+//     pertanyaan ke pengguna, lihat askuser.go);
 //   - mesin melapor lewat stdout (driver deploy/agent/claude_driver.mjs, baris "@@RAKIT");
 //     langkahnya ditampilkan di editor seperti langkah Builder;
 //   - setiap kali mesin selesai, pemeriksaan akhir Builder (finalProblems) dijalankan atas selisih file; masalahnya
@@ -104,12 +105,20 @@ func (s *Service) checkAgentEngines() {
 
 // ---------- Layanan host untuk container ----------
 
-// agentTools: create_table dari container. Tabel langsung dibuat (supaya /api/db bisa diuji agen); snapshot-nya
-// dicatat untuk Batalkan.
+// agentTools: create_table & ask_user dari container. Tabel langsung dibuat (supaya /api/db bisa diuji agen);
+// snapshot-nya dicatat untuk Batalkan.
 type agentTools struct {
 	s    *Service
 	ctx  context.Context
 	slug string
+
+	// ask_user (askuser.go): job yang ditanyakan, event ke editor, dan batas waktu yang dihentikan selama menunggu.
+	jobCtx    context.Context
+	messageID int64
+	userID    int64
+	send      func(event)
+	deadline  *pausableDeadline
+	askSeq    int
 
 	mu      sync.Mutex
 	tables  []tableSnapshot
@@ -121,6 +130,10 @@ func (t *agentTools) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(status)
 		io.WriteString(w, text)
+	}
+	if r.Method == http.MethodPost && r.URL.Path == "/ask_user" {
+		t.askUser(w, r)
+		return
 	}
 	if r.Method != http.MethodPost || r.URL.Path != "/create_table" {
 		reply(http.StatusNotFound, "tidak ada")
@@ -310,7 +323,7 @@ func agentStep(name string, args map[string]any) (tool, target string) {
 		return ""
 	}
 	clean := func(p string) string { return strings.TrimPrefix(strings.TrimPrefix(p, "/workspace/"), "./") }
-	switch name {
+	switch strings.TrimPrefix(name, "mcp__rakit__") { // tool MCP rakit (create_table, ask_user)
 	case "Write":
 		return "write_file", clean(str("file_path", "path"))
 	case "Edit", "MultiEdit":
@@ -325,6 +338,12 @@ func agentStep(name string, args map[string]any) (tool, target string) {
 		return "bash", cmd
 	case "create_table":
 		return "create_table", str("name")
+	case "ask_user":
+		q := str("question")
+		if len([]rune(q)) > 90 {
+			q = string([]rune(q)[:90]) + "…"
+		}
+		return "ask_user", q
 	case "TodoWrite":
 		return "todo", ""
 	case "Skill":
@@ -519,8 +538,11 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	if h.onRunning != nil {
 		h.onRunning()
 	}
-	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	// Batas waktu job; berhenti selama agen menunggu jawaban pengguna (ask_user).
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	deadline := newPausableDeadline(cfg.Timeout, cancel)
+	defer deadline.stop()
 
 	primary, _ := s.models.For(aimodels.TaskBuilder)
 	endpoint, err := s.models.Resolve(primary)
@@ -589,7 +611,8 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	// Layanan host.
 	proxy := &agentProxy{ctx: ctx, client: s.http, baseURL: endpoint.BaseURL, apiKey: endpoint.APIKey, model: endpoint.Model,
 		maxOutput: s.cfg.AI.MaxTokens, budget: cfg.MaxTokens}
-	toolsSrv := &agentTools{s: s, ctx: context.Background(), slug: slug}
+	toolsSrv := &agentTools{s: s, ctx: context.Background(), slug: slug,
+		jobCtx: ctx, messageID: in.messageID, userID: in.user.ID, send: act.send, deadline: deadline}
 	defer func() {
 		if err != nil {
 			toolsSrv.revert()
@@ -731,7 +754,7 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	}
 
 	if err := ask1(agentPrompt(history, ask)); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if deadline.hasExpired() {
 			return nil, &failure{"timeout", fmt.Sprintf("Mode Agen melewati batas waktu %d menit. Kredit dikembalikan.", int(cfg.Timeout.Minutes()))}
 		}
 		return nil, err
