@@ -87,7 +87,7 @@
 <header class="topbar">
   <div class="top-left">
     <a class="brand" href={EDITOR_HREF} title="rakit.io"><img class="logo" src="/logo.svg" alt=""><span class="brand-name">rakit<span class="dim">.io</span></span></a>
-    <button class="chip-btn" id="toggleSidebar" class:active={!ui.sidebarHidden} onclick={actions.toggleSidebar} title="Tampilkan/sembunyikan file (Ctrl+B)">
+    <button class="chip-btn" id="toggleSidebar" class:active={ui.mode === 'code' && !ui.sidebarHidden} onclick={actions.toggleSidebar} title="Tampilkan/sembunyikan file (Ctrl+B)">
       <svg viewBox="0 0 16 16"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h9A1.5 1.5 0 0 1 14 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5zM3.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5H6V2zM7 2v12h5.5a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5z"/></svg>
     </button>
     <div class="project-chip">
@@ -146,36 +146,6 @@
 </header>
 
 <div class="workbench">
-  <aside class="panel sidebar" id="sidebar" hidden={ui.sidebarHidden}>
-    <div class="panel-head">
-      <span class="panel-title">File</span>
-      <div class="panel-actions">
-        <button class="icon-btn" id="newFileBtn" title="File baru" onclick={() => actions.createEntry('file')}>
-          <svg viewBox="0 0 16 16"><path d="M9.5 1H4a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 4 15h8a1.5 1.5 0 0 0 1.5-1.5V5zM12.5 13.5a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5v-11A.5.5 0 0 1 4 2h5v3.5h3.5zM8.5 7v2h-2v1h2v2h1v-2h2V9h-2V7z"/></svg>
-        </button>
-        <button class="icon-btn" id="newFolderBtn" title="Folder baru" onclick={() => actions.createEntry('dir')}>
-          <svg viewBox="0 0 16 16"><path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3.3l1.5 1.5h6.2A1.5 1.5 0 0 1 15 5v7.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5zM2.5 3a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V5a.5.5 0 0 0-.5-.5H6.9L5.4 3zM7.5 6v2h-2v1h2v2h1V9h2V8h-2V6z"/></svg>
-        </button>
-        <button class="icon-btn" id="uploadBtn" title="Upload gambar" data-i18n="tombol" onclick={() => actions.upload()}>
-          <svg viewBox="0 0 16 16"><path d="M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14H9v-1H2.5a.5.5 0 0 1-.5-.5v-.8l3.2-3.3 2.1 2.1.7-.7-2.8-2.8L2 10.3V3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5V8h1V3.5A1.5 1.5 0 0 0 13.5 2zM10.5 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M12.5 9.3 10 11.8l.7.7 1.3-1.3V15h1v-3.8l1.3 1.3.7-.7z"/></svg>
-        </button>
-        <button class="icon-btn" id="refreshBtn" title="Muat ulang" onclick={actions.refresh}>
-          <svg viewBox="0 0 16 16"><path d="M13.45 5.17A6 6 0 1 0 14 8h-1a5 5 0 1 1-.8-2.73l-1.7.23.14 1 3.4-.5-.5-3.4-1 .14z"/></svg>
-        </button>
-        <button class="icon-btn feature-info-btn" id="filesInfo" title="Apa itu file &amp; folder?" aria-label="Penjelasan file &amp; folder" onclick={() => actions.info('files')}>
-          <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1m0 1a6 6 0 1 0 0 12A6 6 0 0 0 8 2m.5 5v5h-1V7zM8 4.25a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5"/></svg>
-        </button>
-        <button class="icon-btn" id="collapseBtn" title="Tutup semua folder" onclick={actions.collapse}>
-          <svg viewBox="0 0 16 16"><path d="M4 6h8v1H4zm0 3h8v1H4zM2.5 2h11A1.5 1.5 0 0 1 15 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9A1.5 1.5 0 0 1 2.5 2m0 1a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5z"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="project" id="projectName">{p?.siteHost ?? ''}</div>
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div class="tree" id="tree" tabindex="0" {@attach actions.tree}>{#if ui.ready}<FileTree />{/if}</div>
-    <div class="usage" id="usage">{#if ui.ready}<FileUsage />{/if}</div>
-  </aside>
-  <div class="splitter" data-target="sidebar" hidden={ui.sidebarHidden} {@attach splitter}><i></i></div>
 
   <main class="panel editor-area" id="editorArea" data-mode={ui.mode}>
     <div class="mode-switch" role="tablist" aria-label="Mode editor">
@@ -210,6 +180,37 @@
       </button>
     </div>
     <div class="editor-main">
+      <!-- Panel file: di desktop bagian dari mode Code (kiri editor kode); di HP tampil lewat tab File di navigasi bawah. -->
+      <aside class="sidebar" id="sidebar" hidden={ui.sidebarHidden}>
+        <div class="panel-head">
+          <span class="panel-title">File</span>
+          <div class="panel-actions">
+            <button class="icon-btn" id="newFileBtn" title="File baru" onclick={() => actions.createEntry('file')}>
+              <svg viewBox="0 0 16 16"><path d="M9.5 1H4a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 4 15h8a1.5 1.5 0 0 0 1.5-1.5V5zM12.5 13.5a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5v-11A.5.5 0 0 1 4 2h5v3.5h3.5zM8.5 7v2h-2v1h2v2h1v-2h2V9h-2V7z"/></svg>
+            </button>
+            <button class="icon-btn" id="newFolderBtn" title="Folder baru" onclick={() => actions.createEntry('dir')}>
+              <svg viewBox="0 0 16 16"><path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3.3l1.5 1.5h6.2A1.5 1.5 0 0 1 15 5v7.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5zM2.5 3a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V5a.5.5 0 0 0-.5-.5H6.9L5.4 3zM7.5 6v2h-2v1h2v2h1V9h2V8h-2V6z"/></svg>
+            </button>
+            <button class="icon-btn" id="uploadBtn" title="Upload gambar" data-i18n="tombol" onclick={() => actions.upload()}>
+              <svg viewBox="0 0 16 16"><path d="M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14H9v-1H2.5a.5.5 0 0 1-.5-.5v-.8l3.2-3.3 2.1 2.1.7-.7-2.8-2.8L2 10.3V3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5V8h1V3.5A1.5 1.5 0 0 0 13.5 2zM10.5 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M12.5 9.3 10 11.8l.7.7 1.3-1.3V15h1v-3.8l1.3 1.3.7-.7z"/></svg>
+            </button>
+            <button class="icon-btn" id="refreshBtn" title="Muat ulang" onclick={actions.refresh}>
+              <svg viewBox="0 0 16 16"><path d="M13.45 5.17A6 6 0 1 0 14 8h-1a5 5 0 1 1-.8-2.73l-1.7.23.14 1 3.4-.5-.5-3.4-1 .14z"/></svg>
+            </button>
+            <button class="icon-btn feature-info-btn" id="filesInfo" title="Apa itu file &amp; folder?" aria-label="Penjelasan file &amp; folder" onclick={() => actions.info('files')}>
+              <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1m0 1a6 6 0 1 0 0 12A6 6 0 0 0 8 2m.5 5v5h-1V7zM8 4.25a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5"/></svg>
+            </button>
+            <button class="icon-btn" id="collapseBtn" title="Tutup semua folder" onclick={actions.collapse}>
+              <svg viewBox="0 0 16 16"><path d="M4 6h8v1H4zm0 3h8v1H4zM2.5 2h11A1.5 1.5 0 0 1 15 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9A1.5 1.5 0 0 1 2.5 2m0 1a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="project" id="projectName">{p?.siteHost ?? ''}</div>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <div class="tree" id="tree" tabindex="0" {@attach actions.tree}>{#if ui.ready}<FileTree />{/if}</div>
+        <div class="usage" id="usage">{#if ui.ready}<FileUsage />{/if}</div>
+      </aside>
+      <div class="splitter" data-target="sidebar" hidden={ui.sidebarHidden} {@attach splitter}><i></i></div>
       <div class="editor-top">
         <div class="tabs" id="tabs">{#if ui.ready}<Tabs onSelect={actions.selectTab} onClose={actions.closeTab} />{/if}</div>
         <div class="ai-head">

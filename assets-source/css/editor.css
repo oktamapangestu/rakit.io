@@ -355,7 +355,8 @@ a.chip-btn svg { width: 14px; height: 14px; }
 
 /* ---------- Sidebar ---------- */
 /* Panel samping boleh menyusut (sampai min-width) supaya tiga kolom tetap muat di layar tablet. */
-.sidebar { width: 250px; min-width: 180px; flex-shrink: 1; }
+/* Panel file ada di dalam area editor (mode Code), di antara rel tab mode dan editor kode. */
+.sidebar { display: flex; flex-direction: column; min-height: 0; overflow: hidden; width: 230px; min-width: 160px; border-right: 1px solid var(--line); }
 .panel-head {
   display: flex;
   align-items: center;
@@ -494,6 +495,20 @@ a.chip-btn svg { width: 14px; height: 14px; }
 /* Rel tab mode di kiri, isi mode (.editor-main) di kanan. */
 .editor-area { flex: 1; min-width: 240px; flex-direction: row; }
 .editor-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+/* Desktop, mode Code: panel file setinggi panel di kiri; tab file & editor kode di kanannya. Mode lain: tanpa panel file. */
+@media (min-width: 761px) {
+  .editor-area[data-mode="code"] .editor-main {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .editor-area[data-mode="code"] :is(#sidebar, .splitter[data-target="sidebar"]) { grid-row: 1 / -1; }
+  .editor-area[data-mode="code"] .editor-main > :is(.editor-top, .code-view) { grid-column: 3; }
+  .editor-area:not([data-mode="code"]) :is(#sidebar, .splitter[data-target="sidebar"]) { display: none; }
+  /* Pembatas panel file: garis tipis di dalam panel, pegangan muncul saat disorot. */
+  .splitter[data-target="sidebar"] { width: 6px; margin-left: -3px; margin-right: -3px; position: relative; z-index: 1; }
+  .splitter[data-target="sidebar"] i { background: transparent; }
+}
 
 .editor-top {
   display: flex;
@@ -1756,9 +1771,12 @@ button.credit-badge:disabled { cursor: default; }
   .workbench { padding: 8px 8px 0; }
   .splitter { display: none !important; }
   .workbench > .panel { display: none; flex: 1; width: 100% !important; min-width: 0; }
-  body[data-mobile-view="files"] #sidebar,
-  body[data-mobile-view="editor"] #editorArea,
+  body:is([data-mobile-view="files"], [data-mobile-view="editor"]) #editorArea,
   body[data-mobile-view="preview"] #preview { display: flex !important; }
+  /* Panel file ada di dalam area editor: tab File menampilkannya sendirian (apa pun modenya), tab Editor tanpa dia. */
+  body[data-mobile-view="files"] #sidebar { display: flex !important; flex: 1; width: 100% !important; border-right: 0; }
+  body[data-mobile-view="files"] :is(#editorArea > .mode-switch, .editor-main > :not(#sidebar)) { display: none !important; }
+  body:not([data-mobile-view="files"]) #sidebar { display: none !important; }
 
   .mobile-nav {
     display: flex;

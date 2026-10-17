@@ -47,6 +47,12 @@ export function togglePreview() {
 
 export function toggleSidebar() {
   if (isSimple()) return;
+  // Panel file ada di dalam mode Code: dari mode lain, Ctrl+B membuka Code dengan panel file tampil.
+  if (ui.mode !== 'code') {
+    ui.sidebarHidden = false;
+    setMode('code');
+    return;
+  }
   ui.sidebarHidden = !ui.sidebarHidden;
 }
 
