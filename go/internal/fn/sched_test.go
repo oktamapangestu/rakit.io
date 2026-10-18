@@ -139,9 +139,14 @@ func TestAIContext(t *testing.T) {
 	if len(failures) != 1 || !strings.Contains(failures[0], "kirim (http") || !strings.Contains(failures[0], "TypeError: x is undefined") || !strings.Contains(failures[0], "log: mulai") {
 		t.Fatalf("eksekusi gagal: %q", failures)
 	}
-	// Kode yang diubah sesudah gagal dianggap sudah diperbaiki.
+	// Kode yang diubah sesudah gagal dianggap sudah diperbaiki. mtime diset eksplisit lebih baru
+	// dari waktu error: tanpa itu penulisan bisa jatuh di milidetik yang sama dengan record()
+	// sehingga ModTime() > created_at bernilai salah (test gagal tergantung kecepatan mesin).
 	os.MkdirAll(filepath.Join(s.cfg.SiteRoot("toko"), Dir), 0o755)
-	os.WriteFile(filepath.Join(s.cfg.SiteRoot("toko"), Dir, "kirim.js"), []byte("export default () => 1"), 0o644)
+	kirim := filepath.Join(s.cfg.SiteRoot("toko"), Dir, "kirim.js")
+	os.WriteFile(kirim, []byte("export default () => 1"), 0o644)
+	future := time.Now().Add(2 * time.Second)
+	os.Chtimes(kirim, future, future)
 	if _, failures = s.AIContext("toko"); len(failures) != 0 {
 		t.Fatalf("eksekusi gagal sebelum kode diubah ikut: %q", failures)
 	}
