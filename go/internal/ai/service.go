@@ -226,6 +226,24 @@ func (s *Service) insertMessage(threadID, userID int64, role, mode, content, sta
 	return res.LastInsertId()
 }
 
+// saveContext mencatat isi jendela konteks model pada jawaban AI: token input terbesar dari satu panggilan model
+// selama job (riwayat + konteks project + hasil tool yang terkumpul). Ditampilkan editor sebagai persentase dari
+// AI_CONTEXT_WINDOW di kotak prompt.
+func (s *Service) saveContext(messageID int64, tokens int) {
+	if tokens <= 0 {
+		return
+	}
+	var raw sql.NullString
+	s.db.QueryRow("SELECT attachments FROM ai_messages WHERE id = ?", messageID).Scan(&raw)
+	a := parseAttachments(raw)
+	if a == nil {
+		a = &attachments{Thumbs: []string{}}
+	}
+	a.Context = tokens
+	out, _ := marshal(a)
+	s.db.Exec("UPDATE ai_messages SET attachments = ? WHERE id = ?", string(out), messageID)
+}
+
 func (s *Service) finish(id int64, status, content string, errMsg any, changes, applyState, snap any) {
 	if _, err := s.db.Exec("UPDATE ai_messages SET status = ?, content = ?, error = ?, changes = ?, apply_state = ?, snapshot = ? WHERE id = ?",
 		status, content, errMsg, changes, applyState, snap, id); err != nil {
@@ -239,6 +257,7 @@ type attachments struct {
 	Blocks      []blockRef `json:"blocks,omitempty"`  // blok halaman yang dipilih untuk diubah
 	Engine      string     `json:"engine,omitempty"`  // mesin mode Agen (lihat agent.go)
 	AutoFix     int64      `json:"autoFix,omitempty"` // perbaikan otomatis gratis untuk jawaban ini (lihat checkAutoFix)
+	Context     int        `json:"context,omitempty"` // jawaban AI: isi jendela konteks model (token, lihat saveContext)
 }
 
 // blockRef: blok terpilih seperti yang ditampilkan di riwayat chat.
@@ -296,6 +315,7 @@ func publicMessage(m *messageRow) map[string]any {
 	var refs []blockRef
 	var autoFix int64
 	engine := ""
+	ctxTokens := 0
 	if a := parseAttachments(m.Attachments); a != nil {
 		if a.Thumbs != nil {
 			images = a.Thumbs
@@ -303,6 +323,7 @@ func publicMessage(m *messageRow) map[string]any {
 		refs = a.Blocks
 		autoFix = a.AutoFix
 		engine = a.Engine
+		ctxTokens = a.Context
 	}
 	out := map[string]any{
 		"id": m.ID, "threadId": m.ThreadID, "role": m.Role, "mode": m.Mode, "content": m.Content, "status": m.Status,
@@ -317,6 +338,9 @@ func publicMessage(m *messageRow) map[string]any {
 	}
 	if engine != "" {
 		out["engine"] = engine // mesin mode Agen
+	}
+	if ctxTokens > 0 {
+		out["contextTokens"] = ctxTokens // jawaban AI: token prompt terbesar (indikator konteks di editor)
 	}
 	return out
 }
@@ -829,6 +853,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 	send := j.emit
 	status := "error"
 	inTokens, outTokens := 0, 0
+	contextTokens := 0 // token input terbesar satu panggilan model utama (lihat saveContext)
 	task := aimodels.TaskBuilder
 	if in.mode == "plan" {
 		task = aimodels.TaskPlan
@@ -888,6 +913,9 @@ func (s *Service) runJob(j *job, in jobInput) {
 			projectContext, err := s.projectContext(j.ctx, slug, in.activePath, blocks.Related(in.blocks))
 			if err != nil {
 				return err
+			}
+			if notes := notesBlock(s.ProjectNotes(in.project.ID)); notes != "" {
+				projectContext = notes + "\n\n" + projectContext
 			}
 			for _, m := range append(history, message{"role": "user", "content": projectContext + "\n\n---\n\nRequest:\n" + ask}) {
 				if n := len(merged); n > 0 && merged[n-1]["role"] == m["role"] {
@@ -961,6 +989,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 			agentRes = result
 			inTokens += result.inTokens
 			outTokens += result.outTok
+			contextTokens = result.peakIn
 			text, changes = result.message, result.changes
 			if note := imagesNote(result.images); note != "" {
 				text = strings.TrimSpace(text + "\n\n" + note)
@@ -975,6 +1004,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 			}
 			inTokens += r.PromptTokens
 			outTokens += r.CompletionTokens
+			contextTokens = r.PromptTokens
 			if os.Getenv("AI_DEBUG") != "" {
 				log.Printf("----- AI plan (%s) -----\n%s", r.FinishReason, r.Text)
 			}
@@ -1014,6 +1044,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 			}
 			inTokens += result.inTokens
 			outTokens += result.outTok
+			contextTokens = result.peakIn
 			text, changes = result.message, result.changes
 			if note := imagesNote(result.images); note != "" {
 				text = strings.TrimSpace(text + "\n\n" + note)
@@ -1067,6 +1098,7 @@ func (s *Service) runJob(j *job, in jobInput) {
 			changes = []change{}
 		}
 		rawChanges, _ := marshal(changes)
+		s.saveContext(in.messageID, contextTokens)
 		s.finish(in.messageID, "done", text, applyError, string(rawChanges), applyState, snapJSON)
 		row, err := s.message(in.messageID, in.user.ID)
 		if err != nil || row == nil {

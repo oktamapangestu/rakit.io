@@ -188,6 +188,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = h.database(req)
 	case "diagrams":
 		err = h.diagrams(req)
+	case "docs":
+		err = h.docs(req)
 	case "ai":
 		err = h.ai(req)
 	case "billing":

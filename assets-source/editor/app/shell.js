@@ -111,6 +111,8 @@ export function setMode(mode) {
     historyView().load();
   } else if (mode === 'console') {
     devConsoleOpen();
+  } else if (mode === 'docs') {
+    docsLoad();
   } else if (mode === 'ai') {
     autoFocus($('#aiInput'));
   } else if (state.active) {
@@ -221,4 +223,13 @@ export function historyView() {
   ui.loaded.history = true;
   flushSync();
   return views.history;
+}
+
+// ---------- Dokumentasi ----------
+// Tab Dokumentasi: komponen Svelte assets-source/editor/docs/Docs.svelte, dipasang sekali lalu dimuat ulang setiap
+// tab dibuka (dokumentasi selalu mengikuti keadaan project terbaru).
+export function docsLoad() {
+  ui.loaded.docs = true;
+  flushSync();
+  views.docs.load();
 }

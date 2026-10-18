@@ -1,7 +1,7 @@
 // Keadaan kerangka editor (App.svelte): tab mode yang aktif, panel yang tampil, status simpan & kursor, status
 // publikasi. Diubah editor.js; tampilan mengikuti.
 export const ui = $state({
-  mode: 'ai', // code | ai | data | diagram | fn | history | console
+  mode: 'ai', // code | ai | data | diagram | fn | history | console | docs
   sidebarHidden: false,
   previewHidden: false,
   layout: 'coding', // simple | coding (juga di body[data-layout])
@@ -14,10 +14,10 @@ export const ui = $state({
   // Bagian yang butuh data akun & project (pohon file, tab, panel AI) dipasang setelah /api/me selesai.
   ready: false,
   // Tab & panel yang dipasang saat pertama kali dibuka.
-  loaded: { data: false, diagram: false, fn: false, history: false, console: false, flow: false },
+  loaded: { data: false, diagram: false, fn: false, history: false, console: false, docs: false, flow: false },
 });
 
-// Komponen yang fungsinya dipanggil editor.js (bind:this di App.svelte): fn.load(), history.showList()/load().
+// Komponen yang fungsinya dipanggil editor.js (bind:this di App.svelte): fn.load(), history.showList()/load(), docs.load().
 export const views = {};
 
 // Menu konteks (ContextMenu.svelte): null = tertutup.

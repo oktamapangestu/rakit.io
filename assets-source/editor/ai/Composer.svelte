@@ -5,7 +5,7 @@
 <script>
   import { getContext } from 'svelte';
   import Icon from '../Icon.svelte';
-  import { ai, AI_MODES, AGENT_ENGINES, SHOW_AGENT_MODE, activeMode, currentEngine, setEngine, canAfford, promptCost, setMode, send, addImages, removeImage } from './state.svelte.js';
+  import { ai, AI_MODES, AGENT_ENGINES, SHOW_AGENT_MODE, activeMode, currentEngine, setEngine, canAfford, promptCost, contextUsage, setMode, send, addImages, removeImage } from './state.svelte.js';
   import { preview, pageName } from '../preview/state.svelte.js';
 
   const { openTopup, autoFocus, icons, pickParent, pickRemove } = getContext('editor');
@@ -19,6 +19,11 @@
     ? 'Mau blok ini diubah jadi seperti apa? Mis. buat lebih modern dengan warna gelap'
     : AI_MODES[activeMode()].placeholder);
   const agents = $derived(c?.agents ?? []);
+
+  // Isi jendela konteks AI pada jawaban terakhir: cincin kecil + persen di samping tombol kirim.
+  const usage = $derived(contextUsage());
+  const kTok = (n) => `${Math.round(n / 100) / 10}k`;
+  const RING = 2 * Math.PI * 6; // keliling lingkaran r=6
 
   // Kotak prompt membesar mengikuti isinya (maks. 200 px), juga saat diisi dari luar (mis. tombol "Tanya AI").
   let input;
@@ -95,6 +100,17 @@
       <svg viewBox="0 0 16 16"><path d="M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 2zM2 3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v7.3l-3-3-2.5 2.5-3-3L2 11.8zM10.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3"/></svg>
       <span>Gambar</span>
     </button>
+    {#if usage}
+      <span class="ai-context" class:warn={usage.pct >= 70} class:full={usage.pct >= 90} role="img"
+        aria-label={`Konteks AI terpakai ${usage.pct}%`}
+        title={usage.pct >= 70
+          ? `Konteks AI: ${kTok(usage.tokens)} dari ${kTok(usage.size)} token. Percakapan sudah panjang; mulai percakapan baru agar AI lebih fokus.`
+          : `Konteks AI: ${kTok(usage.tokens)} dari ${kTok(usage.size)} token`}>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" class="track" /><circle cx="8" cy="8" r="6" class="fill"
+          stroke-dasharray={RING} stroke-dashoffset={RING * (1 - usage.pct / 100)} /></svg>
+        <span>{`${usage.pct}%`}</span>
+      </span>
+    {/if}
     <button class="ai-send" id="aiSend" type="submit" title="Kirim" disabled={!canSend || !ai.input.trim()}>
       <svg viewBox="0 0 16 16"><path d="M1 1.5 15 8 1 14.5l2-6.5 6-.5v-1l-6-.5z"/></svg>
     </button>

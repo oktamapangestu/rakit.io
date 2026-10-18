@@ -301,6 +301,8 @@ func (s *Store) Migrate() error {
 		// Publikasi manual (dev/prod): lihat internal/publish.
 		{"projects", "publish_mode", "TEXT NOT NULL DEFAULT 'live'"},
 		{"projects", "published_at", "INTEGER"},
+		// Catatan Project (tab Dokumentasi): aturan & selera pemilik, ikut dikirim ke AI di setiap prompt.
+		{"projects", "notes", "TEXT NOT NULL DEFAULT ''"},
 		// Terakhir aktif (ms): diperbarui saat akun memakai aplikasi, paling sering 5 menit sekali.
 		{"users", "last_seen_at", "INTEGER"},
 		// Aksi tiap request AI untuk ranking token di dashboard owner: action = build/plan/diagram,

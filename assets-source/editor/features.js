@@ -50,6 +50,15 @@ export const FEATURE_INFO = {
     tip: 'Jangan pernah menulis kunci API di file .html atau .js halaman — siapa pun bisa membacanya. Simpan di Rahasia (env) dan pakai lewat fungsi.',
     tryText: 'Buatkan fungsi serverless yang mengirim notifikasi ke Telegram setiap ada pesan baru dari form kontak.', tryMode: 'build',
   },
+  docs: {
+    icon: '▤', title: 'Dokumentasi',
+    what: 'Catatan teknis websitemu yang disusun otomatis: alamat API tiap tabel database dan siapa yang boleh memakainya, fungsi serverless beserta isian yang diterimanya, struktur tabel, dan pengaturan seperti rahasia & jadwal.',
+    analogy: 'Seperti buku manual sebuah alat: kamu tidak perlu membongkar mesinnya untuk tahu tombol mana melakukan apa.',
+    why: 'Programmer menulis dokumentasi supaya orang lain — atau dirinya sendiri beberapa bulan kemudian — bisa memakai dan melanjutkan aplikasi tanpa membaca semua kodenya. Di dunia kerja, dokumentasi API adalah pegangan utama saat tim frontend dan backend bekerja sama.',
+    how: ['Buka tab ini kapan saja; isinya selalu mengikuti file, database, dan fungsi terbaru.', 'Lihat bagian "Perlu dicek" untuk masalah seperti rahasia yang belum diisi atau tabel yang belum ada.', 'Salin contoh kode untuk memanggil API dari halamanmu.', 'Tulis komentar di baris pertama file fungsi supaya fungsinya punya deskripsi.'],
+    terms: [['Endpoint', 'alamat API, mis. GET /api/db/produk'], ['Method', 'jenis permintaan: GET mengambil, POST menambah, PATCH mengubah, DELETE menghapus'], ['Body', 'data yang dikirim bersama permintaan, biasanya JSON'], ['Query', 'isian di alamat setelah tanda ?, mis. ?limit=20']],
+    tip: 'Kalau ada akses "Pemilik" yang dipakai halaman, pengunjung akan ditolak. Cek bagian "Perlu dicek" setiap selesai menambah fitur.',
+  },
   history: {
     icon: '↺', title: 'Riwayat versi',
     what: '"Foto" seluruh file project-mu pada satu waktu. Kamu bisa melihat perbedaannya dan kembali ke versi mana pun.',

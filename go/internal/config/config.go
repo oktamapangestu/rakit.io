@@ -57,6 +57,8 @@ type AI struct {
 	// dashboard (lihat paket aimodels).
 	Model, FallbackModel string
 	MaxTokens            int
+	// ContextWindow: ukuran jendela konteks model (token), pembagi indikator konteks di kotak prompt editor.
+	ContextWindow int
 	// Antrean: jumlah panggilan ke provider yang boleh berjalan bersamaan, panjang antrean, dan batas tunggu.
 	MaxConcurrent int
 	QueueMax      int
@@ -174,6 +176,7 @@ func (c *Config) loadServices() {
 		Model:               envOr("AI_MODEL", "deepseek-v4-pro"),
 		FallbackModel:       os.Getenv("AI_FALLBACK_MODEL"),
 		MaxTokens:           envInt("AI_MAX_TOKENS", 64000),
+		ContextWindow:       max(1000, envIntOr("AI_CONTEXT_WINDOW", 128000)),
 		MaxConcurrent:       max(1, envInt("AI_MAX_CONCURRENT", 4)),
 		QueueMax:            max(0, envIntOr("AI_QUEUE_MAX", 30)),
 		QueueTimeout:        time.Duration(max(5, envInt("AI_QUEUE_TIMEOUT_S", 120))) * time.Second,

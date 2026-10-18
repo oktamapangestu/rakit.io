@@ -585,7 +585,7 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	if err != nil {
 		return nil, err
 	}
-	md, err := agentsMD(s.buildPrompt, state)
+	md, err := agentsMD(s.buildPrompt, state, s.ProjectNotes(in.project.ID))
 	if err != nil {
 		return nil, err
 	}
@@ -805,7 +805,7 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	}
 	inTok, outTok := proxy.usage()
 	result := &buildResult{message: stripClaims(planMessage(text)), changes: append(tableChanges, changes...), stats: stats,
-		inTokens: inTok, outTok: outTok, images: images}
+		inTokens: inTok, outTok: outTok, peakIn: proxy.peakInput(), images: images}
 	return &agentResult{buildResult: result, tables: tableSnaps, tools: toolsSrv}, nil
 }
 

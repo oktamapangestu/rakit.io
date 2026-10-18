@@ -567,6 +567,7 @@ type buildResult struct {
 	message          string
 	changes          []change
 	inTokens, outTok int
+	peakIn           int      // token input terbesar satu panggilan model = isi jendela konteks (lihat saveContext)
 	images           []string // gambar yang dirujuk tapi belum ada (lihat imagesNote)
 	stats            buildStats
 }
@@ -658,6 +659,7 @@ func (s *Service) runBuilder(messages []message, ws *workspace, lb *lab, h hooks
 		}
 		out.inTokens += r.PromptTokens
 		out.outTok += r.CompletionTokens
+		out.peakIn = max(out.peakIn, r.PromptTokens)
 		if os.Getenv("AI_DEBUG") != "" {
 			log.Printf("----- AI builder round %d (%s) -----\n%s", round+1, r.FinishReason, r.Text)
 		}

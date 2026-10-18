@@ -102,6 +102,17 @@ export const canAfford = (c, cost) => unlimitedLeft(c) || c.remaining >= cost;
 // Biaya prompt yang sedang disusun: prompt dengan gambar memakai lebih banyak kredit.
 export const promptCost = () => (ai.images.length && ai.credits?.images ? ai.credits.images.cost : ai.credits?.costPerPrompt ?? 1);
 
+// Indikator konteks di kotak prompt: isi jendela konteks model pada jawaban AI terakhir di percakapan ini
+// (contextTokens, lihat saveContext di go/internal/ai/service.go) dibanding credits.contextWindow. null = belum ada.
+export function contextUsage() {
+  const size = ai.credits?.contextWindow;
+  if (!size) return null;
+  const last = ai.messages.findLast((x) => x.kind === 'reply' && x.m.contextTokens > 0);
+  if (!last) return null;
+  const tokens = last.m.contextTokens;
+  return { tokens, size, pct: Math.min(100, Math.round((tokens / size) * 100)) };
+}
+
 export function setMode(mode) {
   ai.mode = mode === 'plan' || (mode === 'agent' && SHOW_AGENT_MODE) ? mode : 'build';
   host?.storageSet('rakit.aiMode', ai.mode);

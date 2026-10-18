@@ -22,6 +22,7 @@
   import History from '../history/History.svelte';
   import ConsoleTab from '../console/Console.svelte';
   import FlowPanel from '../flow/FlowPanel.svelte';
+  import Docs from '../docs/Docs.svelte';
   import { core } from '../files/state.svelte.js';
   import { ai, canAfford, unlimitedLeft } from '../ai/state.svelte.js';
   import { con } from '../console/state.svelte.js';
@@ -178,6 +179,10 @@
         Console
         <span class="console-badge" id="consoleBadge" hidden={!con.unread} title={`${con.unread} error baru`}>{con.unread > 99 ? '99+' : String(con.unread)}</span>
       </button>
+      <button role="tab" data-mode="docs" aria-selected={String(ui.mode === 'docs')} onclick={() => actions.setMode('docs')} title="Dokumentasi project: API database & fungsi, struktur database, dan konfigurasi (otomatis)">
+        <svg viewBox="0 0 16 16"><path d="M3.5 1h6.2L13 4.3v9.2a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 2 13.5v-11A1.5 1.5 0 0 1 3.5 1m0 1a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5V5H9V2zM10 2.7V4h1.3zM4.5 7h7v1h-7zm0 2.5h7v1h-7zm0 2.5h4.5v1H4.5z"/></svg>
+        Docs
+      </button>
     </div>
     <div class="editor-main">
       <!-- Panel file: di desktop bagian dari mode Code (kiri editor kode); di HP tampil lewat tab File di navigasi bawah. -->
@@ -243,6 +248,9 @@
             {:else if ui.mode === 'history'}
               <svg viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 1 1-6.14 4.35l.94.33A5.5 5.5 0 1 0 8 2.5c-1.77 0-3.35.84-4.35 2.15H5.5v1H2V2.15h1v1.72A6.48 6.48 0 0 1 8 1.5M7.5 4h1v3.8l2.6 1.5-.5.87-3.1-1.8z"/></svg>
               Riwayat versi
+            {:else if ui.mode === 'docs'}
+              <svg viewBox="0 0 16 16"><path d="M3.5 1h6.2L13 4.3v9.2a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 2 13.5v-11A1.5 1.5 0 0 1 3.5 1m0 1a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5V5H9V2zM10 2.7V4h1.3zM4.5 7h7v1h-7zm0 2.5h7v1h-7zm0 2.5h4.5v1H4.5z"/></svg>
+              Dokumentasi
             {:else if ui.mode === 'console'}
               <svg viewBox="0 0 16 16"><path d="M1.5 2h13l.5.5v11l-.5.5h-13l-.5-.5v-11zM2 3v10h12V3zm1.6 2.2.7-.7L7.1 8l-2.8 2.5-.7-.7L5.7 8zM8 10h4.5v1H8z"/></svg>
               Console
@@ -332,6 +340,8 @@
       <div class="console-view" id="consoleView" hidden={ui.mode !== 'console'}>{#if ui.loaded.console}<ConsoleTab />{/if}</div>
 
       <div class="history-view" id="historyView" hidden={ui.mode !== 'history'}>{#if ui.loaded.history}<History bind:this={views.history} />{/if}</div>
+
+      <div class="docs-view" id="docsView" hidden={ui.mode !== 'docs'}>{#if ui.loaded.docs}<Docs bind:this={views.docs} />{/if}</div>
     </div>
   </main>
   <div class="splitter" data-target="preview" hidden={ui.previewHidden} {@attach splitter}><i></i></div>

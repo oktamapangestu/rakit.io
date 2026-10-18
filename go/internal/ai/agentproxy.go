@@ -32,6 +32,7 @@ type agentProxy struct {
 
 	mu       sync.Mutex
 	in, out  int
+	peak     int // token input terbesar satu request (isi jendela konteks)
 	requests int
 }
 
@@ -39,6 +40,12 @@ func (p *agentProxy) usage() (in, out int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.in, p.out
+}
+
+func (p *agentProxy) peakInput() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.peak
 }
 
 func (p *agentProxy) exhausted() bool {
@@ -50,6 +57,7 @@ func (p *agentProxy) add(in, out int) {
 	p.mu.Lock()
 	p.in += in
 	p.out += out
+	p.peak = max(p.peak, in)
 	p.requests++
 	p.mu.Unlock()
 }

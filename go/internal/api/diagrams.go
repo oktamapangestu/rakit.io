@@ -284,12 +284,11 @@ func (h *Handler) diagrams(q *request) error {
 }
 
 // diagramFacts: analisis otomatis file & database project (tanpa AI) — bahan untuk AI pembuat diagram.
-func (h *Handler) diagramFacts(ctx context.Context, project *store.Project) (map[string]any, error) {
-	slug := project.Slug
-	root := h.cfg.SiteRoot(slug)
+// readProject: path file project (maks. maxDiagramFiles) beserta isinya; gambar & file tak terbaca = kosong.
+func readProject(root string) ([]string, map[string]string, error) {
 	entries, err := files.ListTree(root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var paths []string
 	for _, e := range entries {
@@ -297,12 +296,30 @@ func (h *Handler) diagramFacts(ctx context.Context, project *store.Project) (map
 			paths = append(paths, e.Path)
 		}
 	}
-	fileSet := map[string]bool{}
 	contents := map[string]string{}
 	for _, p := range paths {
-		fileSet[p] = true
-		contents[p], _ = files.ReadText(root, p) // gambar & file tak terbaca = kosong
+		contents[p], _ = files.ReadText(root, p)
 	}
+	return paths, contents, nil
+}
+
+func (h *Handler) diagramFacts(ctx context.Context, project *store.Project) (map[string]any, error) {
+	slug := project.Slug
+	paths, contents, err := readProject(h.cfg.SiteRoot(slug))
+	if err != nil {
+		return nil, err
+	}
+	return h.projectFacts(ctx, project, paths, contents)
+}
+
+// projectFacts: bahan diagram dari file yang sudah dibaca (dipakai juga tab Dokumentasi, lihat docs.go).
+func (h *Handler) projectFacts(ctx context.Context, project *store.Project, paths []string, contents map[string]string) (map[string]any, error) {
+	slug := project.Slug
+	fileSet := map[string]bool{}
+	for _, p := range paths {
+		fileSet[p] = true
+	}
+	var err error
 
 	tables := []*userdb.TableInfo{}
 	if h.userdb.HasDatabase(slug) {

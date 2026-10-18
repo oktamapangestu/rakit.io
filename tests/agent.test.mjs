@@ -159,3 +159,10 @@ test('mode Agen: Stop saat agen menunggu jawaban menghentikan job', { skip: !GO 
   assert.equal((await user.post(`/api/ai/jobs/${jobId}/answer`, { question: q.id, answer: 'Halo Dunia' })).status, 409);
   assert.equal((await user.credits()).remaining, 20, 'kredit dikembalikan');
 });
+
+test('mode Agen: Catatan Project ikut di AGENTS.md', { skip: !GO }, async () => {
+  const user = await stack.register();
+  assert.equal((await agent(user, '[catatan] cek')).final.message.content, 'tanpa catatan');
+  assert.equal((await user.put('/api/docs/notes', { notes: '- Warna utama hijau' })).status, 200);
+  assert.equal((await agent(user, '[catatan] cek lagi')).final.message.content, 'Catatan: - Warna utama hijau');
+});

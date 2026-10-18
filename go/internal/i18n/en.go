@@ -224,6 +224,11 @@ var en = map[string]string{
 	"Diagram terlalu besar untuk dibuat sekaligus. Kredit dikembalikan.":                     "The diagram is too large to create at once. Credits were refunded.",
 	"AI terlalu lama membuat diagram. Coba lagi. Kredit dikembalikan.":                       "The AI took too long to draw the diagram. Try again. Credits were refunded.",
 	"AI sedang sibuk atau tidak tersedia. Coba lagi sebentar lagi. Kredit dikembalikan.":     "The AI is busy or unavailable. Try again in a moment. Credits were refunded.",
+	"Catatan harus berupa teks":                                                              "Notes must be text",
+	"Catatan maksimal %d karakter":                                                           "Notes can be at most %d characters",
+	"AI belum tersedia di server ini":                                                        "AI is not available on this server yet",
+	"AI tidak memberi draf. Coba lagi. Kredit dikembalikan.":                                 "The AI did not return a draft. Try again. Credits were refunded.",
+	"AI terlalu lama membuat draf. Coba lagi. Kredit dikembalikan.":                          "The AI took too long to write the draft. Try again. Credits were refunded.",
 	"Terjadi kesalahan saat menghubungi AI. Kredit dikembalikan.":                            "Something went wrong while contacting the AI. Credits were refunded.",
 	"Terjadi kesalahan saat menyimpan diagram.":                                              "Something went wrong while saving the diagram.",
 

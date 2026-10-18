@@ -48,10 +48,10 @@ export function renderMarkdown(text) {
       list = null;
       continue;
     }
-    const heading = line.match(/^#{1,6}\s+(.*)/);
+    const heading = line.match(/^(#{1,6})\s+(.*)/);
     const item = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);
     if (heading) {
-      out.append(h('p', { class: 'md-h' }, inlineMd(heading[1])));
+      out.append(h('p', { class: 'md-h', 'data-level': heading[1].length }, inlineMd(heading[2])));
       list = null;
     } else if (item) {
       if (!list) out.append((list = h('ul')));

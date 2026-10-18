@@ -105,6 +105,7 @@ type Info struct {
 	ResetsAt       string     `json:"resetsAt"` // jatah gratis terisi lagi 00.00 WIB
 	Plan           *PlanInfo  `json:"plan"`
 	Agents         any        `json:"agents,omitempty"` // mesin mode Agen yang aktif (lihat ai.AgentEngines)
+	ContextWindow  int        `json:"contextWindow"`    // jendela konteks model (token), untuk indikator konteks editor
 }
 
 func (s *Service) Info(userID int64) *Info {
@@ -124,6 +125,7 @@ func (s *Service) Info(userID int64) *Info {
 		Limit: freeLimit, Used: used, FreeRemaining: freeRemaining,
 		BonusLimit: bonusLimit, BonusRemaining: bonusLeft, BonusUsed: max(0, bonusLimit-bonusLeft),
 		Purchased: purchased, CostPerPrompt: s.cfg.AI.CreditsPerPrompt, ResetsAt: plans.ISO(resetsAt),
+		ContextWindow: s.cfg.AI.ContextWindow,
 	}
 	if s.VisionEnabled != nil && s.VisionEnabled() {
 		info.Images = &ImageInfo{Cost: s.cfg.AI.ImagePromptCredits, Max: s.cfg.AI.MaxImages}

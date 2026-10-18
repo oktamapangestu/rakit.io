@@ -157,6 +157,7 @@ Konfigurasi di `.env`:
 | `AI_FALLBACK_MODEL` | — | Model cadangan saat model utama gangguan, dipisah koma bila lebih dari satu (dicoba berurutan, maks. 5). Kosong = tanpa cadangan. |
 | `AI_VISION_FALLBACK_MODEL` | — | Model cadangan untuk pembaca gambar (`AI_VISION_MODEL`), dipisah koma bila lebih dari satu. |
 | `AI_MAX_TOKENS` | `64000` | Batas token output per putaran AI (termasuk token "berpikir" model reasoning). |
+| `AI_CONTEXT_WINDOW` | `128000` | Ukuran jendela konteks model (token). Dipakai indikator persentase konteks di kotak prompt editor; samakan dengan model yang dipakai. Hanya di server Go. |
 | `AI_MAX_CONCURRENT` | `4` | Maks. panggilan ke provider yang berjalan bersamaan (lihat Antrean AI). |
 | `AI_QUEUE_MAX` | `30` | Panjang antrean maksimal; lebih dari ini ditolak dengan pesan "AI sedang penuh". |
 | `AI_QUEUE_TIMEOUT_S` | `120` | Batas menunggu di antrean (detik). |

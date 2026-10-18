@@ -435,6 +435,23 @@ test('Builder tanpa perubahan: jawaban biasa; jawaban kosong dianggap gagal', as
   assert.equal(empty.final.credits.remaining, 48);
 });
 
+test('indikator konteks: jawaban mencatat token input terbesar satu panggilan model', { skip: goOnly }, async () => {
+  const user = await stack.register();
+  assert.equal((await user.credits()).contextWindow, 128000);
+  stack.ai.script.push(
+    { ...calls(call('write_file', { path: 'a.html', content: '<p>a</p>' })), usage: { prompt_tokens: 9000, completion_tokens: 50 } },
+    { text: 'Selesai.', usage: { prompt_tokens: 4000, completion_tokens: 10 } },
+  );
+  const { final } = await user.build('buat a');
+  assert.equal(final.message.contextTokens, 9000);
+  // Ikut tersimpan: percakapan yang dibuka lagi tetap menampilkannya.
+  const thread = (await user.get(`/api/ai/threads/${final.message.threadId}`)).body;
+  assert.equal(thread.messages.find((m) => m.id === final.message.id).contextTokens, 9000);
+
+  stack.ai.script.push({ text: 'Rencana', usage: { prompt_tokens: 1234, completion_tokens: 5 } });
+  assert.equal((await user.prompt('rencana')).final.message.contextTokens, 1234);
+});
+
 test('Plan: hanya teks, tanpa tool, blok kode dibuang', async () => {
   const user = await stack.register();
   stack.ai.script.push({ text: 'abaikan <message>## Rencana\n\n- Buat halaman\n\n\n\n<file path="a.html">kode</file>\n<db-table name="x"></db-table>Selesai</message> ekor' });
@@ -511,7 +528,8 @@ test('percakapan: prompt lanjutan membawa riwayat; daftar & isi percakapan; hapu
   assert.equal(detail.status, 200);
   assert.equal(detail.body.thread.id, threadId);
   assert.deepEqual(detail.body.messages.map((m) => [m.role, m.mode, m.status]), [['user', 'build', 'sent'], ['assistant', 'build', 'done'], ['user', 'plan', 'sent'], ['assistant', 'plan', 'done']]);
-  assert.deepEqual(Object.keys(detail.body.messages[1]).sort(), ['applyState', 'before', 'changes', 'content', 'createdAt', 'error', 'id', 'images', 'mode', 'role', 'status', 'threadId']);
+  // contextTokens (indikator konteks) hanya dari server Go.
+  assert.deepEqual(Object.keys(detail.body.messages[1]).sort(), ['applyState', 'before', 'changes', 'content', ...(GO ? ['contextTokens'] : []), 'createdAt', 'error', 'id', 'images', 'mode', 'role', 'status', 'threadId']);
   assert.equal(detail.body.messages[1].applyState, 'kept');
   assert.equal((await stranger.get(`/api/ai/threads/${threadId}`)).status, 404);
   assert.equal((await user.get('/api/ai/threads/abc')).status, 404);

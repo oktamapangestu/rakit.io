@@ -6,6 +6,7 @@
 // halaman lewat layanan site, lalu selesai. Prompt berisi "[form-rusak]": form tidak menyimpan (app.js tanpa fetch) —
 // pemeriksaan server harus mengembalikannya, dan prompt berikutnya memperbaikinya. Prompt berisi "[tanya]": agen
 // bertanya lewat ask_user (sekali dengan argumen salah, lalu benar), menunggu jawaban, dan menulis judul sesuai jawaban.
+// Prompt berisi "[catatan]": menjawab dengan isi <project-notes> di AGENTS.md (atau "tanpa catatan") tanpa mengubah file.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -42,6 +43,12 @@ rl.on('line', async (line) => {
   const cmd = JSON.parse(line);
   if (cmd.type !== 'prompt') return;
   turn++;
+  if (cmd.message.includes('[catatan]')) {
+    const md = fs.readFileSync(path.join(ws, 'AGENTS.md'), 'utf8');
+    const notes = /<project-notes>\n([\s\S]*?)\n<\/project-notes>/.exec(md)?.[1];
+    emit({ type: 'settled', text: notes ? `Catatan: ${notes}` : 'tanpa catatan', usage: { prompt: 0, completion: 0 } });
+    return;
+  }
   if (turn === 1 && cmd.message.includes('[tanya]')) {
     emit({ type: 'tool', name: 'mcp__rakit__ask_user', args: { question: 'Satu pilihan saja?' }, response: 'q1' });
     const bad = await call('tools', 'POST', '/ask_user', { question: 'Satu pilihan saja?', options: [{ label: 'Ya' }] });
