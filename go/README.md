@@ -20,7 +20,7 @@ go/bin/rakit --env-file .env              # dari folder repo (PUBLIC_DIR & TEMPL
 | `BASE_DOMAIN`, `PROTOCOL`, `PUBLIC_PORT`, `DATA_DIR`, `ADMIN_EMAILS` | sama dengan Node | |
 | `PUBLIC_DIR` | `public` | Folder halaman & aset aplikasi, relatif ke folder kerja. |
 | `TEMPLATE_DIR` | `templates/default` | File awal project baru, relatif ke folder kerja. |
-| `MAX_PROJECTS`, `GOOGLE_*`, `AI_*`, `KASERA_*`, `CREDIT_PACKAGES`, `ASSISTANT_PACKAGES`, `PLAN_*` | sama dengan Node | |
+| `MAX_PROJECTS`, `MAX_CUSTOM_DOMAINS`, `GOOGLE_*`, `AI_*`, `KASERA_*`, `CREDIT_PACKAGES`, `ASSISTANT_PACKAGES` | lihat README utama | Langganan (`PLAN_*`) sudah dihapus. |
 | `MAIL_API_URL` | `https://mail-api.flaz.id/v1/messages` | API pengirim email (lupa password). Hanya di server Go. |
 | `SITE_MINIFY` | `1` | Website publik dikirim dengan .html/.css/.js versi minify (`internal/sites/minify.go`); versi dev, preview editor & sandbox agen tetap asli. `0` mematikan. Hanya di server Go. |
 

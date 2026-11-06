@@ -5,7 +5,7 @@
 <script>
   import { getContext } from 'svelte';
   import Icon from '../Icon.svelte';
-  import { rupiah, shortDate } from '../format.js';
+  import { rupiah } from '../format.js';
 
   // onTopup: tutup dialog ini lalu buka isi saldo asisten (kembali ke sini setelah berhasil).
   let { onTopup, close } = $props();
@@ -105,9 +105,7 @@
         <div>
           <span class="asst-label">Saldo asisten</span>
           <strong>{rupiah(Math.floor(wallet.available))}</strong>
-          <small>{wallet.allowance
-            ? `Termasuk jatah ${wallet.allowance.plan} ${rupiah(Math.floor(wallet.allowance.remaining))} (terisi lagi ${shortDate(wallet.allowance.resetsAt)}) + saldo ${rupiah(Math.floor(wallet.balance))}`
-            : 'Dipakai setiap kali asisten menjawab. Saldo tidak hangus.'}</small>
+          <small>Dipakai setiap kali asisten menjawab. Saldo tidak hangus.</small>
         </div>
         {#if data.packages.length}<button type="button" class="asst-topup" onclick={onTopup}>Isi saldo</button>{/if}
       </div>

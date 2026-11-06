@@ -22,6 +22,37 @@ func (h *Handler) ai(q *request) error {
 	case q.is("GET", "credits"):
 		return q.json(200, h.svc.Credits.Info(q.user.ID))
 
+	// AI pribadi akun (tab Provider AI).
+	case q.is("GET", "provider"):
+		out, err := svc.PersonalView(q.user.ID)
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
+	case q.is("PUT", "provider"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		out, err := svc.SavePersonal(q.user.ID, q.body)
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
+	case q.is("DELETE", "provider"):
+		if err := svc.DeletePersonal(q.user.ID); err != nil {
+			return err
+		}
+		return q.json(200, map[string]bool{"ok": true})
+	case q.is("POST", "provider", "test"):
+		if err := q.load(); err != nil {
+			return err
+		}
+		out, err := svc.TestPersonal(q.r.Context(), q.user.ID, q.body)
+		if err != nil {
+			return err
+		}
+		return q.json(200, out)
+
 	case q.is("GET", "threads"), q.is("GET", "threads", ":"), q.is("DELETE", "threads"), q.is("POST", "prompt"):
 		project, err := h.loadProject(q)
 		if err != nil {
@@ -143,17 +174,14 @@ func (h *Handler) billing(q *request) error {
 			return err
 		}
 		return q.json(200, out)
-	case q.is("POST", "topup"), q.is("POST", "assistant-topup"), q.is("POST", "subscribe"):
+	case q.is("POST", "topup"), q.is("POST", "assistant-topup"):
 		if err = q.load(); err != nil {
 			return err
 		}
-		switch {
-		case q.is("POST", "topup"):
+		if q.is("POST", "topup") {
 			status, out, err = svc.Topup(ctx, q.user, field("packageId"))
-		case q.is("POST", "assistant-topup"):
+		} else {
 			status, out, err = svc.AssistantTopup(ctx, q.user, field("packageId"))
-		default:
-			status, out, err = svc.Subscribe(ctx, q.user, q.text("planId"))
 		}
 		if err != nil {
 			return err

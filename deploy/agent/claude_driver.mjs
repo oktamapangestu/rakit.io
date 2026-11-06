@@ -106,7 +106,8 @@ try {
   for await (const msg of query({
     prompt: userMessages(),
     options: {
-      cwd: '/workspace',
+      // Container: /workspace. Tanpa Docker (aplikasi desktop, AI_AGENT_LOCAL): folder kerja dari server.
+      cwd: process.env.RAKIT_WORKSPACE || '/workspace',
       model,
       fallbackModel: undefined,
       tools: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', ...(skill ? ['Skill'] : [])],

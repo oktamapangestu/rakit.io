@@ -23,8 +23,8 @@ import (
 
 const keepLogs = 100
 
-// CronMinutes: jarak minimal jadwal (menit) per paket; paket gratis tanpa jadwal.
-var CronMinutes = map[string]int{"pro": 15, "unlimited": 5}
+// CronMinutes: jarak minimal antar-jalan jadwal fungsi.
+const CronMinutes = 15
 
 const maxSchedules = 10
 
@@ -96,14 +96,6 @@ func (s *Service) Logs(p *store.Project, name string, limit int) ([]LogEntry, er
 
 // ---------- Jadwal ----------
 
-// cronLimit: jarak minimal jadwal untuk akun ini (0 = paket tanpa jadwal) dan nama paketnya.
-func (s *Service) cronLimit(userID int64) (time.Duration, string) {
-	if plan := s.plans.Active(userID); plan != nil {
-		return time.Duration(CronMinutes[plan.ID]) * time.Minute, plan.Name
-	}
-	return 0, "Gratis"
-}
-
 type Schedule struct {
 	Cron       string  `json:"cron"`
 	NextRunAt  *string `json:"nextRunAt"`
@@ -119,7 +111,7 @@ func (s *Service) schedules(p *store.Project) (map[string]*Schedule, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	limit, plan := s.cronLimit(p.UserID)
+	const limit = CronMinutes * time.Minute
 	out := map[string]*Schedule{}
 	for rows.Next() {
 		var name string
@@ -139,10 +131,8 @@ func (s *Service) schedules(p *store.Project) (map[string]*Schedule, error) {
 		switch {
 		case err != nil:
 			sc.Note = err.Error()
-		case limit == 0:
-			sc.Note = "Jadwal hanya berjalan pada paket Pro/Unlimited"
 		case cron.MinGap(time.Now()) < limit:
-			sc.Note = "Terlalu sering untuk paket " + plan
+			sc.Note = fmt.Sprintf("Terlalu sering: paling sering setiap %d menit", CronMinutes)
 		default:
 			sc.Active = true
 			if next := cron.Next(time.Now()); !next.IsZero() {
@@ -168,16 +158,12 @@ func (s *Service) SetSchedule(p *store.Project, name, expr string) error {
 	if _, err := os.Stat(filepath.Join(s.cfg.SiteRoot(p.Slug), Dir, name+".js")); err != nil {
 		return httpx.Errorf(404, "Fungsi tidak ditemukan")
 	}
-	limit, plan := s.cronLimit(p.UserID)
-	if limit == 0 {
-		return &httpx.Error{Status: 403, Code: "fn_cron_plan", Message: "Jadwal fungsi tersedia untuk paket Pro dan Unlimited."}
-	}
 	cron, err := ParseCron(expr)
 	if err != nil {
 		return httpx.Errorf(400, "Jadwal tidak valid: %s", err.Error())
 	}
-	if cron.MinGap(time.Now()) < limit {
-		return httpx.Errorf(400, "Paket %s: jadwal paling sering setiap %d menit", plan, int(limit/time.Minute))
+	if cron.MinGap(time.Now()) < CronMinutes*time.Minute {
+		return httpx.Errorf(400, "Jadwal paling sering setiap %d menit", CronMinutes)
 	}
 	var n int
 	s.db.QueryRow("SELECT COUNT(*) FROM fn_schedules WHERE project_id = ? AND name != ?", p.ID, name).Scan(&n)
@@ -249,8 +235,8 @@ func (s *Service) tick(ctx context.Context, minute time.Time) {
 		if cron == nil || !cron.Match(minute) || last >= minute.UnixMilli() {
 			continue
 		}
-		if limit, _ := s.cronLimit(d.project.UserID); limit == 0 || cron.MinGap(minute) < limit {
-			continue // paket berubah: jadwal tidak lagi diizinkan
+		if cron.MinGap(minute) < CronMinutes*time.Minute {
+			continue // jadwal lama yang lebih sering dari batas
 		}
 		list = append(list, d)
 	}

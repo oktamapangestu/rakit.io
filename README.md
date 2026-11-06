@@ -27,9 +27,9 @@ src/
   files.js     penyimpanan file per user di disk, validasi path, kuota
   sites.js     menyajikan website user (index.html, URL bersih, 404.html kustom, ETag)
   ai.js        asisten AI: konteks proyek, panggilan ke provider AI
-  credits.js   kredit AI: kuota langganan, jatah gratis harian, saldo yang dibeli
-  billing.js   isi ulang kredit & langganan via QRIS (Kasera Pay) + webhook
-  plans.js     paket langganan Pro/Unlimited: kuota AI & bonus storage
+  credits.js   kuota AI: jatah prompt gratis harian, lalu saldo kredit yang dibeli
+  billing.js   isi ulang kredit & saldo asisten via QRIS (Kasera Pay) + webhook
+  plans.js     batas akun (sama untuk semua) & jatah prompt harian
   assistant.js asisten AI untuk website pengguna: saldo, model, proxy /api/ai/chat, widget
   versions.js  riwayat versi file project: simpan otomatis/manual, bandingkan, kembalikan
   userdb.js    database per proyek (SQLite), validasi & aturan akses
@@ -66,10 +66,10 @@ Komponennya ada di `assets-source/editor/`. `assets-source/js/editor.js` memasan
 `shell/App.svelte`, yang menyusun semua bagian editor, lalu memuat akun & project. Logikanya (tanpa membuat elemen
 sendiri) dibagi per bagian di `assets-source/editor/app/`: `files.js` (pohon, tab, simpan, operasi file, upload),
 `monaco.js` (editor kode, tema, prediksi kode), `preview.js` (preview, pilih blok, edit teks & gambar), `flow.js`
-(Baca Alur Kode), `shell.js` (mode/tab, panel, dialog tanya), `project.js` (akun, project, publikasi, langganan),
+(Baca Alur Kode), `shell.js` (mode/tab, panel, dialog tanya), `project.js` (akun, project, publikasi, isi ulang kredit),
 `context.js` (context `editor` & `openDialog`), `api.js`, `util.js`. Aksinya diberikan ke App lewat prop `actions`
 dan ke komponen lain lewat context.
-Bagian-bagiannya: Langganan & isi ulang kredit (`Topup.svelte`), tab Fungsi (`functions/`),
+Bagian-bagiannya: Isi ulang kredit (`Topup.svelte`), tab Fungsi (`functions/`),
 tab Data / editor database (`database/`), tab Riwayat versi (`history/`), pengaturan Asisten AI website
 (`assistant/`, masih disembunyikan lewat `SHOW_ASSISTANT`), dialog Pengaturan (`settings/`), dialog Publikasikan &
 Mode publikasi (`publish/`), tab Console (`console/`), panel Baca Alur Kode (`flow/`; sorotan baris & sinkron dengan
@@ -79,7 +79,7 @@ Diagram), dialog penjelasan fitur (`FeatureInfo.svelte`), pohon file/tab/breadcr
 keadaan inti `core` di `files/state.svelte.js`, model Monaco & antrean simpan tetap di `editor.js`), panel preview
 (`preview/`: bar alamat, pilih blok & chip-nya di kotak prompt, mode Edit, ukuran layar, dialog ganti gambar; pesan
 dari/ke iframe dan logika edit teks/gambar tetap di `editor.js`), kerangka editor (`shell/App.svelte`: header,
-panel, tab mode, lencana kredit & langganan, status simpan, status bar, navigasi HP; keadaan tampilan `ui` di
+panel, tab mode, lencana kredit, status simpan, status bar, navigasi HP; keadaan tampilan `ui` di
 `shell/state.svelte.js`, splitter di `shell/resize.js`), menu konteks & toast (`showMenu()`,
 `toast()` di `shell/state.svelte.js`), dialog tanya/konfirmasi (`shell/ConfirmDialog.svelte`) dan dialog perbandingan
 file (`shell/DiffDialog.svelte`). `editor.html` kini hanya berisi wadah `.app` kosong dan `#modal`.
@@ -135,7 +135,10 @@ lewat tombol ID/EN, yaitu `?lang=id|en`). Bila cookie berisi `en`, alamat Indone
   mendapat username dari email. Email yang sudah terdaftar dengan password **tidak** ditautkan otomatis ke Google
   (pendaftaran password tidak memverifikasi email), jadi pemiliknya masuk memakai password.
 - **Project = workspace**: setiap project punya subdomain sendiri (`<slug>.rakit.io`), file (`data/sites/<slug>`),
-  database (`data/db/<slug>.db`), dan riwayat AI sendiri. Maksimal `MAX_PROJECTS` (default 5) per akun; kuota
+  database (`data/db/<slug>.db`), dan riwayat AI sendiri. Project baru otomatis beralamat acak (`web-xxxxxx`);
+  alamat pilihan sendiri bisa dipasang saat membuat atau lewat menu project → *Ganti alamat website* (file,
+  database, dan riwayat ikut pindah; alamat lama dilepas), maksimal `MAX_CUSTOM_DOMAINS` (default 5) per akun.
+  Maksimal `MAX_PROJECTS` (default 20) project per akun; kuota
   file & database dihitung per project. Ganti, buat, ganti nama, atau hapus project lewat tombol folder di chip
   alamat website (atau menu avatar di HP). Project terakhir tidak bisa dihapus.
 - **Kredit AI milik akun** dan dipakai bersama semua project; satu prompt berjalan per akun di project mana pun.
@@ -162,8 +165,8 @@ Konfigurasi di `.env`:
 | `AI_QUEUE_MAX` | `30` | Panjang antrean maksimal; lebih dari ini ditolak dengan pesan "AI sedang penuh". |
 | `AI_QUEUE_TIMEOUT_S` | `120` | Batas menunggu di antrean (detik). |
 | `AI_DEBUG` | — | Isi `1` untuk mencetak jawaban mentah AI ke log (berisi kode user — jangan di production). |
-| `AI_DAILY_CREDITS` | `3` | Default kredit gratis per user per hari (reset 00.00 WIB, tidak menumpuk). Diatur di dashboard owner setelah pernah disimpan. |
-| `AI_CREDITS_PER_PROMPT` | `1` | Kredit yang dipakai per prompt. |
+| `AI_DAILY_PROMPTS` | `20` | Default prompt gratis per akun per hari (reset 00.00 WIB, tidak menumpuk; prompt bergambar juga 1). Diatur di dashboard owner setelah pernah disimpan. |
+| `AI_CREDITS_PER_PROMPT` | `1` | Kredit yang dibeli terpakai per prompt setelah jatah harian habis. |
 
 - Mode **Builder** memakai *tool calling* (`write_file`, `delete_file`, `create_table`); server memvalidasi setiap
   panggilan dan memeriksa alamat `/api/db/...` di kode sebelum hasilnya dikirim ke editor. Mode **Plan** hanya teks.
@@ -230,37 +233,34 @@ Di dashboard Kasera, daftarkan URL webhook: `https://rakit.io/api/billing/webhoo
 - Setiap pembayaran hanya menambah kredit sekali, walaupun webhook terkirim berulang.
 - Riwayat pembayaran ada di tabel `payments`.
 
-## Langganan (Pro & Unlimited)
+## Jatah AI & batas akun
 
-Selain membeli kredit, user bisa berlangganan 30 hari lewat QRIS yang sama. Pembayarannya sekali bayar tanpa tagihan
-otomatis, dan bisa diperpanjang kapan saja. Paket dibuka dari badge kredit AI atau menu avatar → **Langganan & kredit AI**.
+Tidak ada paket langganan. Semua akun mendapat batas yang sama:
 
-| Paket | Default awal | AI | Storage file / project | Database / project | File & folder | Gambar / file |
-|---|---|---|---|---|---|---|
-| Gratis | — | `AI_DAILY_CREDITS` per hari (default 3, tidak menumpuk) | 20 MB | 10 MB | 500 | 1 MB |
-| Pro | `PLAN_PRO=49000:300` | 300 kredit tiap siklus 30 hari | 100 MB | 50 MB | 2.000 | 5 MB |
-| Unlimited | `PLAN_UNLIMITED=149000:60` | tanpa kuota bulanan, maks. 60 prompt/hari (WIB) | 250 MB | 100 MB | 5.000 | 10 MB |
+| AI | Storage file / project | Database / project | File & folder | Gambar / file | Riwayat versi | Fungsi / hari | Jadwal fungsi |
+|---|---|---|---|---|---|---|---|
+| `AI_DAILY_PROMPTS` prompt/hari (default 20), lalu kredit yang dibeli | 100 MB | 50 MB | 2.000 | 5 MB | 30 hari / 200 | 20.000 | min. 15 menit |
 
-- **Harga, kuota AI, dan status dijual diatur di dashboard owner** (`/admin` → kartu *Harga langganan*) dan
-  disimpan di tabel `settings`. `PLAN_PRO`/`PLAN_UNLIMITED` di `.env` hanya default sebelum owner pernah menyimpan.
-  Kartu yang sama mengatur **kredit gratis per hari** (reset 00.00 WIB; sisa hari itu hangus, tidak menumpuk).
-  Perubahan harga berlaku untuk pembelian baru; tagihan QRIS yang masih menunggu tetap dengan nominal lamanya. Paket
-  yang tidak dijual tetap berlaku bagi pelanggan yang sudah membayar. Kartu itu juga menghitung harga per
-  kredit/prompt dan perkiraan margin terburuk dari rata-rata token per prompt 30 hari terakhir × biaya model
-  (Rp per 1 juta token, diisi owner).
-- Urutan pemakaian kredit: kuota langganan → kredit gratis harian → saldo kredit yang dibeli. Jadi pelanggan
-  Unlimited yang mencapai batas harian tetap bisa memakai kredit gratis/belinya.
-- Bila satu sumber tidak cukup (mis. prompt bergambar 2 kredit, sisa gratis 1 + dibeli 1), sisanya diambil dari
-  sumber berikutnya dalam satu transaksi; saat gagal/dihentikan, tiap bagian dikembalikan ke sumbernya (kolom
-  `ai_messages.credit`: `{ source, period, cost, more: [...] }`).
-- Batas harian Unlimited menghitung **prompt**: prompt bergambar pun memakai 1 dari jatah hari itu.
-- **Perpanjang** paket yang sama: masa aktif ditambah 30 hari dari tanggal berakhir. **Upgrade** Pro → Unlimited:
-  langsung aktif, sisa hari Pro dikonversi ke hari Unlimited sesuai harga. Downgrade ditolak selama paket lebih tinggi aktif.
-- **Bonus storage** berlaku untuk semua project milik pelanggan dan langsung aktif setelah pembayaran. Saat
-  langganan berakhir, batas kembali ke paket gratis: file yang ada tidak dihapus, tetapi file baru atau file yang
-  makin besar ditolak sampai pemakaian turun di bawah batas (mengecilkan/menghapus file tetap bisa).
-- Data di tabel `subscriptions` (satu baris per user); pembayarannya di `payments` dengan `package_id = 'plan:<id>'`.
-  Batas storage per paket diatur di `src/plans.js`.
+- **Jatah prompt harian** diatur di dashboard owner (`/admin` → kartu *Jatah AI gratis*) dan disimpan di tabel
+  `settings`; `AI_DAILY_PROMPTS` hanya default sebelum owner pernah menyimpan. Reset 00.00 WIB, tidak menumpuk.
+  Satu prompt = 1 dari jatah, termasuk prompt bergambar.
+- Setelah jatah habis, prompt memakai **kredit yang dibeli** (`AI_CREDITS_PER_PROMPT`, prompt bergambar
+  `AI_IMAGE_PROMPT_CREDITS`). Saat gagal/dihentikan, jatah atau kredit dikembalikan ke sumbernya (kolom
+  `ai_messages.credit`: `{ source, period, cost }`).
+- Tabel `subscriptions` dan tagihan lama `package_id = 'plan:<id>'` tidak dipakai lagi (hanya riwayat).
+
+## AI pribadi (tab Provider AI)
+
+Tab **Provider AI** di editor berisi dua hal:
+
+- **AI pribadi untuk editor** (per akun, tabel `user_ai_provider`): base URL kompatibel OpenAI + API key + model milik
+  pengguna. Selama aktif, Builder/Plan, diagram, dan draf catatan memanggil endpoint itu (`internal/ai/personal.go`)
+  tanpa memotong jatah prompt/kredit, tanpa antrean bersama, dan tanpa model cadangan. Permintaan mode Agen
+  dikerjakan Builder, kecuali pengguna mengisi *Base URL mode Agen* berformat Anthropic (mis.
+  `https://api.anthropic.com/v1`): proxy agen lalu memakai base URL itu dengan key & model yang sama.
+  Key tidak pernah dikirim balik ke browser.
+  API: `GET/PUT/DELETE /api/ai/provider`, `POST /api/ai/provider/test` (GET `{baseUrl}/models`).
+- **Provider untuk fungsi** (per project, `ai.*` di fungsi serverless) — dulu di tab Fungsi.
 
 ## Asisten AI untuk website pengguna
 
@@ -275,8 +275,7 @@ Pemilik website bisa memasang **chatbot AI** untuk pengunjungnya, memakai AI dar
   `POST /api/ai/chat` dengan `{ messages: [{ role, content }] }` → `{ reply }` (`stream: true` → NDJSON
   `{type:"delta",text}` … `{type:"done"}`). AI Builder tahu cara memasangnya.
 - **Biaya:** token sebenarnya (laporan provider) × biaya model per 1 juta token × margin. Dana dicadangkan dulu
-  sebesar perkiraan, lalu diselesaikan ke biaya sebenarnya. Urutan dana: **jatah asisten dari langganan**
-  (Pro Rp10.000, Unlimited Rp30.000 per siklus 30 hari, `assistant` di `src/plans.js`) → **saldo** (saldo
+  sebesar perkiraan, lalu diselesaikan ke biaya sebenarnya. Dana diambil dari **saldo** (saldo
   percobaan sekali per akun + isi ulang, tidak hangus). Isi ulang lewat `ASSISTANT_PACKAGES`.
 - **Dashboard owner** → kartu *Asisten AI website*: daftar model (aktif/nonaktif, ID model di gateway, biaya,
   margin, perkiraan harga jual & modal per jawaban), tambah/hapus model, saldo percobaan, dan daftar website
@@ -303,8 +302,7 @@ kondisi sebelumnya. Bahasanya sengaja dibuat untuk pemula (tanpa istilah seperti
 - Penyimpanan: isi file disimpan sekali per hash SHA-256 di `data/versions/<slug>/`, dan tiap versi (tabel
   `versions`) hanya mencatat path → hash. File yang tidak berubah tidak memakan tempat lagi. Riwayat tidak
   dihitung ke kuota storage.
-- Batas riwayat per project mengikuti paket pemilik: Gratis 7 hari / 20 versi, Pro 30 hari / 200 versi,
-  Unlimited 90 hari / 2.000 versi (`history` di `src/plans.js`). Versi lama dan isi file yang tak terpakai
+- Batas riwayat per project: 30 hari / 200 versi (`FreeHistory` di `go/internal/plans`). Versi lama dan isi file yang tak terpakai
   dibersihkan otomatis saat versi baru dibuat. Menghapus project ikut menghapus riwayatnya.
 - API: `GET/POST /api/versions`, `GET /api/versions/:id`, `GET /api/versions/:id/file?path=`,
   `POST /api/versions/:id/restore` (body `{ path }` untuk satu file).
@@ -354,7 +352,7 @@ Website user memakainya lewat API otomatis di domainnya sendiri:
 - Setiap operasi per tabel diatur **Publik** atau **Hanya pemilik** (default: semua hanya pemilik).
 - Kolom **privat** tidak pernah dikirim lewat API publik.
 - Tipe kolom: teks, angka, ya/tidak, tanggal. Kolom `id` dan `created_at` otomatis.
-- Batas per proyek: 10 MB (lebih besar untuk pelanggan, lihat Langganan), 20 tabel, 30 kolom per tabel (`DB_LIMITS` di `src/userdb.js`).
+- Batas per proyek: 50 MB, 20 tabel, 30 kolom per tabel (`DB_LIMITS` di `src/userdb.js`).
 - Rate limit API publik per situs per IP: 300 baca dan 60 tulis per menit.
 - Path `/api/` di domain user dicadangkan untuk sistem.
 - Di mode Builder, AI bisa membuat tabel sendiri; perubahannya ikut dikonfirmasi (Simpan/Batalkan).
@@ -505,6 +503,12 @@ ukuran panel berubah.
 ## Batasan (ubah di `src/files.js` → `LIMITS`)
 
 - 512 KB per file, 20 MB & 500 file/folder per project (lebih besar untuk pelanggan, lihat `src/plans.js`), kedalaman folder 8.
+
+## Aplikasi desktop
+
+Folder `desktop/`: aplikasi Tauri 2 (Rust) yang menjalankan server Go ini di komputer pengguna (`DESKTOP=1`,
+`go/internal/desktop`). Mode Agen di desktop berjalan tanpa Docker (`AI_AGENT_LOCAL` = folder runtime berisi
+`claude_driver.mjs`, Node, SDK, Chromium; `AI_AGENT_NODE` = binary Node). Lihat `desktop/README.md`.
 
 ## Deploy ke VPS
 

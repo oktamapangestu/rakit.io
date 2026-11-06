@@ -10,7 +10,7 @@
   import ImageCompareDialog from './ImageCompareDialog.svelte';
   import { HIST_ICON, versionText, timeOf, dayLabel, fullTime, STATUS_TEXT, restoreText } from './text.js';
 
-  const { api, toast, confirm, saveAll, syncFromServer, showDiff, openDialog, topupEnabled, hasPlan, openTopup } = getContext('editor');
+  const { api, toast, confirm, saveAll, syncFromServer, showDiff, openDialog } = getContext('editor');
 
   let list = $state.raw([]);
   let history = $state.raw(null); // { days, max }: batas riwayat paket pemilik
@@ -186,7 +186,6 @@
       {@const { days, max } = history}
       <p class="history-note">
         {`Versi disimpan selama ${days} hari (maks. ${max.toLocaleString('id-ID')} versi).`}
-        {#if !hasPlan() && topupEnabled()}<button type="button" class="link-btn" onclick={() => openTopup('plans')}>Ingin riwayat lebih lama?</button>{/if}
       </p>
     {/if}
   </aside>

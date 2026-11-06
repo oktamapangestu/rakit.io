@@ -1,10 +1,10 @@
-<!-- Dialog jadwal (cron, WIB) satu fungsi. minMinutes = jadwal tersering paket pemilik (0 = paket tanpa jadwal). -->
+<!-- Dialog jadwal (cron, WIB) satu fungsi. minMinutes = jarak jadwal tersering yang diizinkan. -->
 <script>
   import { getContext } from 'svelte';
   import { FN_DAYS, pad2, describeCron } from './cron.js';
 
   let { f, minMinutes: min, onSaved, close } = $props();
-  const { api, toast, topupEnabled, openTopup } = getContext('editor');
+  const { api, toast } = getContext('editor');
 
   // svelte-ignore state_referenced_locally
   const current = f.schedule?.cron ?? ''; // jadwal saat dialog dibuka
@@ -37,7 +37,7 @@
   };
   let chosen = $state(guess());
   let saving = $state(false);
-  const blocked = (o) => o.id !== 'off' && (min === 0 || (o.every && o.every < min));
+  const blocked = (o) => o.id !== 'off' && o.every && o.every < min;
 
   async function save() {
     saving = true;
@@ -56,14 +56,7 @@
 
 <div class="modal publish-modal" role="dialog" aria-label="Jadwal fungsi">
   <h3>{`Jadwal ${f.name}`}</h3>
-  {#if min === 0}
-    <div class="cron-locked">
-      <p>Jadwal (cron) tersedia untuk paket Pro dan Unlimited: fungsi berjalan otomatis, mis. kirim rekap harian atau bersihkan data lama.</p>
-      {#if topupEnabled()}<button type="button" class="fn-btn primary" onclick={() => { close(); openTopup('plans'); }}>Lihat paket</button>{/if}
-    </div>
-  {:else}
-    <p class="fn-note">{`Berjalan otomatis (WIB) memakai versi publik fungsi; req.method = "CRON". Paketmu: paling sering tiap ${min} menit.`}</p>
-  {/if}
+  <p class="fn-note">{`Berjalan otomatis (WIB) memakai versi publik fungsi; req.method = "CRON". Paling sering tiap ${min} menit.`}</p>
   <div class="cron-options" role="radiogroup">
     {#each options as o (o.id)}
       {@const off = blocked(o)}
@@ -81,7 +74,7 @@
         {:else if o.id === 'custom'}
           <span class="cron-extra"><input bind:value={custom} placeholder="menit jam tanggal bulan hari, mis. 0 7 * * 1-5" spellcheck="false"></span>
         {/if}
-        {#if off && o.every}<span class="cron-plan">{min ? `min. ${min} mnt` : 'Pro'}</span>{/if}
+        {#if off && o.every}<span class="cron-plan">{`min. ${min} mnt`}</span>{/if}
       </div>
     {/each}
   </div>

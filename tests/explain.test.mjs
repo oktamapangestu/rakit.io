@@ -24,7 +24,7 @@ const answer = (steps) => ({ text: '```json\n' + JSON.stringify({
 test('baca alur kode: konteks ke AI, hasil disimpan per isi file, kuota harian', { skip }, async () => {
   const user = await stack.register('alur');
   assert.equal((await stack.client().post('/api/ai/explain', { path: 'script.js', content: code })).status, 401);
-  const credits = (await user.credits()).remaining;
+  const credits = (await user.credits()).freeRemaining;
 
   const empty = await user.get('/api/ai/explain?path=script.js');
   assert.deepEqual(empty.body, { saved: null, remaining: 3, limit: 3 });
@@ -73,7 +73,7 @@ test('baca alur kode: konteks ke AI, hasil disimpan per isi file, kuota harian',
 
   const limited = await user.post('/api/ai/explain', { path: 'script.js', content: `${code}\n// ubah`, force: true });
   assert.deepEqual([limited.status, limited.body.code], [429, 'explain_limit']);
-  assert.equal((await user.credits()).remaining, credits, 'tidak memakai kredit');
+  assert.equal((await user.credits()).freeRemaining, credits, 'tidak memakai kredit');
 });
 
 test('baca alur kode: validasi file', { skip }, async () => {

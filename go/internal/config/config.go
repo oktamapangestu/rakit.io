@@ -28,6 +28,13 @@ type Config struct {
 	TemplateDir string // file awal project baru (templates/default)
 	SiteMinify  bool   // website publik dikirim dengan .html/.css/.js versi minify (SITE_MINIFY=0 mematikan)
 	MaxProjects int    // jumlah project (subdomain) maksimal per akun
+	MaxCustom   int    // dari project itu, berapa yang boleh memakai alamat (subdomain) pilihan sendiri
+
+	// Aplikasi desktop (internal/desktop): DESKTOP=1, token masuk dari aplikasi, dan mode proxy untuk webview
+	// yang tidak mengenal *.localhost (macOS).
+	Desktop      bool
+	DesktopToken string
+	DesktopProxy bool
 
 	// Login dengan Google (OAuth client tipe "Web application").
 	GoogleEnabled      bool
@@ -44,8 +51,6 @@ type Config struct {
 		// Paket isi ulang Saldo Asisten (Rupiah).
 		Packages []AssistantPackage
 	}
-	// Default langganan dari .env sebelum owner menyimpan di dashboard.
-	PlanPro, PlanUnlimited PlanEnv
 }
 
 // AI: provider apa pun yang kompatibel dengan API chat completions OpenAI.
@@ -63,9 +68,10 @@ type AI struct {
 	MaxConcurrent int
 	QueueMax      int
 	QueueTimeout  time.Duration
-	// Default kredit gratis per hari & bonus sekali untuk akun baru; diatur owner di dashboard.
-	DailyCredits, BonusCredits int
-	CreditsPerPrompt           int
+	// Default jatah prompt gratis per akun per hari; diatur owner di dashboard.
+	DailyPrompts int
+	// Kredit yang dibeli terpakai per prompt setelah jatah harian habis.
+	CreditsPerPrompt int
 	// Prompt dengan gambar: model vision mendeskripsikan gambar, lalu model utama membangun.
 	VisionModel, VisionFallbackModel string
 	ImagePromptCredits               int
@@ -102,6 +108,10 @@ type Agent struct {
 	// Transport layanan host ke container: "unix" (unix socket, container tanpa jaringan — untuk server Linux)
 	// atau "tcp" (127.0.0.1 + host.docker.internal; untuk pengembangan di Docker Desktop, tanpa isolasi jaringan).
 	Transport string
+	// Local: folder runtime agen tanpa Docker (aplikasi desktop): claude_driver.mjs, cek-halaman.cjs, node_modules,
+	// ms-playwright, bin/. Diisi = mesin dijalankan langsung dengan Node (Node: binary node, bawaan "node").
+	Local string
+	Node  string
 	// Command: pengganti docker untuk test (dijalankan lewat sh -c dengan env yang sama, path host).
 	Command string
 }
@@ -126,9 +136,6 @@ type Billing struct {
 	Livemode      bool
 	Packages      []CreditPackage
 }
-
-// PlanEnv: "harga:kuota" dari .env.
-type PlanEnv struct{ Price, Quota int }
 
 func envInt(key string, fallback int) int {
 	if n, err := strconv.ParseFloat(strings.TrimSpace(os.Getenv(key)), 64); err == nil && n != 0 {
@@ -164,11 +171,6 @@ func numbers(entry string) (a, b float64) {
 	return a, b
 }
 
-func planEnv(value string) PlanEnv {
-	price, quota := numbers(value)
-	return PlanEnv{Price: int(max(price, 0)), Quota: int(max(quota, 0))}
-}
-
 func (c *Config) loadServices() {
 	c.AI = AI{
 		BaseURL:             strings.TrimRight(os.Getenv("AI_BASE_URL"), "/"),
@@ -180,8 +182,7 @@ func (c *Config) loadServices() {
 		MaxConcurrent:       max(1, envInt("AI_MAX_CONCURRENT", 4)),
 		QueueMax:            max(0, envIntOr("AI_QUEUE_MAX", 30)),
 		QueueTimeout:        time.Duration(max(5, envInt("AI_QUEUE_TIMEOUT_S", 120))) * time.Second,
-		DailyCredits:        max(0, envIntOr("AI_DAILY_CREDITS", 3)),
-		BonusCredits:        max(0, envIntOr("AI_BONUS_CREDITS", 20)),
+		DailyPrompts:        max(0, envIntOr("AI_DAILY_PROMPTS", 20)),
 		CreditsPerPrompt:    envInt("AI_CREDITS_PER_PROMPT", 1),
 		VisionModel:         envDefault("AI_VISION_MODEL", "deepseek-v4.1-flash"),
 		VisionFallbackModel: os.Getenv("AI_VISION_FALLBACK_MODEL"),
@@ -201,6 +202,11 @@ func (c *Config) loadServices() {
 		CPUs:          envOr("AI_AGENT_CPUS", "1"),
 		Transport:     envOr("AI_AGENT_TRANSPORT", "unix"),
 		Command:       os.Getenv("AI_AGENT_CMD"),
+		Local:         os.Getenv("AI_AGENT_LOCAL"),
+		Node:          envOr("AI_AGENT_NODE", "node"),
+	}
+	if c.AI.Agent.Local != "" {
+		c.AI.Agent.Transport = "tcp" // layanan host di 127.0.0.1, proses agen di mesin yang sama
 	}
 	c.AI.Tests = os.Getenv("AI_BUILDER_TESTS") != "0" && os.Getenv("AI_BUILDER_TESTS") != "off"
 	c.AI.Browser = Browser{
@@ -236,9 +242,6 @@ func (c *Config) loadServices() {
 			c.Assistant.Packages = append(c.Assistant.Packages, AssistantPackage{ID: "asst:" + strconv.Itoa(n), Amount: n})
 		}
 	}
-	// Langganan 30 hari. Kosongkan harga (PLAN_PRO=) untuk menyembunyikan paket.
-	c.PlanPro = planEnv(envDefault("PLAN_PRO", "49000:300"))             // harga:kredit per 30 hari
-	c.PlanUnlimited = planEnv(envDefault("PLAN_UNLIMITED", "149000:60")) // harga:prompt per hari
 }
 
 // LoadEnvFile membaca file .env (KEY=VALUE per baris, # untuk komentar). Variabel yang sudah ada di
@@ -302,9 +305,16 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	c.SiteMinify = os.Getenv("SITE_MINIFY") != "0"
-	c.MaxProjects = 5
+	c.MaxProjects = 20
 	if n, convErr := strconv.Atoi(os.Getenv("MAX_PROJECTS")); convErr == nil && n != 0 {
 		c.MaxProjects = max(1, n)
+	}
+	c.Desktop = os.Getenv("DESKTOP") == "1"
+	c.DesktopToken = os.Getenv("DESKTOP_TOKEN")
+	c.DesktopProxy = c.Desktop && os.Getenv("DESKTOP_PROXY") == "1"
+	c.MaxCustom = 5
+	if n, convErr := strconv.Atoi(os.Getenv("MAX_CUSTOM_DOMAINS")); convErr == nil {
+		c.MaxCustom = max(0, n)
 	}
 	c.GoogleClientID = os.Getenv("GOOGLE_CLIENT_ID")
 	c.GoogleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")

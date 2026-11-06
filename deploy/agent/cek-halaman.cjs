@@ -7,7 +7,8 @@ const args = process.argv.slice(2);
 const shotAt = args.indexOf('--shot');
 const shot = shotAt >= 0 ? args.splice(shotAt, 2)[1] : null;
 const paths = args.length ? args : ['/'];
-const origin = 'http://localhost'; // website project (lihat proxy.cjs)
+// Website project: http://localhost di container (lihat proxy.cjs), atau RAKIT_SITE tanpa Docker (aplikasi desktop).
+const origin = (process.env.RAKIT_SITE || 'http://localhost').replace(/\/$/, '');
 
 // Batas waktu keseluruhan: perintah ini dipakai model lewat shell, jadi tidak boleh pernah menggantung.
 setTimeout(() => {

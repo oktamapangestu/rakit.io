@@ -46,7 +46,7 @@ test('pengaturan pemilik: bawaan, simpan, dan validasi', async () => {
     { key: 'flash', name: 'DeepSeek V4.1 Flash', tier: 'Hemat', perMessage: 0.68, per1k: 680 },
     { key: 'pro', name: 'DeepSeek V4 Pro', tier: 'Pintar', perMessage: 1.94, per1k: 1940 },
   ]);
-  assert.deepEqual(body.wallet, { balance: 500, allowance: null, available: 500 }, 'saldo percobaan');
+  assert.deepEqual(body.wallet, { balance: 500, available: 500 }, 'saldo percobaan');
   assert.equal(body.usage.length, 7);
   assert.deepEqual(body.usage.at(-1), { day: new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10), spent: 0, messages: 0 });
   assert.deepEqual(body.packages, [{ id: 'asst:10000', amount: 10000 }, { id: 'asst:25000', amount: 25000 }]);
@@ -113,7 +113,7 @@ test('chat: jawaban dari model pilihan, ditagih sesuai token yang terpakai', asy
   assert.ok(sent.messages[0].content.endsWith("Website owner's instructions:\nToko buka 09.00–17.00."));
 
   // 500 token × (150 × 3 / 1 juta) = Rp0,225 → saldo 500 − 0,225.
-  assert.deepEqual(await site.wallet(), { balance: 499.77, allowance: null, available: 499.77 });
+  assert.deepEqual(await site.wallet(), { balance: 499.77, available: 499.77 });
   const usage = (await site.owner.get('/api/assistant')).body.usage.at(-1);
   assert.deepEqual([usage.spent, usage.messages], [0.23, 1]);
   const row = stack.db().prepare('SELECT spent, messages, tokens FROM assistant_usage').all().at(-1);
@@ -180,27 +180,22 @@ test('chat: pesan tidak valid ditolak; riwayat panjang dipangkas', async () => {
   assert.deepEqual(sent.slice(1).map((m) => m.content[0]), ['3', '4', '5', '6', '7', '8']);
 });
 
-test('sumber dana: jatah langganan dulu, lalu saldo; saldo habis → asisten istirahat', async () => {
+test('biaya diambil dari saldo; saldo habis → asisten istirahat', async () => {
   const site = await siteWithAssistant();
-  stack.db().prepare('INSERT INTO subscriptions (user_id, plan, started_at, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(site.owner.userId, 'pro', Date.now(), Date.now() + 30 * DAY_MS, Date.now());
   let wallet = await site.wallet();
-  assert.deepEqual([wallet.balance, wallet.allowance.plan, wallet.allowance.limit, wallet.allowance.remaining, wallet.available], [500, 'Pro', 10000, 10000, 10500]);
-  assert.ok(Math.abs(Date.parse(wallet.allowance.resetsAt) - (Date.now() + 30 * DAY_MS)) < 10_000);
+  assert.deepEqual(wallet, { balance: 500, available: 500 });
 
   stack.ai.script.push({ text: 'ok', usage: { prompt_tokens: 900, completion_tokens: 100 } });
   assert.equal((await site.ask()).status, 200);
   wallet = await site.wallet();
-  assert.deepEqual([wallet.balance, wallet.allowance.remaining, wallet.available], [500, 9999.55, 10499.55]);
+  assert.deepEqual([wallet.balance, wallet.available], [499.55, 499.55]);
 
-  // Langganan berakhir dan saldo kosong.
-  stack.db().prepare('UPDATE subscriptions SET expires_at = ? WHERE user_id = ?').run(Date.now() - 1000, site.owner.userId);
   stack.db().prepare('UPDATE assistant_wallet SET balance = 100 WHERE user_id = ?').run(site.owner.userId);
   const before = stack.ai.requests.length;
   const res = await site.ask();
   assert.deepEqual([res.status, res.body.error], [503, 'Asisten sedang istirahat. Silakan hubungi pemilik website.']);
   assert.equal(stack.ai.requests.length, before, 'provider tidak dipanggil');
-  assert.deepEqual(await site.wallet(), { balance: 0.1, allowance: null, available: 0.1 });
+  assert.deepEqual(await site.wallet(), { balance: 0.1, available: 0.1 });
 });
 
 test('batas harian per website', async () => {

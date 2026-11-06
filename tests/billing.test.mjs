@@ -4,8 +4,8 @@ import { after, before, test } from 'node:test';
 import { startStack } from './helpers/harness.mjs';
 
 let stack;
-// Tanpa kredit gratis, supaya saldo yang dibeli terlihat jelas.
-before(async () => { stack = await startStack({ AI_BONUS_CREDITS: '0', AI_DAILY_CREDITS: '0' }); });
+// Tanpa prompt gratis, supaya saldo yang dibeli terlihat jelas.
+before(async () => { stack = await startStack({ AI_DAILY_PROMPTS: '0' }); });
 after(() => stack?.stop());
 
 const payments = (userId) => stack.db().prepare('SELECT id, status, amount, credits, package_id FROM payments WHERE user_id = ? ORDER BY created_at').all(userId);
@@ -23,7 +23,7 @@ test('daftar paket', async () => {
   assert.equal(body.enabled, true);
   assert.equal(body.livemode, false);
   assert.deepEqual(body.packages, [{ id: 'p20', credits: 20, price: 10000 }, { id: 'p50', credits: 50, price: 20000 }]);
-  assert.deepEqual(body.plans.map((p) => [p.id, p.price, p.credits, p.dailyLimit]), [['pro', 49000, 3, null], ['unlimited', 98000, null, 2]]);
+  assert.equal(body.plans, undefined, 'tidak ada paket langganan');
   assert.deepEqual(body.assistantPackages, [{ id: 'asst:10000', amount: 10000 }, { id: 'asst:25000', amount: 25000 }]);
   assert.equal(body.credits.remaining, 0);
   assert.equal((await stack.client().get('/api/billing/packages')).status, 401);
@@ -35,7 +35,6 @@ test('isi ulang membuat tagihan QRIS; tagihan yang masih berlaku dipakai ulang',
   assert.equal(payment.status, 'pending');
   assert.equal(payment.credits, 20);
   assert.equal(payment.amount, 10000);
-  assert.equal(payment.plan, null);
   assert.equal(payment.assistant, false);
   assert.match(payment.qr, /^data:image\/svg\+xml;base64,/);
 

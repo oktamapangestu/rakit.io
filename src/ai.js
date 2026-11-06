@@ -66,7 +66,7 @@ Serverless functions (server-side code):
   ai.chat(prompt | { messages: [{ role: 'user'|'assistant', content }], system, images, provider, model, temperature, maxTokens }) -> { text, model, provider, usage }. images: https URLs, project image paths ("/uploads/…", "/images/…") or data URLs (max 4). ai.json(prompt, shape, options) returns the parsed object. ai.embed(text | texts, { provider, model }) -> vector | vectors. The default provider is used unless { provider: '<name>' } is given (names under "AI providers"). Max 5 ai calls per run; waiting for AI does not count toward the 10-second limit. The owner adds providers (OpenAI, Claude, Gemini, or OpenAI-compatible like DeepSeek/Groq) with their OWN API key in the "Fungsi" tab → "Provider AI"; if none is listed, tell the user to add one there. Anthropic has no embeddings.
 - For a visitor chatbot without their own API key, prefer the AI assistant widget above; use ai.* in functions when the owner wants their own provider/key or custom logic.
 - Limits: 10 seconds and 64 MB per run, at most 10 fetch calls, and fetch cannot reach rakit.io websites (use db instead). A thrown error returns status 500 { "error" } to the caller.
-- Scheduled runs (cron, e.g. a daily report) are set by the user in the "Fungsi" tab → "Jadwal" (Pro/Unlimited plans); a scheduled run receives req.method "CRON".
+- Scheduled runs (cron, e.g. a daily report) are set by the user in the "Fungsi" tab → "Jadwal" (at most every 15 minutes); a scheduled run receives req.method "CRON".
 
 Database:
 - Each project has a built-in database of tables, used from the site's JavaScript with fetch() on the same domain (no keys, no CORS):

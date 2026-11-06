@@ -1,0 +1,13 @@
+{
+  "name": "rakit-desktop",
+  "private": true,
+  "description": "rakit.io versi desktop (Tauri + server Go lokal)",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "sidecar": "bash scripts/build-sidecar.sh"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.2.0"
+  }
+}

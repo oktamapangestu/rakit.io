@@ -8,7 +8,7 @@ import { startStack, TINY_PNG } from './helpers/harness.mjs';
 
 const GO = /go\/bin\/rakit/.test(process.env.RAKIT_SERVER_CMD ?? '');
 let stack;
-before(async () => { stack = await startStack({ AI_BONUS_CREDITS: '50', AI_DAILY_CREDITS: '0' }); });
+before(async () => { stack = await startStack({ AI_DAILY_PROMPTS: '50' }); });
 after(() => stack?.stop());
 
 let callId = 0;
@@ -53,7 +53,7 @@ test('Builder: menulis, menghapus file dan membuat tabel; hasilnya menunggu konf
   assert.equal(m.before['halaman/tentang.html'], null, 'file baru');
   assert.ok(m.before['script.js'].length > 0);
   assert.deepEqual(final.touched, ['index.html', 'halaman/tentang.html', 'script.js']);
-  assert.equal(final.credits.remaining, 49);
+  assert.equal(final.credits.freeRemaining, 49);
 
   // Perubahan langsung diterapkan di server.
   assert.equal(read(user, 'index.html'), '<h1>Baru</h1>');
@@ -352,7 +352,7 @@ test('Builder: perbaikan otomatis error preview gratis, sekali per jawaban', { s
   const first = await user.build('buat a.js');
   const threadId = first.started.body.threadId;
   const target = first.final.message.id;
-  const credits = (await user.credits()).remaining;
+  const credits = (await user.credits()).freeRemaining;
 
   // Daftar error kosong ditolak; prompt dari klien diabaikan.
   assert.equal((await user.startPrompt('apa saja', { mode: 'build', autoFix: target, errors: [' '], threadId })).status, 400);
@@ -364,7 +364,7 @@ test('Builder: perbaikan otomatis error preview gratis, sekali per jawaban', { s
   assert.equal(fix.started.body.userMessage.content, 'Setelah perubahan terakhir, preview menampilkan error ini:\n'
     + '- [/] Uncaught ReferenceError: x is not defined\n- GET /api/db/x → 404\n\nCari penyebabnya (terutama di kode yang baru diubah) dan perbaiki. Jangan mengubah hal lain.');
   assert.ok(sent(2).messages.at(-1).content.endsWith('Jangan mengubah hal lain.'));
-  assert.equal((await user.credits()).remaining, credits, 'gratis');
+  assert.equal((await user.credits()).freeRemaining, credits, 'gratis');
   // Jawaban sebelumnya dianggap disimpan, sama seperti prompt biasa.
   assert.equal(stack.db().prepare('SELECT apply_state FROM ai_messages WHERE id = ?').get(target).apply_state, 'kept');
 
@@ -386,7 +386,7 @@ test('Builder: perbaikan otomatis error preview gratis, sekali per jawaban', { s
   assert.equal((await again(plan.final.message.id)).status, 409);
   const stranger = await stack.register();
   assert.equal((await stranger.startPrompt('', { autoFix: target, errors: ['x'], threadId })).status, 400);
-  assert.equal((await user.credits()).remaining, credits - 2);
+  assert.equal((await user.credits()).freeRemaining, credits - 2);
 
   // Riwayat: jawaban yang dibatalkan ditandai, isi perubahan jawaban terbaru ikut terkirim.
   stack.ai.script.push({ text: 'Oke.' });
@@ -432,7 +432,7 @@ test('Builder tanpa perubahan: jawaban biasa; jawaban kosong dianggap gagal', as
   stack.ai.script.push({ text: '  ' });
   const empty = await user.build('kosong');
   assert.deepEqual([empty.final.type, empty.final.error], ['error', 'AI tidak memberi jawaban. Coba lagi.']);
-  assert.equal(empty.final.credits.remaining, 48);
+  assert.equal(empty.final.credits.freeRemaining, 48);
 });
 
 test('indikator konteks: jawaban mencatat token input terbesar satu panggilan model', { skip: goOnly }, async () => {
@@ -482,7 +482,7 @@ test('jawaban terpotong terus-menerus dan jawaban yang ditolak provider → gaga
   const broken = await user.prompt('putus di tengah');
   assert.deepEqual([broken.final.type, broken.final.error], ['error', 'Terjadi kesalahan saat menghubungi AI. Kredit dikembalikan.']);
 
-  assert.equal((await user.credits()).remaining, 50);
+  assert.equal((await user.credits()).freeRemaining, 50);
   const log = stack.db().prepare('SELECT status FROM ai_requests WHERE user_id = ? ORDER BY id').all(user.userId).map((r) => r.status);
   assert.deepEqual(log, ['max_tokens', 'refusal', 'error']);
 });
@@ -636,7 +636,7 @@ test('lampiran gambar: dideskripsikan model vision, disimpan di riwayat, ikut di
   stack.ai.script.push({ text: ' ' });
   const blind = await user.prompt('gambar tak terbaca', { images: [TINY_PNG], thumbs: [TINY_PNG] });
   assert.equal(blind.final.error, 'AI gagal membaca gambar. Coba lagi. Kredit dikembalikan.');
-  assert.equal(blind.final.credits.remaining, 47);
+  assert.equal(blind.final.credits.freeRemaining, 47);
 
   const tooMany = await user.startPrompt('kebanyakan', { images: [TINY_PNG, TINY_PNG, TINY_PNG, TINY_PNG] });
   assert.deepEqual([tooMany.status, tooMany.body.error], [400, 'Maksimal 3 gambar per prompt']);
@@ -661,14 +661,14 @@ test('server dimulai ulang saat AI bekerja: job ditandai gagal dan kredit dikemb
   const called = stack.ai.nextRequest();
   const started = await user.startPrompt('terputus');
   await called;
-  assert.equal((await user.credits()).remaining, 49);
+  assert.equal((await user.credits()).freeRemaining, 49);
   await stack.restart();
 
   const final = await user.finishJob(started.body.assistantMessage.id);
   assert.equal(final.type, 'error');
   assert.equal(final.error, 'Server dimulai ulang saat AI sedang bekerja. Kredit dikembalikan, silakan kirim ulang.');
   assert.equal(final.message.status, 'error');
-  assert.equal(final.credits.remaining, 50);
+  assert.equal(final.credits.freeRemaining, 50);
   assert.equal((await user.get('/api/ai/threads')).body.activeJob, null);
   // Setelah itu bisa langsung mengirim prompt lagi.
   stack.ai.script.push({ text: 'Jalan lagi.' });

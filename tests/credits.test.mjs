@@ -1,25 +1,25 @@
-// Kredit AI: pemotongan di awal, urutan sumber (bonus → gratis harian), dan pengembalian saat gagal/dihentikan.
+// Kuota AI: jatah prompt harian (1 prompt = 1, termasuk bergambar), lalu kredit yang dibeli; pemotongan di awal dan
+// pengembalian saat gagal/dihentikan.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { startStack, TINY_PNG } from './helpers/harness.mjs';
 
 let stack;
-before(async () => { stack = await startStack(); }); // bonus 2, gratis harian 2, 1 kredit/prompt, 2 kredit/prompt bergambar
+before(async () => { stack = await startStack(); }); // 4 prompt gratis/hari, 1 kredit/prompt, 2 kredit/prompt bergambar
 after(() => stack?.stop());
 
-test('akun baru mendapat bonus + jatah gratis harian', async () => {
+const buy = (user, n) => stack.db().prepare(`
+  INSERT INTO credit_balance (user_id, balance) VALUES (?, ?)
+  ON CONFLICT (user_id) DO UPDATE SET balance = balance + excluded.balance`).run(user.userId, n);
+
+test('akun baru mendapat jatah prompt harian, tanpa langganan & bonus', async () => {
   const user = await stack.register();
   const c = await user.credits();
   assert.equal(c.enabled, true);
-  assert.equal(c.bonusLimit, 2);
-  assert.equal(c.bonusRemaining, 2);
-  assert.equal(c.limit, 2);
-  assert.equal(c.freeRemaining, 2);
-  assert.equal(c.purchased, 0);
-  assert.equal(c.remaining, 4);
+  assert.deepEqual([c.limit, c.used, c.freeRemaining, c.purchased, c.remaining], [4, 0, 4, 0, 0]);
   assert.equal(c.costPerPrompt, 1);
   assert.deepEqual(c.images, { cost: 2, max: 3 });
-  assert.equal(c.plan, null);
+  for (const gone of ['plan', 'bonusLimit', 'bonusRemaining']) assert.equal(c[gone], undefined, gone);
 });
 
 test('tanpa login ditolak 401, Origin asing ditolak 403', async () => {
@@ -30,146 +30,113 @@ test('tanpa login ditolak 401, Origin asing ditolak 403', async () => {
   const user = await stack.register();
   const res = await user.req('POST', '/api/ai/prompt', { prompt: 'x', mode: 'plan' }, { Origin: 'http://jahat.localhost' });
   assert.equal(res.status, 403);
-  assert.equal((await user.credits()).remaining, 4);
+  assert.equal((await user.credits()).freeRemaining, 4);
 });
 
-test('prompt berhasil memotong 1 kredit dan mencatat request', async () => {
+test('prompt berhasil memakai 1 jatah dan mencatat request', async () => {
   const user = await stack.register();
   stack.ai.script.push({ text: 'Ini rencananya.' });
   const { started, final } = await user.prompt('Buat halaman toko');
   assert.equal(started.status, 201);
-  assert.equal(started.body.credits.remaining, 3, 'kredit dipotong saat prompt diterima');
+  assert.equal(started.body.credits.freeRemaining, 3, 'jatah dipotong saat prompt diterima');
   assert.equal(final.type, 'done');
-  assert.equal(final.message.status, 'done');
   assert.equal(final.message.content, 'Ini rencananya.');
-  assert.equal(final.credits.remaining, 3);
+  assert.equal(final.credits.freeRemaining, 3);
 
   const log = stack.db().prepare('SELECT model, status, input_tokens, output_tokens FROM ai_requests WHERE user_id = ?').all(user.userId);
   assert.deepEqual(log.map((r) => ({ ...r })), [{ model: 'mock-main', status: 'ok', input_tokens: 100, output_tokens: 20 }]);
 });
 
-test('urutan pemakaian: bonus dulu, lalu gratis harian, lalu ditolak 402', async () => {
+test('jatah habis: kredit yang dibeli dipakai, lalu ditolak 402', async () => {
   const user = await stack.register();
-  const seen = [];
-  for (let i = 0; i < 4; i++) {
-    const { final } = await user.prompt(`prompt ${i}`);
-    assert.equal(final.type, 'done');
-    seen.push([final.credits.bonusRemaining, final.credits.freeRemaining]);
-  }
-  assert.deepEqual(seen, [[1, 2], [0, 2], [0, 1], [0, 0]]);
-
+  for (let i = 0; i < 4; i++) assert.equal((await user.prompt(`prompt ${i}`)).final.type, 'done');
   const refused = await user.startPrompt('satu lagi');
-  assert.equal(refused.status, 402);
-  assert.equal(refused.body.code, 'no_credits');
-  assert.equal((await user.credits()).remaining, 0);
-  // Prompt yang ditolak tidak meninggalkan job yang menggantung.
-  const threads = (await user.get('/api/ai/threads')).body;
-  assert.equal(threads.activeJob, null);
+  assert.deepEqual([refused.status, refused.body.code], [402, 'no_credits']);
+  assert.match(refused.body.error, /Jatah 4 prompt hari ini sudah habis/);
+  assert.equal((await user.get('/api/ai/threads')).body.activeJob, null, 'tidak ada job yang menggantung');
+
+  buy(user, 1);
+  const paid = await user.prompt('pakai kredit');
+  assert.equal(paid.started.status, 201);
+  assert.deepEqual([paid.final.credits.freeRemaining, paid.final.credits.purchased], [0, 0]);
+  assert.equal((await user.startPrompt('habis')).status, 402);
 });
 
-test('AI gagal: kredit dikembalikan', async () => {
+test('AI gagal / menjawab kosong / Stop: jatah dikembalikan', async () => {
   const user = await stack.register();
   stack.ai.script.push({ status: 500 });
-  const { started, final } = await user.prompt('akan gagal');
-  assert.equal(started.body.credits.remaining, 3);
-  assert.equal(final.type, 'error');
-  assert.equal(final.message.status, 'error');
-  assert.match(final.error, /Kredit dikembalikan/);
-  assert.equal(final.credits.remaining, 4);
-  assert.equal(final.credits.bonusRemaining, 2);
+  const failed = await user.prompt('akan gagal');
+  assert.equal(failed.started.body.credits.freeRemaining, 3);
+  assert.equal(failed.final.type, 'error');
+  assert.match(failed.final.error, /Kredit dikembalikan/);
+  assert.equal(failed.final.credits.freeRemaining, 4);
   assert.equal(stack.db().prepare('SELECT status FROM ai_requests WHERE user_id = ?').get(user.userId).status, 'error');
-});
 
-test('AI menjawab kosong: dianggap gagal dan kredit dikembalikan', async () => {
-  const user = await stack.register();
   stack.ai.script.push({ text: '   ' });
-  const { final } = await user.prompt('jawaban kosong');
-  assert.equal(final.type, 'error');
-  assert.equal(final.credits.remaining, 4);
-});
+  assert.equal((await user.prompt('jawaban kosong')).final.credits.freeRemaining, 4);
 
-test('Stop: job dibatalkan dan kredit dikembalikan', async () => {
-  const user = await stack.register();
   stack.ai.script.push({ hang: true });
   const called = stack.ai.nextRequest();
   const started = await user.startPrompt('lama sekali');
-  assert.equal(started.status, 201);
   await called;
+  assert.equal((await user.credits()).freeRemaining, 3);
   const id = started.body.assistantMessage.id;
-
-  assert.equal((await user.credits()).remaining, 3);
   assert.equal((await user.post(`/api/ai/jobs/${id}/cancel`)).status, 200);
   const final = await user.finishJob(id);
-  assert.equal(final.type, 'error');
-  assert.equal(final.message.status, 'aborted');
-  assert.equal(final.credits.remaining, 4);
+  assert.deepEqual([final.message.status, final.credits.freeRemaining], ['aborted', 4]);
 });
 
-test('satu prompt berjalan per akun: prompt kedua ditolak 429 tanpa memotong kredit', async () => {
+test('kredit dibeli dikembalikan ke saldo bila AI gagal', async () => {
+  const user = await stack.register();
+  for (let i = 0; i < 4; i++) await user.prompt(`prompt ${i}`);
+  buy(user, 3);
+  stack.ai.script.push({ status: 500 });
+  const failed = await user.prompt('gagal');
+  assert.equal(failed.started.body.credits.purchased, 2);
+  assert.equal(failed.final.credits.purchased, 3);
+});
+
+test('satu prompt berjalan per akun: prompt kedua ditolak 429 tanpa memotong jatah', async () => {
   const user = await stack.register();
   stack.ai.script.push({ hang: true });
   const called = stack.ai.nextRequest();
   const first = await user.startPrompt('pertama');
   await called;
+  assert.equal((await user.startPrompt('kedua')).status, 429);
+  assert.equal((await user.credits()).freeRemaining, 3);
 
-  const second = await user.startPrompt('kedua');
-  assert.equal(second.status, 429);
-  assert.equal((await user.credits()).remaining, 3, 'hanya prompt pertama yang memotong kredit');
-
-  // Job orang lain tidak boleh disentuh.
   const other = await stack.register();
   assert.equal((await other.post(`/api/ai/jobs/${first.body.assistantMessage.id}/cancel`)).status, 404);
-
   await user.post(`/api/ai/jobs/${first.body.assistantMessage.id}/cancel`);
   await user.finishJob(first.body.assistantMessage.id);
-  assert.equal((await user.credits()).remaining, 4);
+  assert.equal((await user.credits()).freeRemaining, 4);
 });
 
-test('prompt dengan gambar memakai 2 kredit; ditolak bila sisa kredit kurang', async () => {
+test('prompt bergambar: 1 dari jatah harian, atau 2 kredit setelah jatah habis', async () => {
   const user = await stack.register();
   stack.ai.script.push({ text: 'Image 1: mockup halaman.' }, { text: 'Rencana dari gambar.' });
   const { started, final } = await user.prompt('ikuti desain ini', { images: [TINY_PNG], thumbs: [TINY_PNG] });
   assert.equal(started.status, 201);
-  assert.equal(final.type, 'done');
-  assert.equal(final.credits.remaining, 2);
+  assert.equal(final.credits.freeRemaining, 3);
   assert.equal(stack.ai.requests.at(-2).model, 'mock-vision');
   assert.equal(stack.ai.requests.at(-1).model, 'mock-main');
 
-  await user.prompt('biasa'); // sisa 1
+  for (let i = 0; i < 3; i++) await user.prompt(`biasa ${i}`);
+  buy(user, 1);
   const refused = await user.startPrompt('gambar lagi', { images: [TINY_PNG], thumbs: [TINY_PNG] });
-  assert.equal(refused.status, 402);
-  assert.equal(refused.body.code, 'no_credits');
-  assert.equal((await user.credits()).remaining, 1);
-});
-
-test('prompt bergambar memakai gabungan sumber bila satu sumber tidak cukup; gagal → tiap sumber dikembalikan', async () => {
-  const user = await stack.register();
-  await user.prompt('pakai 1 bonus'); // bonus 1 + gratis 2
-  stack.ai.script.push({ text: 'Image 1: mockup.' }, { status: 500 });
-  const failed = await user.prompt('gambar gagal', { images: [TINY_PNG], thumbs: [TINY_PNG] });
-  assert.equal(failed.started.status, 201, 'sisa 3 kredit dari dua sumber cukup untuk 2 kredit');
-  assert.equal(failed.started.body.credits.bonusRemaining, 0);
-  assert.equal(failed.started.body.credits.freeRemaining, 1);
-  assert.equal(failed.final.type, 'error');
-  assert.equal(failed.final.credits.bonusRemaining, 1, 'bagian bonus dikembalikan');
-  assert.equal(failed.final.credits.freeRemaining, 2, 'bagian gratis dikembalikan');
-
-  // Gratis tinggal 1 + saldo dibeli 1: total 2 cukup untuk prompt bergambar.
-  await user.prompt('pakai bonus terakhir');
-  await user.prompt('pakai 1 gratis');
-  stack.db().prepare('INSERT INTO credit_balance (user_id, balance) VALUES (?, 1)').run(user.userId);
-  assert.equal((await user.credits()).remaining, 2);
+  assert.deepEqual([refused.status, refused.body.code], [402, 'no_credits']);
+  assert.match(refused.body.error, /butuh 2 kredit/);
+  buy(user, 1);
   stack.ai.script.push({ text: 'Image 1: mockup.' }, { text: 'Rencana.' });
-  const ok = await user.prompt('gambar dari dua sumber', { images: [TINY_PNG], thumbs: [TINY_PNG] });
-  assert.equal(ok.started.status, 201);
+  const ok = await user.prompt('gambar dari kredit', { images: [TINY_PNG], thumbs: [TINY_PNG] });
   assert.equal(ok.final.type, 'done');
-  assert.deepEqual([ok.final.credits.freeRemaining, ok.final.credits.purchased, ok.final.credits.remaining], [0, 0, 0]);
+  assert.equal(ok.final.credits.purchased, 0);
 });
 
-test('prompt tidak valid ditolak tanpa memotong kredit', async () => {
+test('prompt tidak valid ditolak tanpa memotong jatah', async () => {
   const user = await stack.register();
   assert.equal((await user.startPrompt('   ')).status, 400);
   assert.equal((await user.startPrompt('x'.repeat(20_001))).status, 400);
   assert.equal((await user.startPrompt('gambar rusak', { images: ['data:image/png;base64,AAAA'] })).status, 400);
-  assert.equal((await user.credits()).remaining, 4);
+  assert.equal((await user.credits()).freeRemaining, 4);
 });

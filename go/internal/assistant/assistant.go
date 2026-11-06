@@ -152,39 +152,9 @@ func (s *Service) ensureWallet(q store.Q, userID int64) (balance int64, err erro
 	return balance, q.QueryRow("SELECT balance FROM assistant_wallet WHERE user_id = ?", userID).Scan(&balance)
 }
 
-type allowance struct {
-	period    string
-	limit     int64
-	spent     int64
-	remaining int64
-	resetsAt  int64
-	plan      string
-}
-
-// allowanceOf: jatah per siklus dari paket langganan, atau nil.
-func (s *Service) allowanceOf(q store.Q, userID int64) *allowance {
-	plan := s.plans.Active(userID)
-	if plan == nil || plan.Assistant == 0 {
-		return nil
-	}
-	cycle := plans.CycleOf(plan)
-	a := &allowance{period: "asst:" + cycle.Key, limit: int64(plan.Assistant) * mrp, resetsAt: min(cycle.ResetsAt, plan.ExpiresAt), plan: plan.Name}
-	q.QueryRow("SELECT spent FROM assistant_allowance WHERE user_id = ? AND period = ?", userID, a.period).Scan(&a.spent)
-	a.remaining = max(0, a.limit-a.spent)
-	return a
-}
-
-type AllowanceInfo struct {
-	Plan      string  `json:"plan"`
-	Limit     float64 `json:"limit"`
-	Remaining float64 `json:"remaining"`
-	ResetsAt  string  `json:"resetsAt"`
-}
-
 type WalletInfo struct {
-	Balance   float64        `json:"balance"`
-	Allowance *AllowanceInfo `json:"allowance"`
-	Available float64        `json:"available"`
+	Balance   float64 `json:"balance"`
+	Available float64 `json:"available"`
 }
 
 // mRp -> Rupiah (2 desimal, dibulatkan ke bawah).
@@ -198,12 +168,7 @@ func (s *Service) walletInfo(userID int64) (*WalletInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	info := &WalletInfo{Balance: rupiahDown(balance), Available: rupiahDown(balance)}
-	if a := s.allowanceOf(s.db, userID); a != nil {
-		info.Allowance = &AllowanceInfo{Plan: a.plan, Limit: rupiahDown(a.limit), Remaining: rupiahDown(a.remaining), ResetsAt: plans.ISO(a.resetsAt)}
-		info.Available = rupiahDown(balance + a.remaining)
-	}
-	return info, nil
+	return &WalletInfo{Balance: rupiahDown(balance), Available: rupiahDown(balance)}, nil
 }
 
 func (s *Service) transaction(fn func(tx *sql.Tx) error) error {
@@ -226,77 +191,33 @@ func changed(res sql.Result, err error) bool {
 	return n == 1
 }
 
-// hold: dana yang dicadangkan untuk satu pesan.
-type hold struct {
-	fromAllowance, fromBalance int64
-	period                     string
-}
-
-func takeAllowance(tx *sql.Tx, userID int64, a *allowance, amount int64) bool {
-	tx.Exec("INSERT INTO assistant_allowance (user_id, period, spent) VALUES (?, ?, 0) ON CONFLICT DO NOTHING", userID, a.period)
-	return changed(tx.Exec("UPDATE assistant_allowance SET spent = spent + ? WHERE user_id = ? AND period = ? AND spent + ? <= ?", amount, userID, a.period, amount, a.limit))
-}
+// hold: dana yang dicadangkan dari saldo untuk satu pesan (mRp).
+type hold struct{ amount int64 }
 
 // reserve mencadangkan dana sebesar perkiraan biaya maksimal.
 func (s *Service) reserve(userID, amount int64) (*hold, error) {
 	if _, err := s.ensureWallet(s.db, userID); err != nil {
 		return nil, err
 	}
-	h := &hold{}
-	err := s.transaction(func(tx *sql.Tx) error {
-		if a := s.allowanceOf(tx, userID); a != nil {
-			h.period = a.period
-			if a.remaining > 0 {
-				if h.fromAllowance = min(a.remaining, amount); !takeAllowance(tx, userID, a, h.fromAllowance) {
-					h.fromAllowance = 0
-				}
-			}
-		}
-		h.fromBalance = amount - h.fromAllowance
-		if h.fromBalance > 0 && !changed(tx.Exec("UPDATE assistant_wallet SET balance = balance - ? WHERE user_id = ? AND balance >= ?", h.fromBalance, userID, h.fromBalance)) {
-			return httpx.Errorf(402, "Saldo asisten website ini habis.")
-		}
-		return nil
-	})
-	return h, err
+	if amount > 0 && !changed(s.db.Exec("UPDATE assistant_wallet SET balance = balance - ? WHERE user_id = ? AND balance >= ?", amount, userID, amount)) {
+		return nil, httpx.Errorf(402, "Saldo asisten website ini habis.")
+	}
+	return &hold{amount}, nil
 }
 
 const addBalanceSQL = `
 	INSERT INTO assistant_wallet (user_id, balance, trial_granted) VALUES (?, ?, 0)
 	ON CONFLICT (user_id) DO UPDATE SET balance = balance + excluded.balance`
 
-// settle menyelesaikan tagihan: kembalikan sisa cadangan (ke saldo dulu, lalu ke jatah langganan),
-// atau tagih kekurangannya bila biaya sebenarnya lebih besar dari perkiraan.
+// settle menyelesaikan tagihan: kembalikan sisa cadangan ke saldo, atau tagih kekurangannya bila biaya
+// sebenarnya lebih besar dari perkiraan (jarang; saldo boleh jadi sedikit minus).
 func (s *Service) settle(userID int64, h *hold, actual int64) {
-	held := h.fromAllowance + h.fromBalance
-	if actual > held {
-		s.transaction(func(tx *sql.Tx) error {
-			extra := actual - held
-			// Kekurangan diambil dari jatah langganan dulu (kalau masih ada), sisanya dari saldo.
-			if a := s.allowanceOf(tx, userID); a != nil && a.remaining > 0 {
-				if part := min(extra, a.remaining); takeAllowance(tx, userID, a, part) {
-					extra -= part
-				}
-			}
-			if extra > 0 {
-				// Biaya sebenarnya melebihi cadangan (jarang): tetap ditagih walau saldo jadi sedikit minus.
-				tx.Exec("UPDATE assistant_wallet SET balance = balance - ? WHERE user_id = ?", extra, userID)
-			}
-			return nil
-		})
-		return
+	switch {
+	case actual > h.amount:
+		s.db.Exec("UPDATE assistant_wallet SET balance = balance - ? WHERE user_id = ?", actual-h.amount, userID)
+	case actual < h.amount:
+		s.db.Exec(addBalanceSQL, userID, h.amount-actual)
 	}
-	refund := held - actual
-	s.transaction(func(tx *sql.Tx) error {
-		if toBalance := min(refund, h.fromBalance); toBalance > 0 {
-			tx.Exec(addBalanceSQL, userID, toBalance)
-			refund -= toBalance
-		}
-		if refund > 0 && h.period != "" {
-			tx.Exec("UPDATE assistant_allowance SET spent = MAX(0, spent - ?) WHERE user_id = ? AND period = ?", refund, userID, h.period)
-		}
-		return nil
-	})
 }
 
 // AddBalance menambah saldo dari pembayaran isi ulang (dipanggil di dalam transaksi pembayaran).

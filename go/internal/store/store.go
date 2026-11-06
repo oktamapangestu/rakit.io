@@ -55,23 +55,10 @@ func SetSettingIn(q Q, key, value string) error {
 	return err
 }
 
-// Subscription: langganan akun (masih berlaku atau tidak), atau nil.
-type Subscription struct {
-	Plan      string
-	StartedAt int64
-	ExpiresAt int64
-}
-
 // Q: yang bisa menjalankan query — *sql.DB atau *sql.Tx.
 type Q interface {
 	Exec(query string, args ...any) (sql.Result, error)
 	QueryRow(query string, args ...any) *sql.Row
-}
-
-func SubscriptionOf(q Q, userID int64) (*Subscription, error) {
-	var sub Subscription
-	err := q.QueryRow("SELECT plan, started_at, expires_at FROM subscriptions WHERE user_id = ?", userID).Scan(&sub.Plan, &sub.StartedAt, &sub.ExpiresAt)
-	return oneOrNil(&sub, err)
 }
 
 func now() int64 { return time.Now().UnixMilli() }
@@ -221,6 +208,8 @@ type Project struct {
 	// dipublikasikan). PublishedAt: publikasi terakhir (ms), 0 = belum pernah.
 	Mode        string
 	PublishedAt int64
+	// Custom: subdomain dipilih sendiri (dihitung dalam batas alamat custom per akun).
+	Custom bool
 }
 
 // Manual: project memakai dev/prod.
@@ -234,12 +223,12 @@ const (
 func scanProject(row interface{ Scan(...any) error }) (*Project, error) {
 	var p Project
 	var published sql.NullInt64
-	err := row.Scan(&p.ID, &p.UserID, &p.Slug, &p.Name, &p.CreatedAt, &p.Mode, &published)
+	err := row.Scan(&p.ID, &p.UserID, &p.Slug, &p.Name, &p.CreatedAt, &p.Mode, &published, &p.Custom)
 	p.PublishedAt = published.Int64
 	return oneOrNil(&p, err)
 }
 
-const projectColumns = "id, user_id, slug, name, created_at, publish_mode, published_at"
+const projectColumns = "id, user_id, slug, name, created_at, publish_mode, published_at, custom"
 
 // SetPublishMode mengganti mode publikasi project; published_at = waktu publikasi (atau NULL).
 func (s *Store) SetPublishMode(id int64, mode string, publishedAt int64) error {
@@ -279,8 +268,14 @@ func (s *Store) ProjectsOf(userID int64) ([]*Project, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) InsertProject(userID int64, slug, name string) error {
-	_, err := s.db.Exec("INSERT INTO projects (user_id, slug, name, created_at) VALUES (?, ?, ?, ?)", userID, slug, name, now())
+func (s *Store) InsertProject(userID int64, slug, name string, custom bool) error {
+	_, err := s.db.Exec("INSERT INTO projects (user_id, slug, name, created_at, custom) VALUES (?, ?, ?, ?, ?)", userID, slug, name, now(), custom)
+	return err
+}
+
+// ChangeProjectSlug mengganti subdomain project (file di disk dipindah pemanggil).
+func (s *Store) ChangeProjectSlug(id int64, slug string, custom bool) error {
+	_, err := s.db.Exec("UPDATE projects SET slug = ?, custom = ? WHERE id = ?", slug, custom, id)
 	return err
 }
 
@@ -305,30 +300,6 @@ func (s *Store) ActiveJobIn(projectID int64) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
-}
-
-// ---------- Langganan ----------
-
-// ActivePlanOfProject: id paket langganan pemilik project yang masih berlaku, atau "".
-func (s *Store) ActivePlanOfProject(slug string) (string, error) {
-	var plan string
-	err := s.db.QueryRow(`
-		SELECT sub.plan FROM projects p JOIN subscriptions sub ON sub.user_id = p.user_id
-		WHERE p.slug = ? AND sub.expires_at > ?`, slug, now()).Scan(&plan)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return plan, err
-}
-
-// ActivePlanOfUser: id paket langganan akun yang masih berlaku, atau "".
-func (s *Store) ActivePlanOfUser(userID int64) (string, error) {
-	var plan string
-	err := s.db.QueryRow("SELECT plan FROM subscriptions WHERE user_id = ? AND expires_at > ?", userID, now()).Scan(&plan)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return plan, err
 }
 
 // ---------- Riwayat versi ----------

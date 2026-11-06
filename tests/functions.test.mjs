@@ -117,7 +117,7 @@ test('jawaban: Response, header yang diizinkan, dan pesan kesalahan', { skip }, 
     ['html', 'functions/html.js', `http://fn-jawab.${stack.origin.slice(7)}/api/fn/html`],
     ['rusak', 'functions/rusak.js', `http://fn-jawab.${stack.origin.slice(7)}/api/fn/rusak`],
   ]);
-  assert.deepEqual([list.usage.plan, list.usage.limit, list.limits], ['Gratis', 1000, { timeoutSeconds: 10, memoryMb: 64 }]);
+  assert.deepEqual([list.usage.plan, list.usage.limit, list.limits], [undefined, 20000, { timeoutSeconds: 10, memoryMb: 64 }]);
   assert.ok(list.usage.today >= 4);
 });
 
@@ -127,10 +127,10 @@ test('kuota harian per akun', { skip }, async () => {
   assert.equal((await call('fn-kuota', 'x')).status, 200);
   const db = stack.db();
   const day = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
-  db.prepare('UPDATE fn_usage SET count = 1000 WHERE user_id = ? AND day = ?').run(user.userId, day);
+  db.prepare('UPDATE fn_usage SET count = 20000 WHERE user_id = ? AND day = ?').run(user.userId, day);
   const res = await call('fn-kuota', 'x');
   assert.deepEqual([res.status, json(res).code], [429, 'fn_quota']);
-  assert.match(json(res).error, /1000 eksekusi\/hari untuk paket Gratis/);
+  assert.match(json(res).error, /20000 eksekusi\/hari\)/);
 });
 
 test('publikasi manual: fungsi dev di <slug>--dev, tayang setelah dipublikasikan', { skip }, async () => {
@@ -169,17 +169,12 @@ test('log eksekusi: pengunjung & uji coba tercatat, bisa disaring per fungsi', {
   assert.deepEqual((await other.get('/api/functions/logs')).body.logs, []);
 });
 
-test('jadwal: hanya paket berbayar, dengan jarak minimal per paket', { skip }, async () => {
+test('jadwal: semua akun, paling sering setiap 15 menit', { skip }, async () => {
   const user = await stack.register('fn-jadwal');
   await fn(user, 'rekap', 'export default (req) => req.method');
-  let res = await user.put('/api/functions/rekap/schedule', { cron: '0 7 * * *' });
-  assert.deepEqual([res.status, res.body.code], [403, 'fn_cron_plan']);
-  assert.equal((await user.get('/api/functions')).body.cron.minMinutes, 0);
-
-  stack.db().prepare('INSERT INTO subscriptions (user_id, plan, started_at, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(user.userId, 'pro', Date.now(), Date.now() + 30 * 86_400_000, Date.now());
-  res = await user.put('/api/functions/rekap/schedule', { cron: '*/5 * * * *' });
-  assert.deepEqual([res.status, res.body.error], [400, 'Paket Pro: jadwal paling sering setiap 15 menit']);
+  assert.equal((await user.get('/api/functions')).body.cron.minMinutes, 15);
+  let res = await user.put('/api/functions/rekap/schedule', { cron: '*/5 * * * *' });
+  assert.deepEqual([res.status, res.body.error], [400, 'Jadwal paling sering setiap 15 menit']);
   res = await user.put('/api/functions/rekap/schedule', { cron: '0 0 30 2 *' });
   assert.match(res.body.error, /tidak pernah terjadi/);
   assert.equal((await user.put('/api/functions/tidak-ada/schedule', { cron: '0 7 * * *' })).status, 404);

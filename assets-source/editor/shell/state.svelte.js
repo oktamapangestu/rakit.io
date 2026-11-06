@@ -14,7 +14,7 @@ export const ui = $state({
   // Bagian yang butuh data akun & project (pohon file, tab, panel AI) dipasang setelah /api/me selesai.
   ready: false,
   // Tab & panel yang dipasang saat pertama kali dibuka.
-  loaded: { data: false, diagram: false, fn: false, history: false, console: false, docs: false, flow: false },
+  loaded: { data: false, diagram: false, fn: false, history: false, console: false, docs: false, flow: false, providers: false },
 });
 
 // Komponen yang fungsinya dipanggil editor.js (bind:this di App.svelte): fn.load(), history.showList()/load(), docs.load().

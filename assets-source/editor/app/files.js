@@ -339,7 +339,7 @@ export async function uploadImages(files, dir, replacePath = null, { reload = tr
     if (!isImage(file.name)) {
       toast(`"${file.name}" dilewati: hanya gambar ${IMAGE_EXT.join(', ')}`, 'error');
     } else if (file.size > limit) {
-      toast(`"${file.name}" terlalu besar (${formatBytes(file.size)}). Maksimal ${formatBytes(limit)} per gambar${ai.credits?.plan ? '' : ' di paket Gratis'}.`, 'error');
+      toast(`"${file.name}" terlalu besar (${formatBytes(file.size)}). Maksimal ${formatBytes(limit)} per gambar.`, 'error');
     } else {
       accepted.push(file);
     }

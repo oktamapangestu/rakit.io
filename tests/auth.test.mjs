@@ -37,7 +37,7 @@ test('daftar: akun + project pertama + sesi; website langsung tayang', async () 
   const me = await client.get('/api/me');
   assert.equal(me.status, 200);
   assert.deepEqual(me.body.user, { username: 'budi-web', email: 'budi@contoh.id', isAdmin: false });
-  assert.equal(me.body.maxProjects, 5);
+  assert.deepEqual([me.body.maxProjects, me.body.maxCustom], [20, 5]);
   assert.equal(me.body.projects.length, 1);
   const project = me.body.project;
   assert.deepEqual({ ...project, createdAt: 0 }, {

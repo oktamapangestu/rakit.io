@@ -31,13 +31,9 @@ test('daftar file awal beserta pemakaian dan batas paket', async () => {
   assert.deepEqual(body.usage, {
     size: files.reduce((sum, f) => sum + f.size, 0),
     entries: 3,
-    limits: { fileSize: 512 * 1024, totalSize: 20 * 1024 * 1024, entries: 500, imageSize: 1024 * 1024, depth: 8 },
+    limits: { fileSize: 512 * 1024, totalSize: 100 * 1024 * 1024, entries: 2000, imageSize: 5 * 1024 * 1024, depth: 8 },
   });
   assert.equal((await stack.client().get('/api/files')).status, 401);
-
-  stack.db().prepare('INSERT INTO subscriptions (user_id, plan, started_at, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(user.userId, 'unlimited', Date.now(), Date.now() + DAY_MS, Date.now());
-  assert.deepEqual((await user.get('/api/files')).body.usage.limits, { fileSize: 512 * 1024, totalSize: 250 * 1024 * 1024, entries: 5000, imageSize: 10 * 1024 * 1024, depth: 8 });
 });
 
 test('baca dan simpan isi file', async () => {
@@ -104,8 +100,8 @@ test('unggah gambar: isi diperiksa, ukuran mengikuti paket, timpa hanya bila dim
   assert.equal((await upload(user, 'path=logo.svg', svg, { 'Content-Type': 'image/svg+xml' })).status, 201);
   expectError(await upload(user, 'path=palsu.svg', Buffer.from('<html><svg></svg></html>')), 400, 'Isi file bukan gambar SVG yang valid');
 
-  const big = Buffer.concat([PNG, Buffer.alloc(1024 * 1024)]);
-  expectError(await upload(user, 'path=besar.png', big), 413, 'Ukuran gambar maksimal 1 MB per file di paketmu');
+  const big = Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]);
+  expectError(await upload(user, 'path=besar.png', big), 413, 'Ukuran gambar maksimal 5 MB per file');
   expectError(await upload(user, 'path=raksasa.png', Buffer.concat([PNG, Buffer.alloc(10 * 1024 * 1024 + 2048)])), 413, 'Request terlalu besar');
 });
 
@@ -144,21 +140,22 @@ test('hapus file dan folder beserta isinya', async () => {
 test('kuota: jumlah file & folder dan total ukuran', async () => {
   const user = await stack.register();
   const root = rootOf(user);
-  // Isi langsung di disk sampai tepat di batas 500 entri (3 file awal + folder + 496 file).
+  // Isi langsung di disk sampai tepat di batas 2.000 entri (3 file awal + folder + 1.996 file).
   fs.mkdirSync(path.join(root, 'banyak'));
-  for (let i = 0; i < 496; i++) fs.writeFileSync(path.join(root, 'banyak', `f${i}.js`), '');
-  expectError(await user.post('/api/files', { path: 'satu-lagi.html' }), 413, 'Maksimal 500 file & folder');
-  expectError(await user.post('/api/files', { path: 'folder-baru', type: 'dir' }), 413, 'Maksimal 500 file & folder');
+  for (let i = 0; i < 1996; i++) fs.writeFileSync(path.join(root, 'banyak', `f${i}.js`), '');
+  expectError(await user.post('/api/files', { path: 'satu-lagi.html' }), 413, 'Maksimal 2000 file & folder');
+  expectError(await user.post('/api/files', { path: 'folder-baru', type: 'dir' }), 413, 'Maksimal 2000 file & folder');
   assert.equal((await user.put('/api/files/content', { path: 'index.html', content: 'tetap boleh diubah' })).status, 200);
   fs.rmSync(path.join(root, 'banyak'), { recursive: true });
 
-  // Total 20 MB: file gambar besar ditaruh langsung di disk.
-  fs.writeFileSync(path.join(root, 'besar.png'), Buffer.alloc(20 * 1024 * 1024 - 100));
+  // Total 100 MB: file gambar besar (sparse) ditaruh langsung di disk.
+  fs.writeFileSync(path.join(root, 'besar.png'), '');
+  fs.truncateSync(path.join(root, 'besar.png'), 100 * 1024 * 1024 - 100);
   await user.put('/api/files/content', { path: 'index.html', content: '' });
   await user.put('/api/files/content', { path: 'style.css', content: '' });
   await user.put('/api/files/content', { path: 'script.js', content: '' });
   assert.equal((await user.put('/api/files/content', { path: 'index.html', content: 'x'.repeat(100) })).status, 200);
-  expectError(await user.put('/api/files/content', { path: 'style.css', content: 'x' }), 413, 'Kuota penyimpanan 20 MB penuh');
+  expectError(await user.put('/api/files/content', { path: 'style.css', content: 'x' }), 413, 'Kuota penyimpanan 100 MB penuh');
   assert.equal((await user.put('/api/files/content', { path: 'index.html', content: 'x'.repeat(50) })).status, 200, 'mengecilkan file tetap boleh');
 });
 

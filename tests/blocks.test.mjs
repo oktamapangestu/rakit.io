@@ -9,7 +9,7 @@ import { startStack } from './helpers/harness.mjs';
 const skip = !process.env.RAKIT_SERVER_CMD?.includes('go/bin/rakit') && 'fitur khusus server Go';
 
 let stack;
-before(async () => { if (!skip) stack = await startStack({ AI_BONUS_CREDITS: '50', AI_DAILY_CREDITS: '0' }); });
+before(async () => { if (!skip) stack = await startStack({ AI_DAILY_PROMPTS: '50' }); });
 after(() => stack?.stop());
 
 let callId = 0;
@@ -118,7 +118,7 @@ test('peringatan bila AI juga mengubah bagian lain halaman atau halaman lain', {
 
 test('blok yang tidak valid ditolak sebelum kredit dipakai', { skip }, async () => {
   const user = await owner('toko-salah');
-  const before = (await user.credits()).remaining;
+  const before = (await user.credits()).freeRemaining;
   for (const [blocks, error] of [
     ['x', 'Daftar blok tidak valid'],
     [[{ ...heroBlock, selector: 'section.hero' }], 'Blok tidak valid. Pilih ulang bloknya di preview.'],
@@ -129,7 +129,7 @@ test('blok yang tidak valid ditolak sebelum kredit dipakai', { skip }, async () 
     const res = await user.startPrompt('ubah', { mode: 'build', blocks });
     assert.deepEqual([res.status, res.body.error], [400, error], JSON.stringify(blocks).slice(0, 60));
   }
-  assert.equal((await user.credits()).remaining, before);
+  assert.equal((await user.credits()).freeRemaining, before);
 });
 
 test('blok dari beberapa halaman sekaligus: diperiksa per halaman', { skip }, async () => {

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"rakit.io/server/internal/aimodels"
 	"rakit.io/server/internal/aiqueue"
 	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/jsconv"
@@ -115,9 +116,14 @@ type streamEvent struct {
 // chatCompletion memanggil endpoint chat completions (format OpenAI) dengan streaming SSE, di provider
 // milik model (req.model = "model" atau "model@provider", lihat paket aimodels).
 func (s *Service) chatCompletion(req request, h hooks) (*reply, error) {
-	endpoint, err := s.models.Resolve(req.model)
-	if err != nil {
-		return nil, err // dianggap gangguan: callAI pindah ke model cadangan bila ada
+	var endpoint aimodels.Endpoint
+	if ep := personalOf(h.ctx); ep != nil {
+		endpoint = *ep // AI pribadi pengguna (personal.go)
+	} else {
+		var err error
+		if endpoint, err = s.models.Resolve(req.model); err != nil {
+			return nil, err // dianggap gangguan: callAI pindah ke model cadangan bila ada
+		}
 	}
 	body := map[string]any{
 		"model":          endpoint.Model,
@@ -288,6 +294,15 @@ func isOutage(err error, ctx context.Context) bool {
 // yang sama dengan model cadangan berikutnya, dan seterusnya. Model yang gangguan dilewati beberapa menit (lihat paket aimodels),
 // jadi putaran berikutnya langsung memakai cadangan.
 func (s *Service) callAI(req request, h hooks) (*reply, error) {
+	// AI pribadi: satu model milik pengguna, tanpa cadangan dan tanpa memengaruhi status model platform.
+	if ep := personalOf(h.ctx); ep != nil {
+		req.model = ep.Model
+		out, err := s.callModel(req, h, len(retryDelays))
+		if err == nil && h.onModel != nil {
+			h.onModel(ep.Model)
+		}
+		return out, err
+	}
 	order := s.models.OrderFor(req.task)
 	for i, model := range order {
 		hasNext := i < len(order)-1
@@ -323,8 +338,13 @@ func (s *Service) callAI(req request, h hooks) (*reply, error) {
 // callModel memanggil satu model lewat antrean: tunggu slot, jalankan, lepas slot. Bila provider
 // menolak karena sibuk (429/503), coba lagi dengan jeda (atau sesuai Retry-After) sampai maxRetries kali.
 func (s *Service) callModel(req request, h hooks, maxRetries int) (*reply, error) {
+	personal := personalOf(h.ctx) != nil
 	for attempt := 0; ; attempt++ {
-		release, err := s.queue.Acquire(h.ctx, h.onQueued)
+		// AI pribadi tidak memakai antrean bersama: kuotanya milik pengguna sendiri.
+		release, err := func() {}, error(nil)
+		if !personal {
+			release, err = s.queue.Acquire(h.ctx, h.onQueued)
+		}
 		if err != nil {
 			var qe *aiqueue.Error
 			if errors.As(err, &qe) {
@@ -341,13 +361,15 @@ func (s *Service) callModel(req request, h hooks, maxRetries int) (*reply, error
 		}
 		out, err := s.chatCompletion(req, h)
 		if err == nil {
-			s.queue.ReportSuccess()
+			if !personal {
+				s.queue.ReportSuccess()
+			}
 			release()
 			return out, nil
 		}
 		var pe *providerError
 		busy := errors.As(err, &pe) && pe.busy()
-		if busy {
+		if busy && !personal {
 			s.queue.ReportBusy()
 		}
 		release()

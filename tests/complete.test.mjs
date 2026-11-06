@@ -15,7 +15,7 @@ const complete = (user, body) => user.post('/api/ai/complete', body);
 test('prediksi kode: konteks ke model, jawaban dirapikan, kuota harian', { skip }, async () => {
   const user = await stack.register('ketik');
   assert.equal((await stack.client().post('/api/ai/complete', { prefix: 'x' })).status, 401);
-  const credits = (await user.credits()).remaining;
+  const credits = (await user.credits()).freeRemaining;
 
   stack.ai.script.push({ text: 'Tentu! <insert>console.log(nama);\n</insert> Penjelasan diabaikan.' });
   const first = await complete(user, { path: 'script.js', prefix: 'function sapa(nama) {\n  ', suffix: '\n}\n' });
@@ -41,5 +41,5 @@ test('prediksi kode: konteks ke model, jawaban dirapikan, kuota harian', { skip 
   const limited = await complete(user, { path: 'a.js', prefix: 'let b', suffix: '' });
   assert.equal(limited.status, 429);
   assert.equal(limited.body.code, 'complete_limit');
-  assert.equal((await user.credits()).remaining, credits, 'tidak memakai kredit');
+  assert.equal((await user.credits()).freeRemaining, credits, 'tidak memakai kredit');
 });

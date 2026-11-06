@@ -341,6 +341,8 @@ type publicProject struct {
 	SiteURL   string `json:"siteUrl"`
 	SiteHost  string `json:"siteHost"`
 	CreatedAt int64  `json:"createdAt"`
+	// Custom: alamat pilihan sendiri (dihitung dalam batas alamat custom per akun).
+	Custom bool `json:"custom,omitempty"`
 	// Hanya untuk publikasi manual: mode "manual" dan PreviewURL = versi dev yang dimuat preview editor.
 	// Tanpa keduanya, project langsung tayang dan preview memakai SiteURL.
 	Mode       string `json:"mode,omitempty"`
@@ -348,7 +350,7 @@ type publicProject struct {
 }
 
 func (h *Handler) public(p *store.Project) publicProject {
-	out := publicProject{Slug: p.Slug, Name: p.Name, SiteURL: h.cfg.SiteURL(p.Slug), SiteHost: h.cfg.SiteHost(p.Slug), CreatedAt: p.CreatedAt}
+	out := publicProject{Slug: p.Slug, Name: p.Name, SiteURL: h.cfg.SiteURL(p.Slug), SiteHost: h.cfg.SiteHost(p.Slug), CreatedAt: p.CreatedAt, Custom: p.Custom}
 	if p.Manual() {
 		out.Mode, out.PreviewURL = store.ModeManual, h.cfg.DevURL(p.Slug)
 	}

@@ -190,6 +190,19 @@ const schema = `
 	  count   INTEGER NOT NULL DEFAULT 0,
 	  PRIMARY KEY (user_id, day)
 	);
+	-- AI pribadi akun (internal/ai/personal.go): endpoint kompatibel OpenAI dengan API key milik pengguna. Saat
+	-- aktif, AI editor (Builder/Plan/diagram/catatan) memakainya tanpa memotong jatah/kredit. Key tidak pernah
+	-- dikirim balik ke browser.
+	CREATE TABLE IF NOT EXISTS user_ai_provider (
+	  user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+	  base_url   TEXT NOT NULL,
+	  api_key    TEXT NOT NULL DEFAULT '',
+	  model      TEXT NOT NULL,
+	  -- Opsional: base URL format Anthropic (Messages API) untuk mode Agen (Claude Agent SDK) dengan key yang sama.
+	  agent_base_url TEXT NOT NULL DEFAULT '',
+	  active     INTEGER NOT NULL DEFAULT 1,
+	  updated_at INTEGER NOT NULL
+	);
 	-- Library AI fungsi (internal/fnai): provider yang dipasang pemilik project dengan API key-nya sendiri
 	-- (tidak pernah dikirim ke browser maupun ke kode fungsi), dan pemakaian per project per hari (WIB).
 	CREATE TABLE IF NOT EXISTS fn_ai_providers (
@@ -314,6 +327,18 @@ func (s *Store) Migrate() error {
 		{"ai_requests", "checks", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := addColumn(c[0], c[1], c[2]); err != nil {
+			return err
+		}
+	}
+	// Alamat custom (subdomain pilihan sendiri, dibatasi per akun); 0 = alamat acak atau username akun.
+	// Saat kolom baru dibuat, project lama yang subdomainnya bukan username dianggap custom.
+	var hasCustom int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'custom'").Scan(&hasCustom); err != nil {
+		return err
+	}
+	if hasCustom == 0 {
+		if _, err := tx.Exec(`ALTER TABLE projects ADD COLUMN custom INTEGER NOT NULL DEFAULT 0;
+			UPDATE projects SET custom = 1 WHERE slug <> (SELECT u.username FROM users u WHERE u.id = projects.user_id);`); err != nil {
 			return err
 		}
 	}

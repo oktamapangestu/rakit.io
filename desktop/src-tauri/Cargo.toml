@@ -1,0 +1,30 @@
+[package]
+name = "rakit-desktop"
+version = "0.1.0"
+description = "rakit.io versi desktop: editor + server lokal (project disimpan di komputer sendiri)"
+edition = "2021"
+publish = false
+
+[lib]
+name = "rakit_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+getrandom = "0.2"
+url = "2"
+
+# Webview macOS memakai server lokal sebagai proxy (macOS 14+), lihat src/lib.rs.
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri = { version = "2", features = ["macos-proxy"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

@@ -22,7 +22,7 @@ test('daftar kosong lalu buat tabel: nama dirapikan, aturan bawaan khusus pemili
   const user = await stack.register();
   const empty = await user.get(T);
   assert.deepEqual(empty.body.tables, []);
-  assert.deepEqual({ ...empty.body.usage, bytes: 0 }, { bytes: 0, tables: 0, limits: { bytes: 10 * 1024 * 1024, tables: 20 } });
+  assert.deepEqual({ ...empty.body.usage, bytes: 0 }, { bytes: 0, tables: 0, limits: { bytes: 50 * 1024 * 1024, tables: 20 } });
   assert.ok(empty.body.usage.bytes > 0);
   assert.equal((await stack.client().get(T)).status, 401);
 

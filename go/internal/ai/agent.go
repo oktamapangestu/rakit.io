@@ -82,7 +82,17 @@ func (s *Service) checkAgentEngines() {
 			log.Printf("ai: mesin agen %q tidak dikenal (pilihan: claude)", id)
 			continue
 		}
-		if cfg.Command == "" {
+		if cfg.Local != "" {
+			// Tanpa Docker (aplikasi desktop): driver & Node harus ada.
+			if _, err := os.Stat(filepath.Join(cfg.Local, "claude_driver.mjs")); err != nil {
+				log.Printf("ai: mode Agen %s tidak aktif — runtime lokal %s tidak lengkap: %v", id, cfg.Local, err)
+				continue
+			}
+			if _, err := exec.LookPath(cfg.Node); err != nil {
+				log.Printf("ai: mode Agen %s tidak aktif — Node %q tidak ditemukan: %v", id, cfg.Node, err)
+				continue
+			}
+		} else if cfg.Command == "" {
 			// image ls, bukan image inspect: di Docker Desktop (containerd) inspect nama pendek bisa gagal walau
 			// image-nya ada dan bisa dijalankan.
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -462,6 +472,45 @@ func agentCommand(model string) (env map[string]string, cmd []string) {
 		[]string{"node", "/opt/rakit/claude_driver.mjs"}
 }
 
+// localAgentCommand: mesin agen tanpa Docker (aplikasi desktop, AI_AGENT_LOCAL). Driver dijalankan Node di folder
+// kerja; layanan host di 127.0.0.1 (port acak) menggantikan port tetap container. HOME terpisah per job supaya
+// konfigurasi Claude Code milik pengguna tidak tersentuh.
+func (s *Service) localAgentCommand(wsDir, runDir string, hostAddrs, engineEnv map[string]string) *exec.Cmd {
+	cfg := s.cfg.AI.Agent
+	url := func(name string) string { return "http://" + strings.TrimPrefix(hostAddrs[name], "tcp:") }
+	home := filepath.Join(runDir, "home")
+	os.MkdirAll(home, 0o755)
+	cmd := exec.Command(cfg.Node, filepath.Join(cfg.Local, "claude_driver.mjs"))
+	cmd.Dir = wsDir
+	env := map[string]string{
+		"RAKIT_WORKSPACE": wsDir, "RAKIT_RUN": runDir, "RAKIT_AGENTS_MD": "1", "RAKIT_UPSTREAMS": joinUpstreams(hostAddrs),
+		"RAKIT_BRIDGE": url("tools"), "RAKIT_SITE": url("site"),
+		"HOME": home, "USERPROFILE": home, "CLAUDE_CONFIG_DIR": filepath.Join(home, ".claude"),
+		"NODE_PATH":                filepath.Join(cfg.Local, "node_modules"),
+		"PLAYWRIGHT_BROWSERS_PATH": filepath.Join(cfg.Local, "ms-playwright"),
+		"PATH":                     localAgentPath(cfg.Local, cfg.Node),
+		"IS_SANDBOX":               "1", "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+	}
+	for k, v := range engineEnv {
+		env[k] = v
+	}
+	env["ANTHROPIC_BASE_URL"] = url("ai")
+	cmd.Env = os.Environ()
+	for _, k := range sortedKeys(env) {
+		cmd.Env = append(cmd.Env, k+"="+env[k])
+	}
+	return cmd
+}
+
+// localAgentPath: PATH proses agen lokal — bin/ runtime (cek-halaman) dan folder Node bawaan (dipakai SDK & bin/).
+func localAgentPath(local, node string) string {
+	dirs := []string{filepath.Join(local, "bin")}
+	if filepath.IsAbs(node) {
+		dirs = append(dirs, filepath.Dir(node))
+	}
+	return strings.Join(append(dirs, os.Getenv("PATH")), string(os.PathListSeparator))
+}
+
 // agentDiff: perubahan file .html/.css/.js salinan kerja dibanding isi awal, plus file lain yang dibuat agen
 // (tidak didukung, diabaikan).
 func agentDiff(before, after string) (changes []change, ignored []string, err error) {
@@ -545,8 +594,11 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	defer deadline.stop()
 
 	primary, _ := s.models.For(aimodels.TaskBuilder)
-	endpoint, err := s.models.Resolve(primary)
-	if err != nil {
+	var endpoint aimodels.Endpoint
+	if ep := s.PersonalAgent(in.user.ID); ep != nil && personalOf(ctx) != nil {
+		// AI pribadi dengan endpoint format Anthropic (personal.go): dibayar pengguna langsung.
+		endpoint, primary = *ep, ep.Model
+	} else if endpoint, err = s.models.Resolve(primary); err != nil {
 		return nil, err
 	}
 	if h.onModel != nil {
@@ -564,12 +616,15 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	defer os.RemoveAll(work)
 	root := s.cfg.SiteRoot(slug)
 	before, wsDir, runDir := filepath.Join(work, "before"), filepath.Join(work, "workspace"), filepath.Join(work, "run")
-	// Unix socket di folder pendek: path socket dibatasi ±104 karakter (macOS) / 108 (Linux).
-	sockDir, err := os.MkdirTemp("/tmp", "rakit-agent-")
-	if err != nil {
-		return nil, err
+	// Unix socket di folder pendek: path socket dibatasi ±104 karakter (macOS) / 108 (Linux). Transport tcp (mis.
+	// runtime lokal, juga di Windows yang tidak punya /tmp) tidak memakai socket.
+	sockDir := ""
+	if cfg.Transport != "tcp" {
+		if sockDir, err = os.MkdirTemp("/tmp", "rakit-agent-"); err != nil {
+			return nil, err
+		}
+		defer os.RemoveAll(sockDir)
 	}
-	defer os.RemoveAll(sockDir)
 	for _, d := range []string{before, wsDir, runDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, err
@@ -588,6 +643,9 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	md, err := agentsMD(s.buildPrompt, state, s.ProjectNotes(in.project.ID))
 	if err != nil {
 		return nil, err
+	}
+	if cfg.Local != "" {
+		md = strings.ReplaceAll(md, "/workspace", filepath.ToSlash(wsDir)) // tanpa container: folder kerja asli
 	}
 	var createTable any
 	var tools []map[string]any
@@ -633,7 +691,9 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 	engineEnv, engineCmd := agentCommand(endpoint.Model)
 	name := fmt.Sprintf("rakit-agent-%d", in.messageID)
 	var cmd *exec.Cmd
-	if cfg.Command != "" {
+	if cfg.Local != "" {
+		cmd = s.localAgentCommand(wsDir, runDir, hostAddrs, engineEnv)
+	} else if cfg.Command != "" {
 		cmd = exec.Command("sh", "-c", cfg.Command)
 		cmd.Env = append(os.Environ(), "RAKIT_ENGINE="+in.engine, "RAKIT_WORKSPACE="+wsDir, "RAKIT_RUN="+runDir,
 			"RAKIT_SOCK_DIR="+sockDir, "RAKIT_UPSTREAMS="+joinUpstreams(hostAddrs), "RAKIT_AGENTS_MD=1")
@@ -686,7 +746,7 @@ func (s *Service) runAgent(ctx context.Context, in jobInput, ask string, history
 		close(exited)
 	}()
 	kill := func() {
-		if cfg.Command == "" {
+		if cfg.Command == "" && cfg.Local == "" {
 			exec.Command(cfg.Docker, "rm", "-f", name).Run()
 		}
 		cmd.Process.Kill()

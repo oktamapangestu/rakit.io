@@ -14,7 +14,7 @@ import { activate, closeTab, copyText, createEntry, isDirty, loadTree, openFile,
 import { bindBlockPicker, currentRoute, pick, previewGo, reloadPreview, setDevice, setPick, setTextEdit, textEdit } from '../editor/app/preview.js';
 import { bindAiEvents, loadCredits, setLayout, setMobileView, setMode, showFeatureInfo, showHistoryMenu, toggleAi, togglePreview, toggleSidebar } from '../editor/app/shell.js';
 import { editorContext, openDialog } from '../editor/app/context.js';
-import { maybeShowPlansIntro, openPublish, openTopup, projectUrl, refreshPublish, showAccountMenu, showProjectMenu } from '../editor/app/project.js';
+import { openPublish, openTopup, projectUrl, refreshPublish, showAccountMenu, showProjectMenu } from '../editor/app/project.js';
 import { askFlow, bindFlowEvents, explainFlow, flashFlowLines, flowGoBack, openFlowRef, selectFlowStep, stopFlowPlay, toggleFlow, toggleFlowPlay } from '../editor/app/flow.js';
 
 // ---------- Event ----------
@@ -141,6 +141,7 @@ async function init() {
   state.project = me.project;
   state.projects = me.projects;
   state.maxProjects = me.maxProjects;
+  state.maxCustom = me.maxCustom ?? 0;
   state.projectSlug = me.project.slug;
   storage.set('rakit.project', state.projectSlug);
   history.replaceState(null, '', projectUrl(state.projectSlug));
@@ -165,7 +166,6 @@ async function init() {
   await credits;
   if (!ai.credits) await loadCredits();
   await initAiHistory();
-  maybeShowPlansIntro();
 }
 
 init().catch((err) => {

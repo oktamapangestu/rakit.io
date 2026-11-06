@@ -13,15 +13,20 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 const ws = process.env.RAKIT_WORKSPACE;
+// Alamat layanan: "unix:/path.sock" (container) atau "tcp:127.0.0.1:port" (runtime lokal tanpa Docker).
 const upstream = Object.fromEntries(process.env.RAKIT_UPSTREAMS.split(',').map((e) => {
   const [name, target] = e.split('=');
-  return [name, target.replace(/^unix:/, '')];
+  if (target.startsWith('tcp:')) {
+    const [host, port] = target.slice(4).split(':');
+    return [name, { host, port: Number(port) }];
+  }
+  return [name, { socketPath: target.replace(/^unix:/, '') }];
 }));
 const emit = (obj) => process.stdout.write(`@@RAKIT ${JSON.stringify(obj)}\n`);
 
 function call(name, method, urlPath, body) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ socketPath: upstream[name], method, path: urlPath, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer dari-container' } }, (res) => {
+    const req = http.request({ ...upstream[name], method, path: urlPath, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer dari-container' } }, (res) => {
       let text = '';
       res.on('data', (c) => { text += c; });
       res.on('end', () => resolve({ status: res.statusCode, text }));

@@ -534,7 +534,7 @@ func WriteImage(root, input string, buf []byte, overwrite bool, limits plans.Sto
 		return "", httpx.Errorf(400, "File gambar kosong")
 	}
 	if int64(len(buf)) > limits.ImageSize {
-		return "", httpx.Errorf(413, "Ukuran gambar maksimal %s MB per file di paketmu", mb(limits.ImageSize))
+		return "", httpx.Errorf(413, "Ukuran gambar maksimal %s MB per file", mb(limits.ImageSize))
 	}
 	if !looksLikeImage(ext, buf) {
 		return "", httpx.Errorf(400, "Isi file bukan gambar %s yang valid", strings.ToUpper(ext[1:]))

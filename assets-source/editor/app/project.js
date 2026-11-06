@@ -2,6 +2,7 @@
 // langganan & kredit, Asisten AI website.
 import { core as state } from '../files/state.svelte.js';
 import NewProjectDialog from '../files/NewProjectDialog.svelte';
+import AddressDialog from '../files/AddressDialog.svelte';
 import { showMenu, ui, toast } from '../shell/state.svelte.js';
 import Topup from '../Topup.svelte';
 import Assistant from '../assistant/Assistant.svelte';
@@ -14,7 +15,7 @@ import { diagram, rerender as rerenderDiagram } from '../diagram/state.svelte.js
 import { $, EDITOR_PATH, HOME, ICON, LANG, storage } from './util.js';
 import { api } from './api.js';
 import { editor, monaco, monacoTheme } from './monaco.js';
-import { copyText, loadTree, saveAll } from './files.js';
+import { copyText, saveAll } from './files.js';
 import { pick, reloadPreview, setPick } from './preview.js';
 import { ask, setMode } from './shell.js';
 import { openDialog } from './context.js';
@@ -31,7 +32,7 @@ export function showAccountMenu() {
     { label: 'Pengaturan', run: openSettings },
     { label: LANG === 'en' ? 'Bahasa Indonesia' : 'English', hint: LANG === 'en' ? 'ID' : 'EN', run: () => setLanguage(LANG === 'en' ? 'id' : 'en') },
     SHOW_ASSISTANT && { label: 'Asisten AI website', hint: 'baru', run: openAssistant },
-    ai.credits?.topupEnabled && { label: 'Langganan & kredit AI', hint: ai.credits.plan?.name, run: () => openTopup('plans') },
+    ai.credits?.topupEnabled && { label: 'Isi ulang kredit AI', hint: `${ai.credits.purchased} kredit`, run: () => openTopup() },
     state.me.isAdmin && { label: 'Dashboard pemilik', run: () => { location.href = '/admin'; } },
     '-',
     { label: 'Keluar', danger: true, run: logout },
@@ -111,6 +112,7 @@ export function showProjectMenu(anchor) {
       ? { label: '+ Project baru', run: openNewProject }
       : { label: `Maksimal ${state.maxProjects} project`, run: () => toast(`Maksimal ${state.maxProjects} project per akun. Hapus project lama untuk membuat yang baru.`, 'error') },
     { label: 'Ganti nama project…', run: renameProject },
+    { label: 'Ganti alamat website…', hint: state.project.custom ? 'custom' : 'acak', run: openAddress },
     state.projects.length > 1 ? { label: 'Hapus project ini…', danger: true, run: deleteProject } : null,
   ], { wide: true });
 }
@@ -119,6 +121,16 @@ export function openNewProject() {
   openDialog(NewProjectDialog, {
     onCreated: async (project) => {
       await saveAll();
+      location.href = projectUrl(project.slug);
+    },
+  });
+}
+
+// Ganti alamat (subdomain) project aktif; editor dimuat ulang di alamat baru.
+export function openAddress() {
+  openDialog(AddressDialog, {
+    onChanged: async (project) => {
+      storage.set('rakit.project', project.slug);
       location.href = projectUrl(project.slug);
     },
   });
@@ -217,37 +229,19 @@ export function openAssistant() {
   const close = openDialog(Assistant, { onTopup: () => { close(); openTopup('assistant', { after: openAssistant }); } }, { keepEscapeIn: ['TEXTAREA'] });
 }
 
-// ---------- Langganan & isi ulang kredit (QRIS) ----------
+// ---------- Isi ulang kredit (QRIS) ----------
 // Tampilan & alur pembayarannya: komponen Svelte assets-source/editor/Topup.svelte.
-// tab: 'plans' (langganan) | 'credits' (paket kredit) | 'assistant' (Saldo Asisten AI website).
-// intro: sambutan saat editor pertama kali dibuka. after: dipanggil setelah isi saldo asisten berhasil.
-export function openTopup(tab, { intro = false, after = null } = {}) {
-  const root = $('#modal');
+// tab: 'credits' (paket kredit) | 'assistant' (Saldo Asisten AI website).
+// after: dipanggil setelah isi saldo asisten berhasil.
+export function openTopup(tab = 'credits', { after = null } = {}) {
   const close = openDialog(Topup, {
     tab,
-    intro,
     api,
     showAssistant: SHOW_ASSISTANT,
     icons: { close: ICON.close, spark: SPARK },
     onCredits: (credits) => { ai.credits = credits; },
-    onPlanPaid: () => loadTree().catch(() => {}), // perbarui kuota storage di sidebar
     onUseAI: () => { close(); setMode('ai'); },
     onAfter: () => { close(); after?.(); },
-    // Promosi memakai modal lebar di tengah layar.
-    onPromo: (on) => root.classList.toggle('promo-backdrop', on),
     onClose: () => close(),
-  }, { onClose: () => root.classList.remove('promo-backdrop') });
-}
-
-// Promosi langganan untuk pengguna gratis: maks. sekali sehari (tanggal WIB) per akun, per browser.
-export function maybeShowPlansIntro() {
-  const key = `rakit.promoDay.${state.me.username}`;
-  const today = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
-  const c = ai.credits;
-  if (storage.get(key, null) === today || !c?.topupEnabled || c.plan) return;
-  setTimeout(() => {
-    if (!$('#modal').hidden) return; // ada dialog lain: coba lagi di kunjungan berikutnya
-    storage.set(key, today);
-    openTopup('plans', { intro: true });
-  }, 900);
+  });
 }

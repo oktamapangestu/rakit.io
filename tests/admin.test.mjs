@@ -27,52 +27,35 @@ test('semua rute admin: belum login 401, bukan owner 403', async () => {
   assert.deepEqual((await admin.get('/api/admin/tidak-ada')).body, { error: 'Endpoint tidak ditemukan' });
 });
 
-test('harga langganan: tampilan, simpan, dan validasi', async () => {
+test('jatah AI gratis: tampilan, simpan, dan validasi', async () => {
   const view = (await admin.get('/api/admin/plans')).body;
-  assert.deepEqual(view.plans, [
-    { id: 'pro', name: 'Pro', price: 49000, quota: 3, enabled: true, quotaUnit: 'credits', storage: { totalSize: 104857600, entries: 2000, dbBytes: 52428800, imageSize: 5242880 } },
-    { id: 'unlimited', name: 'Unlimited', price: 98000, quota: 2, enabled: true, quotaUnit: 'daily', storage: { totalSize: 262144000, entries: 5000, dbBytes: 104857600, imageSize: 10485760 } },
-  ]);
-  assert.deepEqual(view.limits, { minPrice: 1000, maxPrice: 10000000, maxQuota: 100000, freeDailyMax: 1000, freeBonusMax: 10000 });
-  assert.deepEqual([view.modelCost, view.freeDaily, view.freeBonus, view.creditsPerPrompt], [0, 2, 2, 1]);
+  assert.equal(view.plans, undefined, 'tidak ada paket langganan');
+  assert.deepEqual(view.limits, { freeDailyMax: 1000 });
+  assert.deepEqual([view.modelCost, view.freeDaily, view.creditsPerPrompt], [0, 4, 1]);
   assert.deepEqual(view.usage, { prompts: 0, avgTokens: 0, maxTokens: 0 });
 
   for (const [body, message] of [
-    [{ plans: [{ id: 'pro', price: 999 }] }, 'Harga Pro harus bilangan bulat Rp1.000–Rp10.000.000'],
-    [{ plans: [{ id: 'pro', price: 49000.5 }] }, 'Harga Pro harus bilangan bulat Rp1.000–Rp10.000.000'],
-    [{ plans: [{ id: 'unlimited', price: 'mahal' }] }, 'Harga Unlimited harus bilangan bulat Rp1.000–Rp10.000.000'],
-    [{ plans: [{ id: 'pro', quota: 100001 }] }, 'Kuota Pro harus bilangan bulat 1–100.000'],
     [{ modelCost: -1 }, 'Biaya model tidak valid'],
     [{ modelCost: 'x' }, 'Biaya model tidak valid'],
-    [{ freeDaily: 1001 }, 'Kredit gratis harian harus bilangan bulat 0–1000'],
-    [{ freeDaily: 1.5 }, 'Kredit gratis harian harus bilangan bulat 0–1000'],
-    [{ freeBonus: 10001 }, 'Bonus kredit awal harus bilangan bulat 0–10000'],
+    [{ freeDaily: 1001 }, 'Prompt gratis harian harus bilangan bulat 0–1000'],
+    [{ freeDaily: 1.5 }, 'Prompt gratis harian harus bilangan bulat 0–1000'],
     // Satu bagian gagal: tidak ada yang tersimpan.
-    [{ plans: [{ id: 'pro', price: 59000 }], freeDaily: 5, freeBonus: -1 }, 'Bonus kredit awal harus bilangan bulat 0–10000'],
+    [{ modelCost: 431, freeDaily: -1 }, 'Prompt gratis harian harus bilangan bulat 0–1000'],
   ]) {
     const res = await admin.put('/api/admin/plans', body);
     assert.deepEqual([res.status, res.body.error], [400, message], JSON.stringify(body));
   }
-  assert.deepEqual((await admin.get('/api/admin/plans')).body.plans.map((p) => p.price), [49000, 98000]);
+  assert.equal((await admin.get('/api/admin/plans')).body.modelCost, 0);
 
-  const saved = await admin.put('/api/admin/plans', {
-    plans: [{ id: 'pro', price: '59000', quota: 10, enabled: 0 }, { id: 'tidak-ada', price: 1 }, 'ngawur'],
-    modelCost: 431.456, freeDaily: '7', freeBonus: 0,
-  });
+  const saved = await admin.put('/api/admin/plans', { modelCost: 431.456, freeDaily: '7' });
   assert.equal(saved.status, 200);
-  assert.deepEqual(saved.body.plans.map((p) => [p.id, p.price, p.quota, p.enabled]), [['pro', 59000, 10, false], ['unlimited', 98000, 2, true]]);
-  assert.deepEqual([saved.body.modelCost, saved.body.freeDaily, saved.body.freeBonus], [431.46, 7, 0]);
+  assert.deepEqual([saved.body.modelCost, saved.body.freeDaily], [431.46, 7]);
   // Langsung berlaku untuk pengguna.
   const user = await stack.register();
-  const credits = await user.credits();
-  assert.deepEqual([credits.limit, credits.bonusLimit, credits.remaining], [7, 0, 7]);
-  assert.deepEqual((await user.get('/api/billing/packages')).body.plans.map((p) => p.id), ['unlimited']);
+  assert.deepEqual([(await user.credits()).limit, (await user.credits()).freeRemaining], [7, 7]);
 
-  // Sebagian saja: yang lain tetap.
-  const partial = await admin.put('/api/admin/plans', { plans: [{ id: 'pro', enabled: true }] });
-  assert.deepEqual(partial.body.plans.map((p) => [p.price, p.quota, p.enabled]), [[59000, 10, true], [98000, 2, true]]);
   assert.equal((await admin.put('/api/admin/plans', {})).status, 200);
-  await admin.put('/api/admin/plans', { plans: [{ id: 'pro', price: 49000, quota: 3 }], freeDaily: 2, freeBonus: 2, modelCost: 0 });
+  await admin.put('/api/admin/plans', { freeDaily: 4, modelCost: 0 });
 });
 
 test('model asisten: tampilan, simpan, validasi, saldo percobaan', async () => {
@@ -145,7 +128,7 @@ test('website pemakai asisten dan blokir', async () => {
   await admin.post('/api/admin/assistant/block', { slug: 'toko-asisten', blocked: false });
 });
 
-test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antrean', async () => {
+test('statistik: pengguna, AI, kredit, pendapatan, penyimpanan, antrean', async () => {
   const a = await stack.register('statistik-a');
   const b = await stack.register('statistik-b');
   stack.ai.script.push({ text: 'ok', usage: { prompt_tokens: 1000, completion_tokens: 200 } }, { status: 500 });
@@ -155,15 +138,13 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
   await b.post('/api/database/tables', { name: 'catatan', columns: [] });
   const topup = (await b.post('/api/billing/topup', { packageId: 'p20' })).body.payment;
   await stack.paid(topup.id);
-  const sub = (await b.post('/api/billing/subscribe', { planId: 'pro' })).body.payment;
-  await stack.paid(sub.id);
   await a.post('/api/billing/topup', { packageId: 'p50' }); // belum dibayar
 
   const before = stack.db();
   const count = (sql) => before.prepare(sql).get().n;
   const { status, body: s } = await admin.get('/api/admin/stats?days=7');
   assert.equal(status, 200);
-  assert.deepEqual(Object.keys(s).sort(), ['activeUsers', 'ai', 'creditUsers', 'credits', 'days', 'generatedAt', 'queue', 'recentPayments', 'recentUsers', 'revenue', 'revenueByDay', 'signupsByDay', 'storage', 'subscribers', 'tokenRanking', 'topUsers', 'users']);
+  assert.deepEqual(Object.keys(s).sort(), ['activeUsers', 'ai', 'creditUsers', 'credits', 'days', 'generatedAt', 'queue', 'recentPayments', 'recentUsers', 'revenue', 'revenueByDay', 'signupsByDay', 'storage', 'tokenRanking', 'topUsers', 'users']);
   assert.equal(s.days, 7);
   assert.ok(Math.abs(Date.parse(s.generatedAt) - Date.now()) < 10_000);
   assert.equal((await admin.get('/api/admin/stats?days=15')).body.days, 30);
@@ -191,18 +172,18 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
   assert.deepEqual([day.date, day.requests, day.failed, day.tokens], [today(), requests, 1, s.ai.tokensIn + s.ai.tokensOut]);
   assert.ok(s.ai.tokensIn >= 1000 && s.ai.tokensOut >= 200);
 
-  // Kredit, langganan, pendapatan
-  assert.equal(s.credits.freePerUser, 2);
-  assert.equal(s.credits.freeBonus, 2);
+  // Kredit, pendapatan
+  assert.equal(s.credits.freePerUser, 4);
+  assert.equal(s.credits.freeBonus, undefined);
   assert.equal(s.credits.purchasedOutstanding, 20);
   assert.equal(typeof s.credits.usedToday, 'number');
-  assert.deepEqual(s.subscribers, { pro: 1 });
-  assert.deepEqual(s.revenue, { allTime: 59000, inPeriod: 59000, paidCount: 2, creditsSold: 20, payingUsers: 1, pending: 1, livemode: false });
-  assert.deepEqual(s.revenueByDay.at(-1), { date: today(), amount: 59000, count: 2 });
+  assert.equal(s.subscribers, undefined);
+  assert.deepEqual(s.revenue, { allTime: 10000, inPeriod: 10000, paidCount: 1, creditsSold: 20, payingUsers: 1, pending: 1, livemode: false });
+  assert.deepEqual(s.revenueByDay.at(-1), { date: today(), amount: 10000, count: 1 });
   assert.deepEqual(s.revenueByDay[0], { date: s.signupsByDay[0].date, amount: 0, count: 0 });
-  assert.equal(s.recentPayments.length, 3);
-  const paid = s.recentPayments.find((p) => p.packageId === 'plan:pro');
-  assert.deepEqual({ ...paid, createdAt: 0, paidAt: '' }, { createdAt: 0, paidAt: '', status: 'succeeded', packageId: 'plan:pro', credits: 0, amount: 49000, livemode: false, username: 'statistik-b' });
+  assert.equal(s.recentPayments.length, 2);
+  const paid = s.recentPayments.find((p) => p.packageId === 'p20');
+  assert.deepEqual({ ...paid, createdAt: 0, paidAt: '' }, { createdAt: 0, paidAt: '', status: 'succeeded', packageId: 'p20', credits: 20, amount: 10000, livemode: false, username: 'statistik-b' });
   assert.equal(typeof paid.createdAt, 'number');
   assert.match(paid.paidAt, /^\d{4}-\d{2}-\d{2}T/);
   const pending = s.recentPayments.find((p) => p.packageId === 'p50');
@@ -229,7 +210,7 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
   assert.equal(s.activeUsers.day, users);
   assert.equal(s.activeUsers.week, users);
   const act = s.activeUsers.users.find((u) => u.username === 'statistik-b');
-  assert.deepEqual({ ...act, lastSeenAt: '' }, { username: 'statistik-b', email: 'statistik-b@test.local', lastSeenAt: '', lastAiAt: null, projects: 2, plan: 'pro', siteUrl: `http://statistik-b.${stack.origin.slice(7)}` });
+  assert.deepEqual({ ...act, lastSeenAt: '' }, { username: 'statistik-b', email: 'statistik-b@test.local', lastSeenAt: '', lastAiAt: null, projects: 2, siteUrl: `http://statistik-b.${stack.origin.slice(7)}` });
   assert.ok(Math.abs(Date.parse(act.lastSeenAt) - Date.now()) < 60_000);
   assert.match(s.activeUsers.users.find((u) => u.username === 'statistik-a').lastAiAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.ok(s.activeUsers.users.every((u, i) => i === 0 || u.lastSeenAt <= s.activeUsers.users[i - 1].lastSeenAt));
@@ -238,7 +219,7 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
   // Kredit per pengguna
   const ca = s.creditUsers.find((u) => u.username === 'statistik-a');
   assert.deepEqual({ ...ca, lastAt: '' }, {
-    username: 'statistik-a', email: 'statistik-a@test.local', used: 0, freeLimit: 2, freeRemaining: 2, bonusLimit: 2, bonusUsed: 1, bonusRemaining: 1,
+    username: 'statistik-a', email: 'statistik-a@test.local', used: 1, freeLimit: 4, freeRemaining: 3,
     purchased: 0, remaining: 3, aiRequests: 2, inTokens: 1000, outTokens: 200, tokens: 1200, lastAt: '', siteUrl: `http://statistik-a.${stack.origin.slice(7)}`,
   });
   assert.match(ca.lastAt, /^\d{4}-\d{2}-\d{2}T/);
@@ -259,7 +240,7 @@ test('statistik: pengguna, AI, kredit, pendapatan, langganan, penyimpanan, antre
 });
 
 test('ranking per aksi: request AI editor dengan token terbanyak, aksinya, dan siapa yang menjalankan', { skip: !process.env.RAKIT_SERVER_CMD?.includes('go/bin/rakit') && 'fitur khusus server Go' }, async () => {
-  const own = await startStack({ AI_BONUS_CREDITS: '10' });
+  const own = await startStack({ AI_DAILY_PROMPTS: '12' });
   try {
     const owner = await own.admin();
     const user = await own.register('aksi-a');
@@ -286,7 +267,7 @@ test('ranking per aksi: request AI editor dengan token terbanyak, aksinya, dan s
 });
 
 test('kualitas kode AI per model: dari hasil pemeriksaan job Builder', { skip: !process.env.RAKIT_SERVER_CMD?.includes('go/bin/rakit') && 'fitur khusus server Go' }, async () => {
-  const own = await startStack({ AI_BONUS_CREDITS: '10' });
+  const own = await startStack({ AI_DAILY_PROMPTS: '12' });
   try {
     const owner = await own.admin();
     const user = await own.register('mutu-a');

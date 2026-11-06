@@ -285,14 +285,11 @@ test('upload: hanya bila Tambah/Ubah dibuka untuk publik; ukuran mengikuti paket
   await site.owner.req('PATCH', '/api/database/tables/galeri', { rules: { update: 'public' } });
   assert.equal((await upload(PNG)).status, 201);
 
-  // Paket gratis: maks. 1 MB per gambar. Pro: 5 MB.
-  const big = Buffer.concat([PNG, Buffer.alloc(2 * 1024 * 1024)]);
-  const tooBig = await upload(big);
+  // Maks. 5 MB per gambar.
+  assert.equal((await upload(Buffer.concat([PNG, Buffer.alloc(2 * 1024 * 1024)]))).status, 201);
+  const tooBig = await upload(Buffer.concat([PNG, Buffer.alloc(6 * 1024 * 1024)]));
   assert.equal(tooBig.status, 413);
-  assert.match(tooBig.body.error, /Ukuran gambar maksimal 1 MB/);
-  stack.db().prepare('INSERT INTO subscriptions (user_id, plan, started_at, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(site.owner.userId, 'pro', Date.now(), Date.now() + 30 * DAY_MS, Date.now());
-  assert.equal((await upload(big)).status, 201);
+  assert.match(tooBig.body.error, /Ukuran gambar maksimal 5 MB/);
   // Di atas batas server (lebih dari batas paket mana pun): ditolak sebelum dibaca seluruhnya.
   const huge = await upload(Buffer.concat([PNG, Buffer.alloc(12 * 1024 * 1024)]));
   assert.equal(huge.status, 413);

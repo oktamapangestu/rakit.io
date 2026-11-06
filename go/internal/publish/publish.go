@@ -226,6 +226,22 @@ func (s *Service) Remove(slug string) error {
 	return os.RemoveAll(s.cfg.PublishedRoot(slug))
 }
 
+// Move memindahkan versi prod ke subdomain baru (alamat project diganti).
+func (s *Service) Move(from, to string) error {
+	if err := s.userdb.Move(userdb.ProdKey(from), userdb.ProdKey(to)); err != nil {
+		return err
+	}
+	return renameDir(s.cfg.PublishedRoot(from), s.cfg.PublishedRoot(to))
+}
+
+// renameDir: seperti os.Rename, tetapi folder asal yang tidak ada bukan kesalahan.
+func renameDir(from, to string) error {
+	if err := os.Rename(from, to); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 // ---------- File ----------
 
 // skipUploads: path relatif di folder upload gambar.

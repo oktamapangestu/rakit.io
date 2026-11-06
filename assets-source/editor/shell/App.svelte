@@ -23,12 +23,12 @@
   import ConsoleTab from '../console/Console.svelte';
   import FlowPanel from '../flow/FlowPanel.svelte';
   import Docs from '../docs/Docs.svelte';
+  import Providers from '../providers/Providers.svelte';
   import { core } from '../files/state.svelte.js';
-  import { ai, canAfford, unlimitedLeft } from '../ai/state.svelte.js';
+  import { ai, canAfford } from '../ai/state.svelte.js';
   import { con } from '../console/state.svelte.js';
   import { flow } from '../flow/state.svelte.js';
   import { FEATURE_INFO } from '../features.js';
-  import { shortDate } from '../format.js';
 
   // actions (editor.js): toggleSidebar() · togglePreview() · setLayout(l) · setMode(m) · setMobileView(v) ·
   // projectMenu(anchor) · accountMenu() · copySite() · publish() · topup(tab?) · info(key) · createEntry(type, dir?) ·
@@ -52,35 +52,18 @@
 
   // Kredit AI (lencana di atas panel AI).
   const c = $derived(ai.credits);
-  const plan = $derived(c?.plan ?? null);
   const credit = $derived.by(() => {
     if (!c || !c.enabled) return { text: '', title: 'Kredit AI', empty: false, disabled: false };
-    const unlimited = unlimitedLeft(c);
+    if (c.personal) return { text: 'AI pribadi', title: `Memakai AI pribadi (${c.personal}): tanpa jatah/kredit. Atur di tab Provider AI.`, empty: false, disabled: false, personal: true };
     return {
-      text: unlimited ? 'Unlimited' : `${c.remaining} kredit`,
+      text: c.freeRemaining > 0 || !c.purchased ? `${c.freeRemaining}/${c.limit} prompt` : `${c.purchased} kredit`,
       empty: !canAfford(c, c.costPerPrompt),
       disabled: !c.topupEnabled,
       title: [
-        plan && `${plan.name} aktif sampai ${shortDate(plan.expiresAt)}`,
-        plan && (plan.id === 'unlimited'
-          ? `Hari ini: ${plan.quotaUsed}/${plan.quota} prompt`
-          : `Kredit ${plan.name}: ${plan.quotaRemaining}/${plan.quota} (terisi ulang ${shortDate(plan.quotaResetsAt)})`),
-        c.bonusRemaining > 0 ? `Bonus awal: ${c.bonusRemaining}/${c.bonusLimit} (sekali, tidak berkurang tiap hari sampai habis)` : null,
-        c.limit ? `Gratis hari ini: ${c.freeRemaining}/${c.limit} (terisi lagi besok 00.00 WIB, tidak menumpuk)` : null,
-        c.purchased ? `Dibeli: ${c.purchased}` : null,
-        c.topupEnabled ? 'Klik untuk langganan / isi ulang' : null,
+        `Prompt gratis hari ini: ${c.freeRemaining}/${c.limit} (terisi lagi besok 00.00 WIB, tidak menumpuk)`,
+        c.purchased ? `Kredit dibeli: ${c.purchased} (dipakai setelah jatah harian habis)` : null,
+        c.topupEnabled ? 'Klik untuk isi ulang kredit' : null,
       ].filter(Boolean).join(' · '),
-    };
-  });
-  // Lencana langganan di header: peringatan saat masa aktif hampir habis.
-  const planInfo = $derived.by(() => {
-    if (!plan) return { expiring: false, days: '', title: null };
-    const daysLeft = Math.max(0, Math.ceil((Date.parse(plan.expiresAt) - Date.now()) / 86_400_000));
-    const expiring = daysLeft <= 3;
-    return {
-      expiring,
-      days: expiring ? (daysLeft ? `${daysLeft} hari lagi` : 'berakhir hari ini') : '',
-      title: `${plan.name} aktif sampai ${shortDate(plan.expiresAt)}${expiring ? ' · klik untuk perpanjang' : ''}`,
     };
   });
 </script>
@@ -137,12 +120,7 @@
       <svg viewBox="0 0 16 16"><path d="M9 2v1h3.3L6.6 8.6l.8.8L13 3.7V7h1V2zM12 13H3V4h4V3H2v11h11V9h-1z"/></svg>
       <span>Lihat situs</span>
     </a>
-    <button type="button" class="plan-badge" id="planBadge" onclick={() => actions.topup('plans')} hidden={!plan} data-plan={plan?.id} class:expiring={planInfo.expiring} title={planInfo.title}>
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.2l3.2 2.3L8 3l2.8 4.5L14 5.2 12.8 12H3.2zM3.3 13h9.4v1.2H3.3z"/></svg>
-      <span class="plan-badge-name">{plan?.name ?? ''}</span>
-      <span class="plan-badge-days">{planInfo.days}</span>
-    </button>
-    <button class="avatar" id="avatarBtn" title="Akun" onclick={(e) => { e.stopPropagation(); actions.accountMenu(); }} class:subscribed={Boolean(plan)} data-plan={plan?.id ?? ''}>{core.me?.username[0] ?? ''}</button>
+    <button class="avatar" id="avatarBtn" title="Akun" onclick={(e) => { e.stopPropagation(); actions.accountMenu(); }}>{core.me?.username[0] ?? ''}</button>
   </div>
 </header>
 
@@ -169,6 +147,10 @@
       <button role="tab" data-mode="fn" aria-selected={String(ui.mode === 'fn')} onclick={() => actions.setMode('fn')} data-i18n="mode" title="Fungsi serverless: kode backend di /api/fn/…">
         <svg viewBox="0 0 16 16"><path d="M9.3 1 3 9.2h4.2L6.3 15l6.6-8.4H8.7z"/></svg>
         Fungsi
+      </button>
+      <button role="tab" data-mode="providers" aria-selected={String(ui.mode === 'providers')} onclick={() => actions.setMode('providers')} title="Provider AI: pakai API key AI milikmu untuk editor (tanpa jatah/kredit) dan untuk fungsi">
+        <svg viewBox="0 0 16 16"><path d="M8 1l1.4 4.1L13.5 6.5 9.4 7.9 8 12 6.6 7.9 2.5 6.5l4.1-1.4zM12.5 10l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+        Provider AI
       </button>
       <button role="tab" data-mode="history" aria-selected={String(ui.mode === 'history')} onclick={() => actions.setMode('history')} title="Riwayat versi: lihat dan kembalikan versi sebelumnya">
         <svg viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 1 1-6.14 4.35l.94.33A5.5 5.5 0 1 0 8 2.5c-1.77 0-3.35.84-4.35 2.15H5.5v1H2V2.15h1v1.72A6.48 6.48 0 0 1 8 1.5M7.5 4h1v3.8l2.6 1.5-.5.87-3.1-1.8z"/></svg>
@@ -223,7 +205,7 @@
             <svg viewBox="0 0 16 16"><path d="M8 0l1.6 4.4L14 6l-4.4 1.6L8 12 6.4 7.6 2 6l4.4-1.6zM13 10l.8 2.2L16 13l-2.2.8L13 16l-.8-2.2L10 13l2.2-.8z"/></svg>
             Asisten AI
           </span>
-          <button type="button" class="credit-badge" id="aiCredits" class:empty={credit.empty} class:plan={Boolean(plan)} disabled={credit.disabled} title={credit.title} onclick={() => actions.topup()}>{credit.text}</button>
+          <button type="button" class="credit-badge" id="aiCredits" class:empty={credit.empty} class:personal={credit.personal} disabled={credit.disabled} title={credit.title} onclick={() => (credit.personal ? actions.setMode('providers') : actions.topup())}>{credit.text}</button>
           <button class="icon-btn" id="aiHistory" title="Riwayat percakapan" onclick={(e) => actions.historyMenu(e.currentTarget)}>
             <svg viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 1 1-6.14 4.35l.94.33A5.5 5.5 0 1 0 8 2.5c-1.77 0-3.35.84-4.35 2.15H5.5v1H2V2.15h1v1.72A6.48 6.48 0 0 1 8 1.5M7.5 4h1v3.8l2.6 1.5-.5.87-3.1-1.8z"/></svg>
           </button>
@@ -245,6 +227,9 @@
             {:else if ui.mode === 'fn'}
               <svg viewBox="0 0 16 16"><path d="M9.3 1 3 9.2h4.2L6.3 15l6.6-8.4H8.7z"/></svg>
               Fungsi serverless
+            {:else if ui.mode === 'providers'}
+              <svg viewBox="0 0 16 16"><path d="M8 1l1.4 4.1L13.5 6.5 9.4 7.9 8 12 6.6 7.9 2.5 6.5l4.1-1.4zM12.5 10l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+              Provider AI
             {:else if ui.mode === 'history'}
               <svg viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 1 1-6.14 4.35l.94.33A5.5 5.5 0 1 0 8 2.5c-1.77 0-3.35.84-4.35 2.15H5.5v1H2V2.15h1v1.72A6.48 6.48 0 0 1 8 1.5M7.5 4h1v3.8l2.6 1.5-.5.87-3.1-1.8z"/></svg>
               Riwayat versi
@@ -340,6 +325,8 @@
       <div class="console-view" id="consoleView" hidden={ui.mode !== 'console'}>{#if ui.loaded.console}<ConsoleTab />{/if}</div>
 
       <div class="history-view" id="historyView" hidden={ui.mode !== 'history'}>{#if ui.loaded.history}<History bind:this={views.history} />{/if}</div>
+
+      <div class="fn-view providers-view" id="providersView" hidden={ui.mode !== 'providers'}>{#if ui.loaded.providers}<Providers bind:this={views.providers} />{/if}</div>
 
       <div class="docs-view" id="docsView" hidden={ui.mode !== 'docs'}>{#if ui.loaded.docs}<Docs bind:this={views.docs} />{/if}</div>
     </div>

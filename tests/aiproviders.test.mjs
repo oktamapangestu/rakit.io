@@ -95,7 +95,7 @@ test('provider: hanya owner, divalidasi, API key tidak pernah dikirim balik', { 
 });
 
 test('model cadangan di provider lain: provider utama gangguan → dijawab provider kedua', { skip }, async () => {
-  const stack = await startStack({ AI_BONUS_CREDITS: '20' });
+  const stack = await startStack({ AI_DAILY_PROMPTS: '22' });
   const second = await startProvider('sk-kedua');
   try {
     const admin = await stack.admin();

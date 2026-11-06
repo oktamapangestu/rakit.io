@@ -2,7 +2,6 @@ package fn
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"rakit.io/server/internal/config"
-	"rakit.io/server/internal/httpx"
 	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/store"
 	"rakit.io/server/internal/userdb"
@@ -31,7 +29,7 @@ func setup(t *testing.T) (*Service, *store.Store, *store.Project) {
 	p := plans.New(cfg, db)
 	s := New(cfg, db, userdb.New(cfg, p), p)
 	uid, _ := db.InsertUser("budi", "budi@x.id", "")
-	db.InsertProject(uid, "toko", "toko")
+	db.InsertProject(uid, "toko", "toko", true)
 	project, _ := db.ProjectBySlug("toko")
 	write := func(root, code string) {
 		os.MkdirAll(filepath.Join(root, Dir), 0o755)
@@ -40,10 +38,6 @@ func setup(t *testing.T) (*Service, *store.Store, *store.Project) {
 	write(cfg.SiteRoot("toko"), `export default (req) => { console.log('jalan', req.method, 'dev'); return 1 }`)
 	write(cfg.PublishedRoot("toko"), `export default (req) => { console.log('jalan', req.method, 'prod'); return 1 }`)
 	return s, db, project
-}
-
-func subscribe(db *store.Store, userID int64, plan string, expires int64) {
-	db.DB().Exec("INSERT OR REPLACE INTO subscriptions (user_id, plan, started_at, expires_at, updated_at) VALUES (?, ?, 0, ?, 0)", userID, plan, expires)
 }
 
 // waitLogs menunggu log jadwal yang dijalankan di goroutine.
@@ -65,11 +59,6 @@ func TestJadwal(t *testing.T) {
 	s, db, p := setup(t)
 	ctx := context.Background()
 
-	var he *httpx.Error
-	if err := s.SetSchedule(p, "lapor", "*/15 * * * *"); !errors.As(err, &he) || he.Code != "fn_cron_plan" {
-		t.Fatalf("paket gratis: %v", err)
-	}
-	subscribe(db, p.UserID, "pro", time.Now().Add(time.Hour).UnixMilli())
 	if err := s.SetSchedule(p, "lapor", "*/5 * * * *"); err == nil || !strings.Contains(err.Error(), "paling sering setiap 15 menit") {
 		t.Fatalf("terlalu sering: %v", err)
 	}
@@ -104,16 +93,16 @@ func TestJadwal(t *testing.T) {
 		t.Fatalf("manual: %q", *logs[0].Logs)
 	}
 
-	// Langganan berakhir: jadwal berhenti (tetap tersimpan, ditandai tidak aktif).
-	subscribe(db, p.UserID, "pro", time.Now().Add(-time.Hour).UnixMilli())
-	s.tick(ctx, at("2026-10-02 10:45"))
+	// Jadwal lama yang lebih sering dari batas: tetap tersimpan, ditandai tidak aktif, dan tidak dijalankan.
+	db.DB().Exec("UPDATE fn_schedules SET cron = '*/5 * * * *' WHERE project_id = ?", p.ID)
+	s.tick(ctx, at("2026-10-02 10:50"))
 	time.Sleep(300 * time.Millisecond)
 	if logs, _ = s.Logs(p, "lapor", 50); len(logs) != 2 {
-		t.Fatalf("tetap jalan setelah langganan berakhir: %d", len(logs))
+		t.Fatalf("jadwal terlalu sering tetap jalan: %d", len(logs))
 	}
 	ov, _ = s.Overview(p)
-	if sc := ov.Functions[0].Schedule; sc.Active || sc.Note != "Jadwal hanya berjalan pada paket Pro/Unlimited" {
-		t.Fatalf("setelah berakhir: %+v", sc)
+	if sc := ov.Functions[0].Schedule; sc.Active || sc.Note != "Terlalu sering: paling sering setiap 15 menit" {
+		t.Fatalf("terlalu sering: %+v", sc)
 	}
 	if err := s.SetSchedule(p, "lapor", ""); err != nil {
 		t.Fatal(err)
@@ -130,10 +119,9 @@ func TestAIContext(t *testing.T) {
 	os.WriteFile(filepath.Join(s.cfg.SiteRoot("toko"), Dir, "kirim.js"), []byte("export default (r) => r.x.y"), 0o644)
 	os.Chtimes(filepath.Join(s.cfg.SiteRoot("toko"), Dir, "kirim.js"), time.Now().Add(-time.Minute), time.Now().Add(-time.Minute))
 	s.record(target, "kirim", "http", &Outcome{Status: 500, Error: "TypeError: x is undefined", Logs: "log: mulai\n"})
-	// Jadwal dari masa langganan yang sudah habis: tetap tersimpan, tapi tidak berjalan di paket gratis.
 	db.DB().Exec("INSERT INTO fn_schedules (project_id, name, cron, created_at) VALUES (?, 'lapor', '0 7 * * *', 0)", p.ID)
 	schedules, failures := s.AIContext("toko")
-	if len(schedules) != 1 || !strings.HasPrefix(schedules[0], `lapor: "0 7 * * *"`) || !strings.Contains(schedules[0], "Pro/Unlimited") {
+	if len(schedules) != 1 || !strings.HasPrefix(schedules[0], `lapor: "0 7 * * *"`) {
 		t.Fatalf("jadwal: %q", schedules)
 	}
 	if len(failures) != 1 || !strings.Contains(failures[0], "kirim (http") || !strings.Contains(failures[0], "TypeError: x is undefined") || !strings.Contains(failures[0], "log: mulai") {

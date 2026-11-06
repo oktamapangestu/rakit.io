@@ -7,7 +7,7 @@ import { startStack } from './helpers/harness.mjs';
 const skip = !process.env.RAKIT_SERVER_CMD?.includes('go/bin/rakit') && 'fitur khusus server Go';
 
 let stack;
-before(async () => { if (!skip) stack = await startStack({ AI_BONUS_CREDITS: '10', AI_DAILY_CREDITS: '0' }); });
+before(async () => { if (!skip) stack = await startStack({ AI_DAILY_PROMPTS: '10' }); });
 after(() => stack?.stop());
 
 async function write(user, path, content) {
@@ -102,12 +102,12 @@ test('Catatan Project: disimpan, ikut dikirim ke AI Builder & Plan, dan bisa dib
   assert.ok(stack.ai.requests.at(-1).messages.at(-1).content.includes(block));
 
   // Draf: 1 kredit, pagar kode & judul dibuang, tidak langsung disimpan; catatan lama ikut dikirim.
-  const before = (await user.credits()).remaining;
+  const before = (await user.credits()).freeRemaining;
   stack.ai.script.push({ text: '```markdown\n# Catatan Project\n\n## Tentang website\n- Toko kue (perkiraan — sesuaikan)\n```' });
   const draft = await user.post('/api/docs/notes/draft');
   assert.equal(draft.status, 200, JSON.stringify(draft.body));
   assert.equal(draft.body.draft, '## Tentang website\n- Toko kue (perkiraan — sesuaikan)');
-  assert.equal(draft.body.credits.remaining, before - 1);
+  assert.equal(draft.body.credits.freeRemaining, before - 1);
   const sent = stack.ai.requests.at(-1).messages;
   assert.match(sent[0].content, /Project notes/);
   assert.ok(sent[1].content.includes(block) && sent[1].content.includes('Automatic analysis'));
@@ -123,7 +123,7 @@ test('Catatan Project: disimpan, ikut dikirim ke AI Builder & Plan, dan bisa dib
   stack.ai.script.push({ text: '   ' });
   const bad = await user.post('/api/docs/notes/draft');
   assert.equal(bad.status, 422);
-  assert.equal((await user.credits()).remaining, afterDrafts);
+  assert.equal((await user.credits()).freeRemaining, afterDrafts);
 
   const stranger = await stack.register('docs-orang-lain');
   assert.equal((await stranger.req('PUT', '/api/docs/notes', { notes: 'x' }, { 'X-Project': 'docs-catatan' })).status, 404);

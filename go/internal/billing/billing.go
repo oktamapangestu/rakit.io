@@ -28,7 +28,6 @@ import (
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/credits"
 	"rakit.io/server/internal/httpx"
-	"rakit.io/server/internal/plans"
 	"rakit.io/server/internal/store"
 )
 
@@ -40,7 +39,6 @@ const (
 type Service struct {
 	cfg     *config.Config
 	db      *sql.DB
-	plans   *plans.Plans
 	credits *credits.Service
 	client  *http.Client
 
@@ -48,8 +46,8 @@ type Service struct {
 	lastChecked map[string]time.Time // payment id -> waktu cek terakhir ke Kasera
 }
 
-func New(cfg *config.Config, db *store.Store, p *plans.Plans, c *credits.Service) *Service {
-	return &Service{cfg: cfg, db: db.DB(), plans: p, credits: c, client: &http.Client{Timeout: 20 * time.Second}, lastChecked: map[string]time.Time{}}
+func New(cfg *config.Config, db *store.Store, c *credits.Service) *Service {
+	return &Service{cfg: cfg, db: db.DB(), credits: c, client: &http.Client{Timeout: 20 * time.Second}, lastChecked: map[string]time.Time{}}
 }
 
 // ---------- Kasera Pay API ----------
@@ -155,7 +153,6 @@ type view struct {
 	ID           string          `json:"id"`
 	Status       string          `json:"status"`
 	Credits      int             `json:"credits"`
-	Plan         *string         `json:"plan"`
 	Assistant    bool            `json:"assistant"` // isi ulang Saldo Asisten (nominal = amount)
 	Amount       int             `json:"amount"`
 	ExpiresAt    *string         `json:"expiresAt"`
@@ -203,11 +200,6 @@ func (s *Service) view(p *payment) (*view, error) {
 		ID: p.ID, Status: p.Status, Credits: p.Credits, Assistant: strings.HasPrefix(p.PackageID, "asst:"), Amount: p.Amount,
 		ExpiresAt: nullable(p.ExpiresAt), CheckoutURL: nullable(p.CheckoutURL), Instructions: json.RawMessage("null"), Livemode: p.Livemode,
 	}
-	if strings.HasPrefix(p.PackageID, "plan:") {
-		if plan := s.plans.FromPackageID(p.PackageID); plan != nil {
-			v.Plan = &plan.Name
-		}
-	}
 	if p.Instructions.Valid && json.Valid([]byte(p.Instructions.String)) {
 		v.Instructions = json.RawMessage(p.Instructions.String)
 	}
@@ -230,11 +222,8 @@ func (s *Service) Packages(userID int64) map[string]any {
 		"enabled":           s.cfg.Billing.Enabled,
 		"livemode":          s.cfg.Billing.Livemode,
 		"packages":          s.cfg.Billing.Packages,
-		"plans":             s.plans.Public(),
 		"assistantPackages": s.cfg.Assistant.Packages,
-		// Pembanding "× lipat" di promosi langganan.
-		"free":    map[string]any{"storage": plans.FreeStorage, "history": plans.FreeHistory},
-		"credits": s.credits.Info(userID),
+		"credits":           s.credits.Info(userID),
 	}
 }
 
@@ -335,17 +324,6 @@ func (s *Service) AssistantTopup(ctx context.Context, user *store.User, packageI
 		}
 	}
 	return 0, nil, httpx.Errorf(400, "Paket saldo asisten tidak ditemukan")
-}
-
-func (s *Service) Subscribe(ctx context.Context, user *store.User, planID string) (int, any, error) {
-	plan := s.plans.ForSale(planID)
-	if plan == nil {
-		return 0, nil, httpx.Errorf(400, "Paket langganan ini sedang tidak dijual")
-	}
-	if err := s.plans.AssertCanBuy(user.ID, plan); err != nil {
-		return 0, nil, err
-	}
-	return s.wrap(s.create(ctx, user, plans.PackageID(plan.ID), 0, plan.Price, "Langganan "+plan.Name+" 30 hari"))
 }
 
 func (s *Service) wrap(status int, v *view, err error) (int, any, error) {

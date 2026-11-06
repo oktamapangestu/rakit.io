@@ -9,6 +9,7 @@ export const core = $state({
   projects: [],
   projectSlug: null,
   maxProjects: 0,
+  maxCustom: 0, // alamat (subdomain) pilihan sendiri per akun; sisanya alamat acak
   entries: [],
   usage: null, // { size, entries, limits } dari GET /api/files
   limits: null,

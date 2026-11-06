@@ -8,7 +8,7 @@
   import { ai, AI_MODES, SHOW_AGENT_MODE, activeMode, engineName, setInput, send, stopJob, openQuestion } from './state.svelte.js';
   import { SPARK } from '../icons.js';
 
-  const { openTopup, icons, pageName } = getContext('editor');
+  const { openTopup, icons, pageName, openProviders } = getContext('editor');
 
   let box;
   $effect(() => {
@@ -22,7 +22,7 @@
 <div class="ai-messages" id="aiMessages" bind:this={box}>
   {#if !ai.messages.length}
     {#if ai.credits && !ai.credits.enabled}
-      <div class="ai-notice">Fitur AI belum diaktifkan di server ini.</div>
+      <div class="ai-notice">AI rakit belum tersedia di sini. Pakai API key AI milikmu: buka tab <button type="button" class="link-btn" onclick={openProviders}>Provider AI</button>, lalu hubungkan OpenAI, DeepSeek, Groq, OpenRouter, atau Ollama.</div>
     {:else}
       <div class="ai-empty">
         <div class="spark"><Icon d={SPARK} /></div>

@@ -18,7 +18,7 @@ const snapshot = async (user, label) => (await user.post('/api/versions', { labe
 test('versi otomatis dibuat sebelum edit pertama, paling sering sekali per 10 menit', async () => {
   const user = await stack.register();
   const initial = (await user.get('/api/versions')).body;
-  assert.deepEqual(initial, { versions: [], history: { days: 7, max: 20 } });
+  assert.deepEqual(initial, { versions: [], history: { days: 30, max: 200 } });
 
   const original = fs.readFileSync(path.join(rootOf(user), 'index.html'), 'utf8');
   await save(user, 'index.html', 'edit 1');
@@ -159,33 +159,26 @@ test('kembalikan satu file saja', async () => {
   assert.equal((await user.post(`/api/versions/${id}/restore`, { path: '../x' })).status, 400);
 });
 
-test('batas riwayat mengikuti paket: versi lama & berlebih dipangkas, isi yang tak terpakai dibersihkan', async () => {
+test('batas riwayat: 30 hari / 200 versi; versi lama dipangkas, isi yang tak terpakai dibersihkan', async () => {
   const user = await stack.register();
-  for (let i = 0; i < 22; i++) {
+  assert.deepEqual((await user.get('/api/versions')).body.history, { days: 30, max: 200 });
+  for (let i = 0; i < 6; i++) {
     fs.writeFileSync(path.join(rootOf(user), 'index.html'), `isi ke-${i}`);
     await snapshot(user, `v${i}`);
   }
   let versions = await list(user);
-  assert.equal(versions.length, 20, 'paket gratis: maksimal 20 versi');
-  assert.deepEqual([versions[0].label, versions.at(-1).label], ['v21', 'v2']);
+  assert.equal(versions.length, 6);
   const blobDir = path.join(stack.dataDir, 'versions', user.username);
   const blobCount = () => fs.readdirSync(blobDir, { recursive: true }).filter((p) => p.length > 60).length;
-  assert.equal(blobCount(), 22, '20 isi index.html + style.css + script.js');
+  assert.equal(blobCount(), 8, '6 isi index.html + style.css + script.js');
 
-  // Lebih tua dari 7 hari: ikut terhapus saat versi berikutnya dibuat.
-  const old = versions.slice(-5).map((v) => v.id);
-  stack.db().prepare(`UPDATE versions SET created_at = ? WHERE id IN (${old.join(',')})`).run(Date.now() - 8 * DAY_MS);
+  // Lebih tua dari 30 hari: ikut terhapus saat versi berikutnya dibuat.
+  const old = versions.slice(-3).map((v) => v.id);
+  stack.db().prepare(`UPDATE versions SET created_at = ? WHERE id IN (${old.join(',')})`).run(Date.now() - 31 * DAY_MS);
   await snapshot(user, 'terbaru');
   versions = await list(user);
-  assert.equal(versions.length, 16);
-  assert.equal(blobCount(), 17);
-
-  // Pelanggan Pro: 30 hari, 200 versi.
-  stack.db().prepare('INSERT INTO subscriptions (user_id, plan, started_at, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(user.userId, 'pro', Date.now(), Date.now() + DAY_MS, Date.now());
-  assert.deepEqual((await user.get('/api/versions')).body.history, { days: 30, max: 200 });
-  for (let i = 0; i < 6; i++) await snapshot(user, `pro${i}`);
-  assert.equal((await list(user)).length, 22);
+  assert.equal(versions.length, 4);
+  assert.equal(blobCount(), 5);
 });
 
 test('versi yang isinya sudah tidak tersedia → 410', async () => {

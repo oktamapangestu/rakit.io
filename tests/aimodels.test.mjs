@@ -53,7 +53,7 @@ test('pengaturan model: hanya owner, divalidasi, default dari .env', async () =>
 });
 
 test('model utama gangguan → pindah ke model cadangan, lalu model utama dilewati sementara', async () => {
-  const stack = await startStack({ AI_BONUS_CREDITS: '20' });
+  const stack = await startStack({ AI_DAILY_PROMPTS: '22' });
   try {
     const admin = await stack.admin();
     const user = await stack.register();
@@ -64,7 +64,7 @@ test('model utama gangguan → pindah ke model cadangan, lalu model utama dilewa
     const first = await user.prompt('satu');
     assert.equal(first.final.message.content, 'dari mock-cadangan');
     assert.deepEqual(seen(), ['mock-main', 'mock-cadangan']);
-    assert.equal(first.final.credits.remaining, 21, 'tetap 1 kredit');
+    assert.equal(first.final.credits.freeRemaining, 21, 'tetap 1 kredit');
 
     // Selama masa jeda, permintaan berikutnya langsung ke cadangan.
     await user.prompt('dua');
@@ -83,7 +83,7 @@ test('model utama gangguan → pindah ke model cadangan, lalu model utama dilewa
     stack.ai.respond = () => ({ status: 500 });
     const both = await user.prompt('tiga');
     assert.deepEqual(seen().slice(3), ['mock-cadangan', 'mock-main']);
-    assert.deepEqual([both.final.type, both.final.credits.remaining], ['error', 20]);
+    assert.deepEqual([both.final.type, both.final.credits.freeRemaining], ['error', 20]);
 
     // Keduanya pulih: kembali ke urutan utama → cadangan.
     stack.ai.respond = (body) => ({ text: `dari ${body.model}` });
@@ -95,7 +95,7 @@ test('model utama gangguan → pindah ke model cadangan, lalu model utama dilewa
 });
 
 test('beberapa model cadangan dicoba berurutan; pengaturan lama (satu cadangan) tetap terbaca', async () => {
-  const stack = await startStack({ AI_BONUS_CREDITS: '20' });
+  const stack = await startStack({ AI_DAILY_PROMPTS: '22' });
   try {
     const admin = await stack.admin();
     const user = await stack.register();
@@ -123,7 +123,7 @@ test('beberapa model cadangan dicoba berurutan; pengaturan lama (satu cadangan) 
 });
 
 test('yang bukan gangguan model tidak memicu pindah: API key ditolak; jawaban terputus memicu pindah', async () => {
-  const stack = await startStack({ AI_FALLBACK_MODEL: 'mock-cadangan', AI_VISION_FALLBACK_MODEL: 'mock-vision-2', AI_BONUS_CREDITS: '20' });
+  const stack = await startStack({ AI_FALLBACK_MODEL: 'mock-cadangan', AI_VISION_FALLBACK_MODEL: 'mock-vision-2', AI_DAILY_PROMPTS: '22' });
   try {
     const user = await stack.register();
     const seen = () => stack.ai.requests.map((r) => r.model);
@@ -161,7 +161,7 @@ test('antrean: lebih dari batas menunggu giliran; antrean penuh ditolak dengan k
     const third = await c.startPrompt('ketiga');
     const full = await c.finishJob(third.body.assistantMessage.id);
     assert.deepEqual([full.type, full.error], ['error', 'AI sedang penuh. Coba lagi beberapa saat lagi. Kredit dikembalikan.']);
-    assert.equal(full.credits.remaining, 4);
+    assert.equal(full.credits.freeRemaining, 4);
     assert.equal(stack.db().prepare('SELECT status FROM ai_requests WHERE user_id = ?').get(c.userId).status, 'queue_full');
     assert.equal((await b.get(`/api/ai/threads/${second.body.threadId}`)).body.messages[1].status, 'queued');
 
@@ -182,7 +182,7 @@ test('AI belum dikonfigurasi: prompt ditolak 503 tanpa memotong kredit', async (
     assert.equal((await user.credits()).enabled, false);
     const res = await user.startPrompt('halo');
     assert.deepEqual([res.status, res.body.error], [503, 'Fitur AI belum dikonfigurasi di server']);
-    assert.equal((await user.credits()).remaining, 4);
+    assert.equal((await user.credits()).freeRemaining, 4);
   } finally {
     await stack.stop();
   }

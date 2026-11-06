@@ -136,7 +136,7 @@ func (c *conn) exists(query string, args ...any) (bool, error) {
 func translate(err error) error {
 	var se *sqlite.Error
 	if errors.As(err, &se) && se.Code()&0xff == sqliteFull {
-		return httpx.Errorf(413, "Database penuh. Hapus data yang tidak dipakai, atau berlangganan untuk kuota database lebih besar.")
+		return httpx.Errorf(413, "Database penuh. Hapus data yang tidak dipakai.")
 	}
 	return err
 }
@@ -357,6 +357,24 @@ func (d *DB) Remove(slug string) {
 	for _, suffix := range []string{"", "-wal", "-shm"} {
 		os.Remove(d.path(slug) + suffix)
 	}
+}
+
+// Move memindahkan file database ke kunci baru (subdomain project diganti). Koneksi lama ditutup dulu.
+func (d *DB) Move(from, to string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if h := d.pool[from]; h != nil {
+		d.evict(from, h)
+	}
+	if h := d.pool[to]; h != nil {
+		d.evict(to, h)
+	}
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		if err := os.Rename(d.path(from)+suffix, d.path(to)+suffix); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // with membuka database project, mengambil tabel `name`, lalu menjalankan fn. owner = dari editor

@@ -48,11 +48,9 @@
 </script>
 
 <div class="ai-topup" id="aiTopupBanner" hidden={!empty}>
-  <span id="aiTopupText">{!c ? 'Kredit AI kamu habis.' : c.topupEnabled
-    ? 'Kredit AI kamu habis.'
-    : c.bonusRemaining > 0
-      ? `Masih ada bonus awal ${c.bonusRemaining} kredit.`
-      : `Kredit AI hari ini habis (gratis ${c.limit}/hari). Terisi lagi besok 00.00 WIB.`}</span>
+  <span id="aiTopupText">{!c ? 'Jatah AI kamu habis.' : c.topupEnabled
+    ? `Jatah ${c.limit} prompt hari ini habis. Terisi lagi besok 00.00 WIB, atau pakai kredit.`
+    : `Jatah ${c.limit} prompt hari ini habis. Terisi lagi besok 00.00 WIB.`}</span>
   <button type="button" class="ai-topup-btn" id="aiTopupBtn" hidden={!c?.topupEnabled} onclick={() => openTopup()}>Isi ulang kredit</button>
 </div>
 <form class="ai-composer" id="aiForm" class:drop

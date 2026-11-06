@@ -199,7 +199,7 @@
       <li><a class="nav-link" href="#f-riwayat"><span class="nav-n">F11</span><span class="nav-t">Riwayat Versi</span></a></li>
       <li><a class="nav-link" href="#f-console"><span class="nav-n">F12</span><span class="nav-t">Console</span></a></li>
       <li><a class="nav-link" href="#f-publikasi"><span class="nav-n">F13</span><span class="nav-t">Publikasi: Langsung Tayang atau Dev/Prod</span></a></li>
-      <li><a class="nav-link" href="#f-kredit"><span class="nav-n">F14</span><span class="nav-t">Kredit AI, Langganan &amp; Pembayaran</span></a></li>
+      <li><a class="nav-link" href="#f-kredit"><span class="nav-n">F14</span><span class="nav-t">Jatah AI, Kredit &amp; Pembayaran</span></a></li>
       <li><a class="nav-link" href="#f-pengaturan"><span class="nav-n">F15</span><span class="nav-t">Pengaturan &amp; Pintasan Keyboard</span></a></li>
       <li><a class="nav-link" href="#f-masalah"><span class="nav-n">F16</span><span class="nav-t">Masalah Umum &amp; Solusinya</span></a></li>
     </ul>
@@ -263,7 +263,7 @@
 <ol class="steps">
   <li>Buka halaman depan rakit.io, klik <span class="ui">Daftar</span>. Isi <b>username</b>, <b>email</b>, dan <b>password</b> — atau pilih <span class="ui">Lanjutkan dengan Google</span>.</li>
   <li>Setelah daftar, website pertamamu langsung online di <code>namamu.rakit.io</code> dan editor terbuka otomatis.</li>
-  <li>Akun baru mendapat <b>bonus kredit AI</b> sekali pakai, ditambah <b>kredit gratis setiap hari</b> (lihat <a href="#f-kredit">Kredit &amp; Paket</a>).</li>
+  <li>Setiap akun mendapat <b>20 prompt AI gratis setiap hari</b> (lihat <a href="#f-kredit">Jatah AI &amp; Kredit</a>).</li>
 </ol>
 <div class="note">🔐 Akun yang didaftarkan dengan email + password tetap masuk memakai password, walaupun emailnya sama dengan akun Google-mu. Akun tidak digabung otomatis demi keamanan.</div>
 
@@ -299,7 +299,7 @@
   <tr><td>Simpan semua</td><td>Menyimpan semua file yang masih terbuka &amp; belum tersimpan.</td></tr>
   <tr><td>Pengaturan</td><td>Tema terang/gelap, bahasa, dan prediksi kode AI.</td></tr>
   <tr><td>English / Bahasa Indonesia</td><td>Mengganti bahasa tampilan.</td></tr>
-  <tr><td>Langganan &amp; kredit AI</td><td>Lihat paket, beli kredit, atau berlangganan.</td></tr>
+  <tr><td>Isi ulang kredit AI</td><td>Beli kredit untuk lanjut setelah jatah harian habis.</td></tr>
   <tr><td>Keluar</td><td>Keluar dari akun di browser ini.</td></tr>
 </table>
 
@@ -368,11 +368,11 @@
 <div class="tip">💡 AI tahu daftar gambar di project-mu, jadi kamu bisa menulis: <i>“pakai gambar /images/hero.jpg sebagai latar bagian hero”</i>. AI tidak bisa membuat atau mengubah gambar — upload sendiri gambar yang dibutuhkan.</div>
 
 <table>
-  <tr><th>Batas</th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>Ukuran satu file kode</td><td colspan="3">512 KB (.html · .css · .js)</td></tr>
-  <tr><td>Ukuran satu gambar</td><td>1 MB</td><td>5 MB</td><td>10 MB</td></tr>
-  <tr><td>Total storage per project</td><td>20 MB</td><td>100 MB</td><td>250 MB</td></tr>
-  <tr><td>Jumlah file &amp; folder</td><td>500</td><td>2.000</td><td>5.000</td></tr>
+  <tr><th>Batas</th><th>Semua akun</th></tr>
+  <tr><td>Ukuran satu file kode</td><td>512 KB (.html · .css · .js)</td></tr>
+  <tr><td>Ukuran satu gambar</td><td>5 MB</td></tr>
+  <tr><td>Total storage per project</td><td>100 MB</td></tr>
+  <tr><td>Jumlah file &amp; folder</td><td>2.000</td></tr>
 </table>
 
 <!-- ══════════════ F4. EDITOR KODE ══════════════ -->
@@ -598,10 +598,10 @@ await fetch('/api/db/produk', {
 <div class="warn">⚠️ <b>Jangan simpan gambar sebagai base64</b> di kolom teks — akan ditolak. Pakai kolom bertipe <b>Gambar</b> dan upload seperti contoh di atas. Pengunjung hanya bisa upload bila akses <code>create</code> atau <code>update</code> tabel itu publik.</div>
 
 <table>
-  <tr><th>Batas database</th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>Ukuran per project</td><td>10 MB</td><td>50 MB</td><td>100 MB</td></tr>
-  <tr><td>Jumlah tabel · kolom</td><td colspan="3">20 tabel · 30 kolom per tabel</td></tr>
-  <tr><td>Request dari pengunjung</td><td colspan="3">300 baca &amp; 60 tulis per menit per pengunjung · maks. 20 upload / 10 menit</td></tr>
+  <tr><th>Batas database</th><th>Semua akun</th></tr>
+  <tr><td>Ukuran per project</td><td>50 MB</td></tr>
+  <tr><td>Jumlah tabel · kolom</td><td>20 tabel · 30 kolom per tabel</td></tr>
+  <tr><td>Request dari pengunjung</td><td>300 baca &amp; 60 tulis per menit per pengunjung · maks. 20 upload / 10 menit</td></tr>
 </table>
 
 <!-- ══════════════ F8. FUNGSI SERVERLESS ══════════════ -->
@@ -753,7 +753,7 @@ const data = await res.json();</code></pre></figure>
 }
 // dari halaman: fetch('/api/fn/admin-pesanan?status=baru', { headers: { 'X-Admin-Key': kunci } })</code></pre></figure>
 
-<figure class="code" data-lang="js"><figcaption><span class="file">functions/laporan-harian.js</span><span class="desc">dijalankan jadwal (Pro/Unlimited)</span></figcaption><pre><code>export default async function (req, { db, env, fetch }) {
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/laporan-harian.js</span><span class="desc">dijalankan jadwal</span></figcaption><pre><code>export default async function (req, { db, env, fetch }) {
   if (req.method !== 'CRON') return Response.json({ error: 'Hanya untuk jadwal' }, { status: 403 });
 
   const sejak = Date.now() - 24 * 3600e3;                     // 24 jam terakhir (created_at dalam UTC)
@@ -823,8 +823,8 @@ const data = await res.json();</code></pre></figure>
     <p style="margin:6px 0">Isi nama (mis. <code>TELEGRAM_TOKEN</code>) dan nilainya, klik <span class="ui">Simpan</span>. Baca di kode lewat <code>env.TELEGRAM_TOKEN</code>. Nilai tidak ditampilkan lagi di editor.</p>
   </div>
   <div class="card">
-    <h3 style="margin-top:0">⏱ Jadwal <span class="pill">Pro / Unlimited</span></h3>
-    <p style="margin:6px 0">Klik <span class="ui">Jadwal</span> pada fungsi: setiap 5/15/30 menit, setiap jam, setiap hari jam tertentu, setiap minggu, atau cron kustom (waktu WIB). Paling sering: Pro 15 menit, Unlimited 5 menit.</p>
+    <h3 style="margin-top:0">⏱ Jadwal</h3>
+    <p style="margin:6px 0">Klik <span class="ui">Jadwal</span> pada fungsi: setiap 5/15/30 menit, setiap jam, setiap hari jam tertentu, setiap minggu, atau cron kustom (waktu WIB). Paling sering setiap 15 menit.</p>
   </div>
   <div class="card">
     <h3 style="margin-top:0">📜 Log eksekusi</h3>
@@ -836,8 +836,8 @@ const data = await res.json();</code></pre></figure>
   </div>
 </div>
 <table>
-  <tr><th>Eksekusi per hari (WIB)</th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>Semua fungsi di akun</td><td>1.000</td><td>20.000</td><td>100.000</td></tr>
+  <tr><th>Eksekusi per hari (WIB)</th><th>Semua akun</th></tr>
+  <tr><td>Semua fungsi di akun</td><td>20.000</td></tr>
 </table>
 <div class="warn">⚠️ <b>Jangan pernah menulis API key/token di file .html atau .js halaman</b> — siapa pun bisa melihatnya. Simpan di Rahasia (env) dan pakai lewat fungsi.</div>
 
@@ -930,9 +930,9 @@ const data = await res.json();</code></pre></figure>
 </div>
 <div class="warn">⚠️ <b>Database tidak ikut</b> disimpan/dikembalikan, supaya data kiriman pengunjung tidak hilang. Mengembalikan seluruh project juga menghapus file yang dibuat setelah versi itu.</div>
 <table>
-  <tr><th>Batas riwayat per project</th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>Disimpan selama</td><td>7 hari</td><td>30 hari</td><td>90 hari</td></tr>
-  <tr><td>Jumlah versi</td><td>20</td><td>200</td><td>2.000</td></tr>
+  <tr><th>Batas riwayat per project</th><th>Semua akun</th></tr>
+  <tr><td>Disimpan selama</td><td>30 hari</td></tr>
+  <tr><td>Jumlah versi</td><td>200</td></tr>
 </table>
 <p style="margin:6px 0;font-size:14px">Riwayat tidak dihitung ke kuota storage.</p>
 
@@ -984,53 +984,30 @@ const data = await res.json();</code></pre></figure>
 <div class="warn">⚠️ Kembali dari manual ke <b>langsung tayang</b> membuat perubahan yang belum dipublikasikan langsung tayang, dan data uji coba di dev diganti data asli dari website publik.</div>
 
 <!-- ══════════════ F14. KREDIT & PAKET ══════════════ -->
-<h2 id="f-kredit"><span class="n">F14</span>Kredit AI, Langganan &amp; Pembayaran</h2>
-<p class="lead">Badge kredit di panel AI menunjukkan sisa kreditmu. Klik badge itu atau menu avatar → <span class="ui">Langganan &amp; kredit AI</span>.</p>
+<h2 id="f-kredit"><span class="n">F14</span>Jatah AI, Kredit &amp; Pembayaran</h2>
+<p class="lead">Badge di panel AI menunjukkan sisa prompt gratis hari ini (atau sisa kredit bila jatah sudah habis). Klik badge itu atau menu avatar → <span class="ui">Isi ulang kredit AI</span>.</p>
 
-<h3>Berapa biaya tiap fitur?</h3>
+<h3>Jatah harian</h3>
+<p>Setiap akun mendapat <b>20 prompt AI gratis per hari</b>. Jatah terisi lagi pukul 00.00 WIB dan sisanya tidak menumpuk. Satu prompt dihitung 1, termasuk prompt dengan gambar. Tidak ada paket langganan: semua akun mendapat batas storage, database, riwayat, dan fungsi yang sama.</p>
+
+<h3>Setelah jatah habis</h3>
 <table>
-  <tr><th>Fitur</th><th>Biaya</th></tr>
+  <tr><th>Fitur</th><th>Biaya dari kredit yang dibeli</th></tr>
   <tr><td>Prompt AI (Builder / Plan)</td><td><b>1 kredit</b></td></tr>
   <tr><td>Prompt dengan gambar</td><td><b>2 kredit</b></td></tr>
   <tr><td>Update diagram</td><td><b>1 kredit</b></td></tr>
   <tr><td>Prediksi kode, Baca Alur Kode, perbaikan diagram</td><td><span class="badge b-ok">Gratis</span> (ada batas harian)</td></tr>
   <tr><td>AI di fungsi (<code>ai.*</code>)</td><td>Ditagih provider ke API key-mu, bukan kredit rakit.io</td></tr>
-  <tr><td>Prompt gagal / dihentikan / antrean penuh</td><td>Kredit <b>dikembalikan</b></td></tr>
+  <tr><td>Prompt gagal / dihentikan / antrean penuh</td><td>Jatah/kredit <b>dikembalikan</b></td></tr>
 </table>
-
-<h3>Sumber kredit (dipakai berurutan)</h3>
-<ol class="steps">
-  <li><b>Kuota langganan</b> — bila berlangganan Pro/Unlimited.</li>
-  <li><b>Bonus awal</b> untuk akun baru (sekali pakai), lalu <b>kredit gratis harian</b> — reset pukul 00.00 WIB, sisanya tidak menumpuk.</li>
-  <li><b>Kredit yang dibeli</b> — tidak hangus.</li>
-</ol>
-
-<h3>Paket</h3>
-<div class="table-scroll"><table>
-  <tr><th></th><th>Gratis</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>AI</td><td>Kredit gratis harian</td><td>Kuota kredit tiap 30 hari</td><td>Tanpa kuota bulanan, ada batas prompt per hari</td></tr>
-  <tr><td>Storage file / project</td><td>20 MB</td><td>100 MB</td><td>250 MB</td></tr>
-  <tr><td>Database / project</td><td>10 MB</td><td>50 MB</td><td>100 MB</td></tr>
-  <tr><td>File &amp; folder</td><td>500</td><td>2.000</td><td>5.000</td></tr>
-  <tr><td>Ukuran gambar</td><td>1 MB</td><td>5 MB</td><td>10 MB</td></tr>
-  <tr><td>Riwayat versi</td><td>7 hari / 20</td><td>30 hari / 200</td><td>90 hari / 2.000</td></tr>
-  <tr><td>Eksekusi fungsi / hari</td><td>1.000</td><td>20.000</td><td>100.000</td></tr>
-  <tr><td>Jadwal fungsi</td><td><span class="badge b-no">—</span></td><td>min. 15 menit</td><td>min. 5 menit</td></tr>
-</table></div>
-<p style="margin:6px 0;font-size:14px">Harga dan kuota AI terbaru tampil di menu <span class="ui">Langganan &amp; kredit AI</span>.</p>
+<p style="margin:6px 0;font-size:14px">Kredit yang dibeli tidak hangus, dan hanya dipakai setelah 20 prompt gratis hari itu habis.</p>
 
 <h3>Membayar dengan QRIS</h3>
 <ol class="steps">
-  <li>Pilih paket kredit atau langganan, lalu klik bayar.</li>
+  <li>Pilih paket kredit, lalu klik bayar.</li>
   <li>Pindai kode QRIS dengan aplikasi bank atau e-wallet mana pun.</li>
-  <li>Biarkan jendela pembayaran terbuka — kredit/paket aktif otomatis begitu pembayaran diterima.</li>
+  <li>Biarkan jendela pembayaran terbuka — kredit masuk otomatis begitu pembayaran diterima.</li>
 </ol>
-<ul>
-  <li><b>Langganan 30 hari</b>, sekali bayar tanpa tagihan otomatis.</li>
-  <li><b>Perpanjang</b> paket yang sama: masa aktif ditambah 30 hari dari tanggal berakhir.</li>
-  <li><b>Upgrade</b> Pro → Unlimited: langsung aktif, sisa hari Pro dikonversi sesuai harga.</li>
-  <li>Saat langganan berakhir, batas kembali ke Gratis. File tidak dihapus, tetapi file baru/lebih besar ditolak sampai pemakaian di bawah batas.</li>
-</ul>
 
 <!-- ══════════════ F15. PENGATURAN & PINTASAN ══════════════ -->
 <h2 id="f-pengaturan"><span class="n">F15</span>Pengaturan &amp; Pintasan Keyboard</h2>
@@ -1074,7 +1051,7 @@ const data = await res.json();</code></pre></figure>
   <tr><td>Perubahan tidak terlihat di website publik</td><td>Mode publikasi manual aktif — tekan <span class="ui">Publikasikan</span>. Atau file belum tersimpan.</td></tr>
   <tr><td>Hasil AI tidak sesuai</td><td>Tekan <span class="ui">Batalkan</span>, lalu tulis ulang lebih spesifik, atau pakai <span class="ui">Pilih blok</span>. Bisa juga kembali lewat tab Riwayat.</td></tr>
   <tr><td>“AI sedang penuh”</td><td>Antrean sedang ramai; kredit dikembalikan. Coba lagi sebentar.</td></tr>
-  <tr><td>Kredit habis</td><td>Tunggu reset 00.00 WIB, beli kredit, atau berlangganan.</td></tr>
+  <tr><td>Jatah AI habis</td><td>Tunggu reset 00.00 WIB, atau isi ulang kredit.</td></tr>
   <tr><td>File/gambar ditolak karena kuota</td><td>Hapus file yang tidak dipakai, perkecil gambar, atau upgrade paket.</td></tr>
   <tr><td>Fungsi error / timeout</td><td>Lihat Log eksekusi di tab Fungsi, lalu <span class="ui">✦ Perbaiki dengan AI</span>. Pastikan rahasia (env) yang dipakai sudah diisi.</td></tr>
   <tr><td>Tombol diam saja saat diklik</td><td>Buka tab Console → saring FE → baca error merah → <span class="ui">✦ Perbaiki dengan AI</span>.</td></tr>
@@ -2009,7 +1986,7 @@ Gaya ceria, warna-warni, animasi halus.</div>
   <tr><th>Aspek</th><th>Batas</th></tr>
   <tr><td>Jenis file</td><td><span class="badge b-ok">.html · .css · .js</span> + gambar yang di-upload</td></tr>
   <tr><td>Ukuran per file kode</td><td>Maks <b>512 KB</b></td></tr>
-  <tr><td>Total per project</td><td><b>20 MB</b> &amp; 500 file/folder (lebih besar di paket Pro/Unlimited)</td></tr>
+  <tr><td>Total per project</td><td><b>100 MB</b> &amp; 2.000 file/folder</td></tr>
   <tr><td>Panjang satu prompt</td><td>Maks <b>20.000 karakter</b>, maks. 3 gambar lampiran</td></tr>
   <tr><td>Kode server</td><td><span class="badge b-warn">fungsi serverless</span> JavaScript di <code>functions/</code> — bukan PHP/Node.js, tanpa npm</td></tr>
   <tr><td>Build step / npm</td><td><span class="badge b-no">Tidak ada</span> — pakai CDN untuk library</td></tr>
@@ -2047,7 +2024,7 @@ Gaya ceria, warna-warni, animasi halus.</div>
   </div>
 </div>
 
-<div class="warn">⚠️ <b>Hemat kredit AI.</b> Setiap prompt memakai kredit (prompt bergambar 2 kredit; akun baru dapat <b>bonus awal</b> sekali, lalu <b>kredit gratis per hari</b>, ditambah langganan &amp; isi ulang — lihat <a href="#f-kredit">Kredit &amp; Paket</a>). Rencanakan dulu dengan Mode Plan, baru jalankan — agar tidak bolak-balik memperbaiki.</div>
+<div class="warn">⚠️ <b>Hemat kredit AI.</b> Setiap akun dapat <b>20 prompt gratis per hari</b>; setelah habis, prompt memakai kredit yang dibeli (lihat <a href="#f-kredit">Jatah AI &amp; Kredit</a>). Rencanakan dulu dengan Mode Plan, baru jalankan — agar tidak bolak-balik memperbaiki.</div>
 
 <!-- ══════════════ TEMPLATE ══════════════ -->
 <h2 id="template"><span class="n">★</span>Template Prompt Universal</h2>

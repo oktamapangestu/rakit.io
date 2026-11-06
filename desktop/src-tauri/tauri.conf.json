@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "rakit",
+  "version": "0.1.0",
+  "identifier": "io.rakit.desktop",
+  "build": {
+    "beforeBuildCommand": "bash scripts/build-sidecar.sh && bash scripts/build-agent-runtime.sh",
+    "beforeDevCommand": "bash scripts/build-sidecar.sh && bash scripts/build-agent-runtime.sh",
+    "frontendDist": "../splash"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Bikin website dengan AI, di komputer sendiri",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/rakit"
+    ],
+    "resources": {
+      "../../public/": "public/",
+      "../../templates/": "templates/",
+      "agent-runtime/": "agent/"
+    }
+  }
+}

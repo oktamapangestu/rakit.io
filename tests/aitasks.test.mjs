@@ -13,7 +13,7 @@ let stack;
 let admin;
 before(async () => {
   if (skip) return;
-  stack = await startStack({ AI_BONUS_CREDITS: '20' });
+  stack = await startStack({ AI_DAILY_PROMPTS: '22' });
   admin = await stack.admin();
 });
 after(() => stack?.stop());

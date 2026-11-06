@@ -34,8 +34,7 @@ code that ignores these rules looks fine in a file but breaks on the site or in 
 - Paths: relative to the site root, letters, digits, `.`, `-`, `_`, may contain folders, must not start with a dot.
   Paths are case-sensitive. Reference site files with absolute paths (`/style.css`, `/js/app.js`,
   `/images/logo.png`) so they work from every page and folder.
-- Size limits: 512 KB per code file. Project storage and file count depend on the plan (Free: 20 MB, 500
-  files/folders; Pro 100 MB / 2,000; Unlimited 250 MB / 5,000). Uploaded image: 1 / 5 / 10 MB per file.
+- Size limits: 512 KB per code file; 100 MB and 2,000 files/folders per project. Uploaded image: 5 MB per file.
 - Routing:
   - `/` → `index.html`; `/folder/` → `folder/index.html`.
   - Clean URLs: `/tentang` → `tentang.html` (link to `/tentang` or `/tentang.html`; both work).
@@ -127,7 +126,7 @@ Each project has a built-in database. Tables are created by the owner in the "Da
   `reference` (id of a row in another table — set `refTable`), `image` (uploaded image address).
 - Column types cannot be changed later; plan them. Names: lowercase letters, digits, `_`, start with a letter.
 - `private: true` columns (email, phone, address) are never returned to visitors, even when `list` is public.
-- Limits: 20 tables × 30 columns; database size 10 / 50 / 100 MB (Free / Pro / Unlimited).
+- Limits: 20 tables × 30 columns; database size 50 MB per project.
 
 ### Access rules (per table, per operation)
 Each operation — `list`, `view`, `create`, `update`, `delete` — is either public (any visitor) or owner-only.
@@ -291,9 +290,9 @@ export default async function (req, { db, env, fetch, ai }) {
 - Secrets: read from `env.NAME`; NEVER write a key or token into any file. Agents cannot set secrets — tell the
   owner to open the "Fungsi" tab → "Rahasia (env)" and add `NAME`.
 - Limits: 10 seconds and 64 MB per run (waiting for `ai.*` does not count), 120 requests/minute per website and
-  60/minute per visitor; daily executions 1,000 / 20,000 / 100,000 (Free / Pro / Unlimited).
-- Scheduled runs (cron, e.g. a daily report): the owner sets them in "Fungsi" → "Jadwal" (Pro/Unlimited, WIB
-  time); the function receives `req.method === 'CRON'`. Return early for other methods if it is cron-only.
+  60/minute per visitor; 20,000 executions per day per account.
+- Scheduled runs (cron, e.g. a daily report): the owner sets them in "Fungsi" → "Jadwal" (WIB time, at most
+  every 15 minutes); the function receives `req.method === 'CRON'`. Return early for other methods if it is cron-only.
 - Calling a function from the page:
 
 ```js

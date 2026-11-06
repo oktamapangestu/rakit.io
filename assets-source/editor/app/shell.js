@@ -113,6 +113,8 @@ export function setMode(mode) {
     devConsoleOpen();
   } else if (mode === 'docs') {
     docsLoad();
+  } else if (mode === 'providers') {
+    providersLoad();
   } else if (mode === 'ai') {
     autoFocus($('#aiInput'));
   } else if (state.active) {
@@ -223,6 +225,14 @@ export function historyView() {
   ui.loaded.history = true;
   flushSync();
   return views.history;
+}
+
+// ---------- Provider AI ----------
+// Tab Provider AI: komponen Svelte assets-source/editor/providers/Providers.svelte (AI pribadi + provider fungsi).
+export function providersLoad() {
+  ui.loaded.providers = true;
+  flushSync();
+  views.providers.load();
 }
 
 // ---------- Dokumentasi ----------

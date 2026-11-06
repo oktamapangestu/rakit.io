@@ -262,63 +262,6 @@ a.chip-btn svg { width: 14px; height: 14px; }
   cursor: pointer;
 }
 .avatar:hover { border-color: var(--accent-line); }
-/* Pelanggan: cincin gradasi di avatar. */
-.avatar.subscribed { border: 0; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--accent); }
-.avatar.subscribed[data-plan="unlimited"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px #f59e0b; }
-
-/* Badge langganan di header. */
-.plan-badge {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px 0 10px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  border-radius: 999px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), color-mix(in srgb, var(--accent) 28%, transparent));
-  color: var(--white);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  cursor: pointer;
-  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-.plan-badge:hover { transform: translateY(-1px); box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 40%, transparent); }
-.plan-badge svg { width: 14px; height: 14px; fill: var(--accent-text); flex-shrink: 0; }
-.plan-badge[data-plan="unlimited"] {
-  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--warn) 28%, transparent), color-mix(in srgb, var(--pink) 24%, transparent));
-  color: var(--white);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--warn) 28%, transparent);
-}
-.plan-badge[data-plan="unlimited"]:hover { box-shadow: 0 0 24px color-mix(in srgb, var(--warn) 45%, transparent); }
-.plan-badge[data-plan="unlimited"] svg { fill: var(--warn); }
-/* Kilau yang lewat sesekali. */
-.plan-badge::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(110deg, transparent 30%, color-mix(in srgb, var(--text) 28%, transparent) 50%, transparent 70%);
-  transform: translateX(-120%);
-  animation: plan-shine 4.5s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes plan-shine {
-  0%, 70% { transform: translateX(-120%); }
-  100% { transform: translateX(120%); }
-}
-.plan-badge-days:empty { display: none; }
-.plan-badge-days { padding: 1px 7px; border-radius: 999px; background: rgb(0 0 0 / 0.3); font-size: 10.5px; font-weight: 600; }
-.plan-badge.expiring { border-color: color-mix(in srgb, var(--warn) 70%, transparent); }
-.plan-badge.expiring .plan-badge-days { color: var(--warn); }
-@media (prefers-reduced-motion: reduce) {
-  .plan-badge::after { animation: none; }
-}
 
 .icon-btn {
   display: inline-grid;
@@ -817,7 +760,6 @@ kbd {
 }
 /* Animasi di belakang popup tidak terlihat: hentikan supaya tidak terus menggambar ulang. */
 body:has(#modal:not([hidden])) #guideLink,
-body:has(#modal:not([hidden])) .plan-badge::after,
 body:has(#modal:not([hidden])) .layout-switch.attention,
 body:has(#modal:not([hidden])) .layout-switch.attention::before,
 body:has(#modal:not([hidden])) .release-dot { animation-play-state: paused; }
@@ -1209,231 +1151,8 @@ button.credit-badge:disabled { cursor: default; }
 }
 .topup-balance strong { color: var(--white); }
 
-.topup-note { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
 
-.topup-tabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 4px; border-radius: 10px; background: var(--bg); }
-.topup-tabs button {
-  flex: 1;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.topup-tabs button[aria-selected="true"] { background: var(--raised); color: var(--white); }
 
-.plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.plan-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px;
-  border: 1.5px solid var(--line-2);
-  border-radius: 14px;
-  background: var(--panel);
-}
-.plan-card.featured { border-color: var(--accent-line); background: linear-gradient(180deg, var(--accent-soft), var(--panel) 70%); }
-.plan-card.current { border-color: var(--ok); }
-.plan-name { display: flex; align-items: center; gap: 8px; color: var(--white); font-weight: 700; font-size: 15px; }
-.plan-tag { padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); font-size: 11px; font-weight: 600; }
-.plan-price { color: var(--white); font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
-.plan-price span { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0; }
-.plan-features { flex: 1; margin: 4px 0 10px; padding-left: 18px; color: var(--text); font-size: 12.5px; line-height: 1.6; }
-.plan-card button {
-  width: 100%;
-  height: 34px;
-  border: 1px solid var(--line-2);
-  border-radius: 10px;
-  background: var(--raised);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-}
-.plan-card button.primary { border: 0; background: var(--grad); color: var(--on-accent); font-weight: 600; }
-.plan-card button.primary:hover { filter: brightness(1.1); }
-.plan-card button:disabled { opacity: 0.55; cursor: default; }
-
-/* ---------- Promosi langganan (pengguna gratis, maks. 1x sehari) ---------- */
-.modal-backdrop.promo-backdrop { align-items: center; padding: 16px; overflow-y: auto; }
-.modal.promo-modal {
-  position: relative;
-  max-width: 720px;
-  max-height: calc(100vh - 32px);
-  max-height: calc(100dvh - 32px);
-  padding: 0 0 18px;
-  overflow-y: auto;
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  background: var(--panel);
-  box-shadow: 0 30px 80px var(--shadow), 0 0 0 1px color-mix(in srgb, var(--text) 3%, transparent), 0 0 60px color-mix(in srgb, var(--accent) 15%, transparent);
-  animation: promo-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.15);
-}
-@keyframes promo-in { from { opacity: 0; transform: translateY(14px) scale(0.97); } }
-.promo-modal svg { fill: currentColor; }
-.promo-close { position: absolute; top: 12px; right: 12px; z-index: 2; background: rgb(0 0 0 / 0.25); border-radius: 50%; }
-
-.promo-hero {
-  position: relative;
-  padding: 28px 28px 22px;
-  overflow: hidden;
-  background:
-    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 35%, transparent), transparent 55%),
-    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent) 40%, transparent), transparent 55%),
-    linear-gradient(180deg, var(--panel-2), var(--panel));
-  border-bottom: 1px solid var(--line);
-}
-.promo-orb { position: absolute; border-radius: 50%; filter: blur(40px); opacity: 0.55; pointer-events: none; animation: promo-float 9s ease-in-out infinite alternate; }
-.promo-orb.a { width: 180px; height: 180px; top: -70px; right: 12%; background: var(--accent); }
-.promo-orb.b { width: 140px; height: 140px; bottom: -80px; left: 8%; background: var(--accent); animation-duration: 11s; }
-@keyframes promo-float { to { transform: translate(24px, 14px) scale(1.1); } }
-.promo-hero > :not(.promo-orb) { position: relative; }
-.promo-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border: 1px solid var(--line-2);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent-text);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.promo-kicker svg { width: 12px; height: 12px; color: var(--warn); }
-.promo-hero h2 {
-  margin: 12px 0 6px;
-  font-size: 26px;
-  line-height: 1.15;
-  letter-spacing: -0.03em;
-  color: var(--white);
-  background: linear-gradient(90deg, var(--white), var(--accent-text) 60%, var(--ok-text));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.promo-hero p { max-width: 520px; margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
-.promo-today {
-  display: grid;
-  gap: 6px;
-  max-width: 340px;
-  margin-top: 16px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgb(0 0 0 / 0.25);
-  color: var(--text);
-  font-size: 12.5px;
-}
-.promo-today.empty { color: var(--danger-text); }
-.promo-meter { height: 5px; border-radius: 5px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; }
-.promo-meter i { display: block; height: 100%; border-radius: 5px; background: var(--grad); }
-.promo-today.empty .promo-meter i { background: var(--danger); }
-
-.promo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; padding: 20px 20px 4px; }
-/* Hanya satu paket dijual: kartu tidak melebar penuh. */
-.promo-grid:has(> .promo-card:only-child) { grid-template-columns: minmax(0, 400px); justify-content: center; }
-.promo-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: 20px 18px 18px;
-  border: 1px solid var(--line-2);
-  border-radius: 16px;
-  background: var(--panel-2);
-  animation: promo-up 0.45s var(--delay, 0ms) both cubic-bezier(0.2, 0.8, 0.3, 1);
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-}
-@keyframes promo-up { from { opacity: 0; transform: translateY(16px); } }
-.promo-card:hover { transform: translateY(-3px); }
-.promo-card.pro { border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 15%, transparent); }
-.promo-card.pro:hover { box-shadow: 0 14px 38px color-mix(in srgb, var(--accent) 28%, transparent); }
-.promo-card.unlimited {
-  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--warn) 10%, transparent), var(--panel-2) 45%);
-  box-shadow: 0 10px 30px color-mix(in srgb, var(--warn) 12%, transparent);
-}
-.promo-card.unlimited:hover { box-shadow: 0 14px 38px color-mix(in srgb, var(--warn) 25%, transparent); }
-.promo-ribbon {
-  position: absolute;
-  top: -11px;
-  left: 18px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--grad);
-  color: var(--on-accent);
-  font-size: 11px;
-  font-weight: 700;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent);
-}
-.promo-card.unlimited .promo-ribbon { background: linear-gradient(135deg, #f59e0b, var(--pink)); box-shadow: 0 4px 14px color-mix(in srgb, var(--warn) 40%, transparent); }
-.promo-name { color: var(--white); font-size: 16px; font-weight: 800; }
-.promo-price { margin-top: 6px; color: var(--white); font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.promo-price span { margin-left: 4px; color: var(--muted); font-size: 13px; font-weight: 500; letter-spacing: 0; }
-.promo-features { flex: 1; display: grid; gap: 8px; margin: 16px 0 18px; padding: 0; list-style: none; font-size: 13px; }
-.promo-features li { display: flex; align-items: center; gap: 8px; color: var(--text); }
-.promo-features li > span { flex: 1; }
-.promo-features svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--ok); }
-.promo-mult { padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.promo-cta {
-  height: 42px;
-  border: 0;
-  border-radius: 11px;
-  background: var(--grad);
-  color: var(--on-accent);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 35%, transparent);
-  transition: filter 0.15s, transform 0.15s;
-}
-.promo-card.unlimited .promo-cta { background: linear-gradient(135deg, #f59e0b, var(--pink)); box-shadow: 0 8px 22px color-mix(in srgb, var(--warn) 30%, transparent); }
-.promo-cta:hover { filter: brightness(1.1); transform: translateY(-1px); }
-
-.promo-trust { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 14px 20px 0; padding: 0; list-style: none; color: var(--muted); font-size: 12px; }
-.promo-trust li { display: inline-flex; align-items: center; gap: 5px; }
-.promo-trust svg { width: 13px; height: 13px; color: var(--ok); }
-.promo-test { margin: 10px 20px 0; text-align: center; }
-.promo-later {
-  display: block;
-  margin: 12px auto 0;
-  padding: 6px 10px;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.promo-later:hover { color: var(--text); text-decoration: underline; }
-
-@media (max-width: 560px) {
-  .promo-hero { padding: 24px 18px 18px; }
-  .promo-hero h2 { font-size: 22px; }
-  .promo-grid { padding: 18px 14px 4px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .modal.promo-modal, .promo-card, .promo-orb { animation: none; }
-  .promo-card:hover, .promo-cta:hover { transform: none; }
-}
-
-.usage-upgrade {
-  display: block;
-  margin-top: 7px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent-text);
-  font: inherit;
-  font-size: 11.5px;
-  text-align: left;
-  cursor: pointer;
-}
-.usage-upgrade:hover { text-decoration: underline; }
-.credit-badge.plan { box-shadow: inset 0 0 0 1px var(--accent-line); }
 
 .pkg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .pkg {
@@ -1790,8 +1509,6 @@ button.credit-badge:disabled { cursor: default; }
   .publish-btn, .release-btn { width: 34px; padding: 0; justify-content: center; }
   /* Panduan tetap tersedia di HP sebagai ikon saja. */
   #guideLink { width: 34px; padding: 0; justify-content: center; }
-  .plan-badge { height: 30px; padding: 0 9px; }
-  .plan-badge-name { display: none; }
 
   /* Satu panel layar penuh, dipilih lewat navigasi bawah. */
   .workbench { padding: 8px 8px 0; }
@@ -1888,18 +1605,9 @@ button.credit-badge:disabled { cursor: default; }
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
   .modal.diff-modal { height: 90dvh; display: flex; flex-direction: column; }
-  .modal-backdrop.promo-backdrop { align-items: center; justify-content: center; padding: 16px; }
   /* Pop-up penjelasan (ⓘ) tetap di tengah layar, bukan bottom sheet. */
   .modal-backdrop:has(.feature-info, .diagram-info) { align-items: center; padding: 16px; }
   .modal.feature-info, .modal.diagram-info { max-height: calc(100dvh - 32px); border-radius: 16px; padding-bottom: 20px; }
-  .modal.promo-modal {
-    max-width: 420px;
-    max-height: 92dvh;
-    padding-top: 0;
-    border-radius: 18px;
-    margin: auto;
-  }
-  .promo-hero { border-radius: 18px 18px 0 0; }
   .diff-body { flex: 1; height: auto; }
   .pkg-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .pkg { padding: 14px 6px 12px; }
@@ -2717,6 +2425,7 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 .mode-options { display: grid; gap: 8px; }
 .mode-option { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel-2); color: var(--muted); text-align: left; font: 12.5px/1.5 var(--ui); cursor: pointer; }
 .mode-option strong { color: var(--white); font-size: 13.5px; }
+.mode-option:disabled { opacity: .55; cursor: not-allowed; }
 .mode-option[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
 /* Tombol dialog yang belum bisa dipakai (mis. menunggu persetujuan) harus terlihat nonaktif. */
 .modal-buttons button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(0.4); }
@@ -2851,8 +2560,6 @@ body[data-layout="simple"] :is(#sidebar, .splitter, #toggleSidebar, #togglePrevi
 /* Jadwal & log fungsi */
 .fn-sched { margin-left: 8px; padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, var(--info) 20%, transparent); color: var(--info-text); font: 600 11px var(--ui); white-space: nowrap; }
 .fn-sched.off { background: var(--raised); color: var(--faint); text-decoration: line-through; }
-.cron-locked { padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--warn) 8%, transparent); }
-.cron-locked p { margin: 0 0 10px; color: var(--warn-text); font-size: 12.5px; }
 .cron-options { display: grid; gap: 6px; margin: 10px 0; }
 .cron-option { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel-2); color: var(--text); font-size: 13px; cursor: pointer; }
 .cron-option[aria-checked="true"] { border-color: #0284c7; background: color-mix(in srgb, var(--info) 15%, transparent); }
@@ -3155,3 +2862,15 @@ a.docs-btn-link { display: inline-flex; align-items: center; text-decoration: no
 .docs-link:disabled { cursor: default; }
 .docs-desc.warn { color: var(--warn-text); }
 .fn-head-actions .fn-btn.primary { height: 32px; }
+
+/* ---------- Provider AI ---------- */
+.editor-area[data-mode="providers"] .mode-switch [data-mode="providers"] { background: var(--accent); color: var(--on-accent); box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 40%, transparent); }
+.mode-switch [data-mode="providers"] svg { color: var(--accent-text); }
+.editor-area[data-mode="providers"] .mode-switch [data-mode="providers"] svg { color: var(--on-accent); }
+.editor-area[data-mode="providers"] .tabs { display: none; }
+.editor-area[data-mode="providers"] .editor-top { justify-content: flex-end; }
+.editor-area[data-mode="providers"] .view-title svg { color: var(--accent-text); }
+.personal-presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.personal-form { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel-2); }
+.switch-inline { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: 12.5px; cursor: pointer; }
+.credit-badge.personal { box-shadow: inset 0 0 0 1px var(--accent-line); }

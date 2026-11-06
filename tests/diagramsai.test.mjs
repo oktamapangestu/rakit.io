@@ -7,7 +7,7 @@ import { startStack } from './helpers/harness.mjs';
 const skip = !process.env.RAKIT_SERVER_CMD?.includes('go/bin/rakit') && 'fitur khusus server Go';
 
 let stack;
-before(async () => { if (!skip) stack = await startStack({ AI_BONUS_CREDITS: '10', AI_DAILY_CREDITS: '0' }); });
+before(async () => { if (!skip) stack = await startStack({ AI_DAILY_PROMPTS: '10' }); });
 after(() => stack?.stop());
 
 const ERD = '```mermaid\nerDiagram\n  tamu {\n    number id PK\n    text nama\n  }\n```\n- [warn] Siapa pun bisa menghapus data tamu.\n- [info] 1 tabel.\nTeks lain diabaikan.';
@@ -26,7 +26,7 @@ test('membuat, menyimpan, dan memperbarui diagram', { skip }, async () => {
   assert.deepEqual(res.body.diagram.notes, [{ level: 'warn', text: 'Siapa pun bisa menghapus data tamu.' }, { level: 'info', text: '1 tabel.' }]);
   assert.equal(res.body.diagram.canFix, true);
   assert.ok(res.body.diagram.updatedAt >= before);
-  assert.equal(res.body.credits.remaining, 9);
+  assert.equal(res.body.credits.freeRemaining, 9);
 
   // AI menerima isi project, analisis otomatis, dan jenis diagram yang diminta.
   const sent = stack.ai.requests.at(-1);
@@ -46,7 +46,7 @@ test('membuat, menyimpan, dan memperbarui diagram', { skip }, async () => {
   assert.match(again.body.diagram.code, /buku/);
   assert.deepEqual(again.body.diagram.notes, []);
   assert.ok(again.body.diagram.updatedAt >= res.body.diagram.updatedAt);
-  assert.equal(again.body.credits.remaining, 8);
+  assert.equal(again.body.credits.freeRemaining, 8);
 });
 
 test('jawaban yang tidak bisa dipakai: kredit dikembalikan, diagram lama tetap', { skip }, async () => {
@@ -63,7 +63,7 @@ test('jawaban yang tidak bisa dipakai: kredit dikembalikan, diagram lama tetap',
   stack.ai.script.push({ text: 'Maaf, saya tidak bisa.' });
   assert.equal((await generate(user, { kind: 'site' })).status, 422);
 
-  assert.equal((await user.credits()).remaining, 10);
+  assert.equal((await user.credits()).freeRemaining, 10);
   assert.deepEqual((await user.get('/api/diagrams/saved')).body, { diagrams: {} });
 });
 
@@ -80,7 +80,7 @@ test('perbaikan kode yang gagal digambar: gratis, maks. 2 kali sampai di-Update'
     assert.equal(fixed.status, 200);
     assert.equal(fixed.body.diagram.code, `flowchart LR\n  A["Beranda ${n}"]`);
     assert.equal(fixed.body.diagram.canFix, n < 2);
-    assert.equal(fixed.body.credits.remaining, 9, 'perbaikan tidak memakai kredit');
+    assert.equal(fixed.body.credits.freeRemaining, 9, 'perbaikan tidak memakai kredit');
     const sent = stack.ai.requests.at(-1).messages;
     assert.equal(sent.at(-2).role, 'assistant');
     assert.match(sent.at(-1).content, /Parse error on line 2/);
@@ -94,7 +94,7 @@ test('perbaikan kode yang gagal digambar: gratis, maks. 2 kali sampai di-Update'
 
 test('format salah dicoba ulang sekali tanpa kredit tambahan; catatan bernomor tetap terbaca', { skip }, async () => {
   const user = await stack.register('ulang');
-  const before = (await user.credits()).remaining;
+  const before = (await user.credits()).freeRemaining;
   stack.ai.script.push(
     { text: '┌──────┐\n│ produk │\n└──────┘' },
     { text: '```mermaid\nflowchart LR\n  A["Beranda"] --> B["Pesan"]\n```\n\n**Catatan:**\n1. **Beranda** menautkan ke halaman Pesan.\n2. [warn] Halaman Tentang tidak ditautkan.' },
@@ -106,7 +106,7 @@ test('format salah dicoba ulang sekali tanpa kredit tambahan; catatan bernomor t
     { level: 'info', text: 'Beranda menautkan ke halaman Pesan.' },
     { level: 'warn', text: 'Halaman Tentang tidak ditautkan.' },
   ]);
-  assert.equal(res.body.credits.remaining, before - 1, 'satu kredit untuk dua panggilan');
+  assert.equal(res.body.credits.freeRemaining, before - 1, 'satu kredit untuk dua panggilan');
   const retry = stack.ai.requests.at(-1).messages;
   assert.equal(retry.at(-2).role, 'assistant');
   assert.match(retry.at(-1).content, /first line is flowchart/);
@@ -134,7 +134,7 @@ test('stream: proses AI (berpikir & kode Mermaid) dikirim selama diagram dibuat'
   const done = events.at(-1);
   assert.equal(done.type, 'done');
   assert.match(done.diagram.code, /^erDiagram/);
-  assert.equal(typeof done.credits.remaining, 'number');
+  assert.equal(typeof done.credits.freeRemaining, 'number');
 
   // Gagal setelah AI menjawab: event error dengan status & pesan; ditolak sebelum mulai: error HTTP biasa.
   stack.ai.script.push({ text: 'NONE: Belum ada tabel.' });
@@ -153,14 +153,14 @@ test('edit diagram: kode disimpan tanpa kredit; ubah dengan AI memakai kode di e
   // Simpan manual: catatan AI tetap, kredit tidak terpakai; jenis & baris pertama diperiksa.
   stack.ai.script.push({ text: ERD });
   assert.equal((await generate(user, { kind: 'erd' })).status, 200);
-  const credits = (await user.credits()).remaining;
+  const credits = (await user.credits()).freeRemaining;
   const edited = 'erDiagram\n  tamu {\n    number id PK\n    text nama_lengkap\n  }';
   const res = await save('erd', `  ${edited}\n`);
   assert.equal(res.status, 200);
   assert.equal(res.body.diagram.code, edited);
   assert.equal(res.body.diagram.notes.length, 2);
   assert.equal((await user.get('/api/diagrams/saved')).body.diagrams.erd.code, edited);
-  assert.equal((await user.credits()).remaining, credits);
+  assert.equal((await user.credits()).freeRemaining, credits);
   assert.equal((await save('erd', 'flowchart LR\n  A --> B')).status, 400, 'jenis lain ditolak');
   assert.equal((await save('pie', edited)).status, 400);
   assert.equal((await save('erd', 'erDiagram\n' + 'x'.repeat(70_000))).status, 400);
@@ -174,7 +174,7 @@ test('edit diagram: kode disimpan tanpa kredit; ubah dengan AI memakai kode di e
   assert.equal(changed.status, 200);
   assert.match(changed.body.diagram.code, /bayar/);
   assert.deepEqual(changed.body.diagram.notes, [{ level: 'info', text: 'Ditambah tabel bayar.' }]);
-  assert.equal(changed.body.credits.remaining, credits - 1);
+  assert.equal(changed.body.credits.freeRemaining, credits - 1);
   const sent = stack.ai.requests.at(-1).messages;
   assert.equal(sent.at(-2).content, '```mermaid\n' + draft + '\n```');
   assert.match(sent.at(-1).content, /tambahkan tabel bayar/);

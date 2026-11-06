@@ -265,7 +265,8 @@ type DiagramRequest struct {
 // menyimpannya. facts: hasil analisis otomatis project (bahan diagram lama), dikirim ke AI sebagai bantuan.
 // send (boleh nil): menerima proses AI selama diagram dibuat (event activity, antrean, coba ulang).
 func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project *store.Project, req DiagramRequest, facts any, send func(event)) (any, error) {
-	if !s.models.Enabled() {
+	personal := s.Personal(user.ID)
+	if personal == nil && !s.models.Enabled() {
 		return nil, httpx.Errorf(503, "Fitur AI belum dikonfigurasi di server")
 	}
 	kind, renderError := req.Kind, req.RenderError
@@ -328,12 +329,16 @@ func (s *Service) GenerateDiagram(ctx context.Context, user *store.User, project
 	var reservation *credits.Reservation
 	if !fixing {
 		var err error
-		if reservation, err = s.credits.Reserve(user.ID, s.cfg.AI.CreditsPerPrompt); err != nil {
+		cost := s.cfg.AI.CreditsPerPrompt
+		if personal != nil {
+			cost = 0
+		}
+		if reservation, err = s.credits.Reserve(user.ID, cost); err != nil {
 			return nil, err
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, diagramTimeout)
+	ctx, cancel := context.WithTimeout(withPersonal(ctx, personal), diagramTimeout)
 	defer cancel()
 	status := "error"
 	usedModel, _ := s.models.For(aimodels.TaskDiagram)

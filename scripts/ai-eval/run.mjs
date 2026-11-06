@@ -85,7 +85,7 @@ if (agentEngines.length) {
   env.AI_AGENT_MAX_CONCURRENT ||= String(parallel);
 }
 if (useSkill) env.AI_BUILD_PROMPT_APPEND = path.join(ROOT, 'skills', 'rakit', 'SKILL.md');
-Object.assign(env, { AI_BONUS_CREDITS: '100000', AI_DAILY_CREDITS: '0', AI_CREDITS_PER_PROMPT: '1', AI_MAX_CONCURRENT: String(parallel) });
+Object.assign(env, { AI_DAILY_PROMPTS: '100000', AI_CREDITS_PER_PROMPT: '1', AI_MAX_CONCURRENT: String(parallel) });
 
 // Kasus nyata: <realDir>/<id>/case.json; site/ dan db.sqlite di sebelahnya (lihat from-requests.mjs).
 function realCases(dir) {

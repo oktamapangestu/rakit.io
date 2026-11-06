@@ -17,7 +17,7 @@ export const FEATURE_INFO = {
     analogy: 'Seperti punya mentor programmer di sebelahmu: kamu ceritakan maumu, dia mengerjakan, lalu kamu bisa bertanya "kenapa begitu?".',
     why: 'Programmer zaman sekarang juga bekerja bersama AI. Kuncinya adalah tahu cara meminta dengan jelas dan memeriksa hasilnya — keterampilan yang kamu latih di sini.',
     how: ['Builder: tulis permintaan, AI mengubah file, lalu kamu pilih Simpan atau Batalkan.', 'Plan: diskusi dan susun rencana; tekan "Jalankan rencana ini" kalau sudah cocok.', 'Pilih blok di preview untuk mengubah bagian halaman tertentu saja.', 'Lampirkan gambar (mis. sketsa atau contoh desain) sebagai acuan.'],
-    terms: [['Prompt', 'perintah atau pertanyaan yang kamu kirim ke AI'], ['Builder / Plan', 'mode mengerjakan / mode berdiskusi'], ['Kredit', 'jatah pemakaian AI; tiap prompt memakai kredit']],
+    terms: [['Prompt', 'perintah atau pertanyaan yang kamu kirim ke AI'], ['Builder / Plan', 'mode mengerjakan / mode berdiskusi'], ['Prompt gratis', 'jatah pemakaian AI per hari; setelah habis, kredit yang dibeli dipakai']],
     tip: 'Setelah AI mengubah sesuatu, tanyakan "jelaskan perubahan barusan", lalu buka tab Code untuk melihat kodenya. Dari situ kamu belajar.',
     tryText: 'Buatkan halaman profil sederhana tentang saya: foto, nama, sedikit cerita, dan daftar hobi.', tryMode: 'build',
   },

@@ -76,7 +76,8 @@ Reply with the Markdown only: no title line, no code fences, no text before or a
 // current: catatan yang sedang ditulis pemilik (boleh belum disimpan) sebagai dasar draf. Memakai 1 prompt kredit;
 // dikembalikan bila gagal. Hasilnya tidak disimpan.
 func (s *Service) DraftNotes(ctx context.Context, user *store.User, project *store.Project, facts any, current, lang string) (any, error) {
-	if !s.models.Enabled() {
+	personal := s.Personal(user.ID)
+	if personal == nil && !s.models.Enabled() {
 		return nil, httpx.Errorf(503, "AI belum tersedia di server ini")
 	}
 	s.mu.Lock()
@@ -93,11 +94,15 @@ func (s *Service) DraftNotes(ctx context.Context, user *store.User, project *sto
 	}()
 
 	var reservation *credits.Reservation
-	reservation, err := s.credits.Reserve(user.ID, s.cfg.AI.CreditsPerPrompt)
+	cost := s.cfg.AI.CreditsPerPrompt
+	if personal != nil {
+		cost = 0
+	}
+	reservation, err := s.credits.Reserve(user.ID, cost)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, notesDraftTimeout)
+	ctx, cancel := context.WithTimeout(withPersonal(ctx, personal), notesDraftTimeout)
 	defer cancel()
 	status := "error"
 	usedModel, _ := s.models.For(aimodels.TaskPlan)

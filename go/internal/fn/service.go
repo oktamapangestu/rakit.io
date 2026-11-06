@@ -39,8 +39,8 @@ const (
 	maxSecretSize = 4 << 10
 )
 
-// DailyLimit: eksekusi per hari (WIB) per akun, menurut paket langganan.
-var DailyLimit = map[string]int{"": 1000, "pro": 20_000, "unlimited": 100_000}
+// DailyLimit: eksekusi fungsi per akun per hari.
+const DailyLimit = 20_000
 
 var (
 	NameRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
@@ -87,15 +87,6 @@ func Hidden(rel string) bool {
 
 // ---------- Kuota ----------
 
-func (s *Service) limitFor(userID int64) (int, string) {
-	if plan := s.plans.Active(userID); plan != nil {
-		if n, ok := DailyLimit[plan.ID]; ok {
-			return n, plan.Name
-		}
-	}
-	return DailyLimit[""], "Gratis"
-}
-
 func today() string {
 	day, _ := plans.WIBDay(time.Now().UnixMilli())
 	return day
@@ -103,7 +94,7 @@ func today() string {
 
 // take memakai satu jatah eksekusi hari ini; false bila sudah habis.
 func (s *Service) take(userID int64) (bool, error) {
-	limit, _ := s.limitFor(userID)
+	limit := DailyLimit
 	res, err := s.db.Exec(`
 		INSERT INTO fn_usage (user_id, day, count) VALUES (?, ?, 1)
 		ON CONFLICT (user_id, day) DO UPDATE SET count = count + 1 WHERE count < ?`, userID, today(), limit)
@@ -208,9 +199,8 @@ type Overview struct {
 	AIProviders []ProviderInfo    `json:"aiProviders"`
 	AIKinds     map[string]string `json:"aiKinds"`
 	Usage       struct {
-		Today int    `json:"today"`
-		Limit int    `json:"limit"`
-		Plan  string `json:"plan"`
+		Today int `json:"today"`
+		Limit int `json:"limit"`
 	} `json:"usage"`
 	Limits struct {
 		TimeoutSeconds int `json:"timeoutSeconds"`
@@ -243,8 +233,7 @@ func (s *Service) Overview(p *store.Project) (*Overview, error) {
 			out.Functions = append(out.Functions, Info{name, Dir + "/" + e.Name(), base + "/api/fn/" + name, schedules[name]})
 		}
 	}
-	gap, _ := s.cronLimit(p.UserID)
-	out.Cron.MinMinutes = int(gap / time.Minute)
+	out.Cron.MinMinutes = CronMinutes
 	rows, err := s.db.Query("SELECT name, updated_at FROM fn_secrets WHERE project_id = ? ORDER BY name", p.ID)
 	if err != nil {
 		return nil, err
@@ -265,7 +254,7 @@ func (s *Service) Overview(p *store.Project) (*Overview, error) {
 		out.AIKinds[k] = v.Label
 	}
 	out.Usage.Today = s.usedToday(p.UserID)
-	out.Usage.Limit, out.Usage.Plan = s.limitFor(p.UserID)
+	out.Usage.Limit = DailyLimit
 	out.Limits.TimeoutSeconds, out.Limits.MemoryMB = int(timeout/time.Second), memoryPages*64/1024
 	return out, rows.Err()
 }
@@ -315,8 +304,7 @@ func (s *Service) execute(parent context.Context, t Target, name string, req Req
 	if ok, err := s.take(t.Project.UserID); err != nil {
 		return nil, err
 	} else if !ok {
-		limit, plan := s.limitFor(t.Project.UserID)
-		return nil, &httpx.Error{Status: 429, Code: "fn_quota", Message: fmt.Sprintf("Kuota fungsi hari ini sudah habis (%d eksekusi/hari untuk paket %s).", limit, plan)}
+		return nil, &httpx.Error{Status: 429, Code: "fn_quota", Message: fmt.Sprintf("Kuota fungsi hari ini sudah habis (%d eksekusi/hari).", DailyLimit)}
 	}
 	select {
 	case s.slots <- struct{}{}:

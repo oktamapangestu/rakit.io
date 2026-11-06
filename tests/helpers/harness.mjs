@@ -50,6 +50,12 @@ async function startMockAI() {
   const ai = { script: [], requests: [], waiters: [], open: new Set() };
   const server = http.createServer(async (req, res) => {
     const body = JSON.parse(await readBody(req) || '{}');
+    ai.lastAuth = req.headers.authorization; // API key yang dipakai server (mis. AI pribadi pengguna)
+    // Daftar model (uji koneksi provider), tidak dicatat sebagai request AI.
+    if (req.method === 'GET' && req.url.endsWith('/models')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ data: [{ id: 'mock-main' }, { id: 'mock-pribadi' }] }));
+    }
     ai.requests.push(body);
     ai.waiters.splice(0).forEach((resolve) => resolve(body));
     // ai.respond(body): perilaku bawaan bila antrean script kosong (mis. menurut body.model).
@@ -248,8 +254,7 @@ export async function startStack(env = {}) {
     AI_API_KEY: 'test-key',
     AI_MODEL: 'mock-main',
     AI_VISION_MODEL: 'mock-vision',
-    AI_BONUS_CREDITS: '2',
-    AI_DAILY_CREDITS: '2',
+    AI_DAILY_PROMPTS: '4',
     AI_CREDITS_PER_PROMPT: '1',
     AI_IMAGE_PROMPT_CREDITS: '2',
     KASERA_API_KEY: 'kp_test_mock',
@@ -260,8 +265,6 @@ export async function startStack(env = {}) {
     GOOGLE_TOKEN_URL: google.url,
     CREDIT_PACKAGES: '20:10000,50:20000',
     ASSISTANT_PACKAGES: '10000,25000',
-    PLAN_PRO: '49000:3',
-    PLAN_UNLIMITED: '98000:2',
     ADMIN_EMAILS: ADMIN_EMAIL,
     // Website disajikan apa adanya (tes membandingkan isi file); minify diuji di tests/minify.test.mjs.
     SITE_MINIFY: '0',

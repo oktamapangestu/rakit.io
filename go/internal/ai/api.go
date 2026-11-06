@@ -146,7 +146,8 @@ var spacesRE = regexp.MustCompile(`\s+`)
 
 // Prompt menerima satu prompt: memotong kredit, menyimpan pesan, lalu menjalankan job di latar.
 func (s *Service) Prompt(user *store.User, project *store.Project, body map[string]any) (any, error) {
-	if !s.models.Enabled() {
+	personal := s.Personal(user.ID)
+	if personal == nil && !s.models.Enabled() {
 		return nil, httpx.Errorf(503, "Fitur AI belum dikonfigurasi di server")
 	}
 	prompt := strings.TrimSpace(jsconv.String(body["prompt"]))
@@ -156,6 +157,10 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 	case "plan":
 		mode = "plan"
 	case "agent":
+		// AI pribadi tanpa endpoint format Anthropic tidak bisa menjalankan mesin agen: dikerjakan Builder.
+		if personal != nil && s.PersonalAgent(user.ID) == nil {
+			break
+		}
 		// Mode Agen (agent.go): mesin harus aktif di server.
 		mode = "agent"
 		engine, _ = body["engine"].(string)
@@ -229,7 +234,7 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 	if err != nil {
 		return nil, err
 	}
-	if len(images) > 0 && s.models.Get().Vision == "" {
+	if len(images) > 0 && personal == nil && s.models.Get().Vision == "" {
 		return nil, httpx.Errorf(400, "Lampiran gambar belum tersedia di server ini")
 	}
 	thumbs := []string{}
@@ -272,6 +277,9 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 			return nil, err
 		}
 		cost = 0
+	}
+	if personal != nil {
+		cost = 0 // AI pribadi: dibayar pengguna langsung ke provider-nya
 	}
 	reservation, err := s.credits.Reserve(user.ID, cost)
 	if err != nil {
@@ -316,7 +324,7 @@ func (s *Service) Prompt(user *store.User, project *store.Project, body map[stri
 		s.db.Exec("UPDATE ai_messages SET attachments = ? WHERE id = ?", string(raw), messageID)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(withPersonal(context.Background(), personal))
 	j := &job{userID: user.ID, ctx: ctx, cancel: cancel, listeners: map[*listener]bool{}}
 	s.mu.Lock()
 	s.jobs[messageID] = j

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"log"
+	"os"
 	"regexp"
 	"strings"
 
@@ -153,6 +155,7 @@ func (h *Handler) me(q *request) error {
 		"project":     h.public(project),
 		"projects":    h.publicAll(all),
 		"maxProjects": h.cfg.MaxProjects,
+		"maxCustom":   h.cfg.MaxCustom,
 	})
 }
 
@@ -181,7 +184,7 @@ func (h *Handler) projects(q *request) error {
 		if err != nil {
 			return err
 		}
-		return q.json(200, map[string]any{"projects": h.publicAll(all), "limit": h.cfg.MaxProjects})
+		return q.json(200, map[string]any{"projects": h.publicAll(all), "limit": h.cfg.MaxProjects, "customLimit": h.cfg.MaxCustom})
 
 	case q.is("POST"):
 		if err := q.load(); err != nil {
@@ -209,6 +212,19 @@ func (h *Handler) projects(q *request) error {
 			return err
 		}
 		project.Name = name
+		return q.json(200, map[string]any{"project": h.public(project)})
+
+	case q.is("POST", ":", "address"):
+		project, err := h.ownedProject(q)
+		if err != nil {
+			return err
+		}
+		if err := q.load(); err != nil {
+			return err
+		}
+		if err := h.changeAddress(q.user, project, strings.ToLower(strings.TrimSpace(q.text("slug")))); err != nil {
+			return err
+		}
 		return q.json(200, map[string]any{"project": h.public(project)})
 
 	case q.is("DELETE", ":"):
@@ -245,4 +261,51 @@ func (h *Handler) projects(q *request) error {
 		return q.json(200, map[string]bool{"ok": true})
 	}
 	return errNotFound
+}
+
+// changeAddress mengganti subdomain project: slug kosong = alamat acak, selain itu alamat custom (dibatasi
+// MaxCustom per akun). File, database, versi prod, dan riwayat versi ikut dipindah; alamat lama berhenti
+// bekerja dan bisa dipakai orang lain.
+func (h *Handler) changeAddress(user *store.User, project *store.Project, slug string) error {
+	if slug == project.Slug {
+		return nil
+	}
+	if busy, err := h.db.ActiveJobIn(project.ID); err != nil {
+		return err
+	} else if busy {
+		return httpx.Errorf(409, "AI sedang bekerja di project ini. Tunggu selesai atau tekan Stop.")
+	}
+	owned, err := h.db.ProjectsOf(user.ID)
+	if err != nil {
+		return err
+	}
+	custom := false
+	if slug == "" {
+		slug, err = h.accounts().RandomSlug()
+	} else {
+		custom, err = h.accounts().CheckSlug(user, slug, owned, project.ID)
+	}
+	if err != nil {
+		return err
+	}
+	old := project.Slug
+	if err := h.db.ChangeProjectSlug(project.ID, slug, custom); err != nil {
+		if store.IsUnique(err) {
+			return httpx.Errorf(409, "%s sudah dipakai", h.cfg.SiteHost(slug))
+		}
+		return err
+	}
+	if err := os.Rename(h.cfg.SiteRoot(old), h.cfg.SiteRoot(slug)); err != nil && !os.IsNotExist(err) {
+		if revertErr := h.db.ChangeProjectSlug(project.ID, old, project.Custom); revertErr != nil {
+			log.Printf("ganti alamat %s → %s: gagal mengembalikan: %v", old, slug, revertErr)
+		}
+		return err
+	}
+	for _, move := range []func(from, to string) error{h.userdb.Move, h.svc.Publish.Move, h.versions.Move} {
+		if err := move(old, slug); err != nil {
+			log.Printf("ganti alamat %s → %s: %v", old, slug, err)
+		}
+	}
+	project.Slug, project.Custom = slug, custom
+	return nil
 }

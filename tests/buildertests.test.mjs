@@ -12,7 +12,7 @@ const GO = /go\/bin\/rakit/.test(process.env.RAKIT_SERVER_CMD ?? '');
 let stack;
 before(async () => {
   if (!GO) return;
-  stack = await startStack({ AI_BONUS_CREDITS: '20', AI_DAILY_CREDITS: '0' });
+  stack = await startStack({ AI_DAILY_PROMPTS: '20' });
 });
 after(() => stack?.stop());
 
@@ -93,6 +93,6 @@ test('Builder: job gagal setelah pengujian → tabel uji dihapus lagi, kredit ke
   );
   const { final } = await user.build('Buat buku tamu');
   assert.equal(final.type, 'error');
-  assert.equal(final.credits.remaining, 20);
+  assert.equal(final.credits.freeRemaining, 20);
   assert.deepEqual((await user.get('/api/database/tables')).body.tables, []);
 });

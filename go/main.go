@@ -27,6 +27,7 @@ import (
 	"rakit.io/server/internal/billing"
 	"rakit.io/server/internal/config"
 	"rakit.io/server/internal/credits"
+	"rakit.io/server/internal/desktop"
 	"rakit.io/server/internal/fn"
 	"rakit.io/server/internal/google"
 	"rakit.io/server/internal/httpx"
@@ -145,10 +146,11 @@ func main() {
 		})
 	}
 	wallet.AgentEngines = func() any { return editorAI.AgentEngines() }
+	wallet.PersonalModel = editorAI.PersonalModel
 	editorAI.Start()
 	appAPI, err := api.New(cfg, db, sessions, api.Services{
 		Plans: limits, UserDB: projectDB, Versions: history, Credits: wallet,
-		Billing: billing.New(cfg, db, limits, wallet), AI: editorAI, AIModels: models, Assistant: helper,
+		Billing: billing.New(cfg, db, wallet), AI: editorAI, AIModels: models, Assistant: helper,
 		Admin:   admin.New(cfg, db, limits, models, queue),
 		Publish: publish.New(cfg, db, projectDB),
 		Fn:      functions,
@@ -158,6 +160,7 @@ func main() {
 		log.Fatal(err)
 	}
 	googleLogin := google.New(cfg, db, sessions)
+	local := desktop.New(cfg, db, sessions)
 	go fn.Warm() // kompilasi mesin fungsi (±0,5 dtk) di latar, supaya eksekusi pertama tidak lambat
 
 	// Routing berdasarkan host:
@@ -168,10 +171,16 @@ func main() {
 	under := func(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
 	suffix := "." + cfg.BaseDomain
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Aplikasi desktop di macOS: server ini juga proxy webview (lihat internal/desktop).
+		if cfg.DesktopProxy && local.ServeProxy(w, r) {
+			return
+		}
 		host := hostname(r)
 		if host == cfg.BaseDomain {
 			i18n.Mark(w, i18n.FromRequest(r)) // bahasa pesan error (httpx.Fail)
 			switch {
+			case cfg.Desktop && desktop.Matches(r.URL.Path):
+				local.Start(w, r)
 			case under(strings.ToLower(r.URL.Path), "/api"):
 				appAPI.ServeHTTP(w, r)
 			case google.Matches(r.URL.Path):

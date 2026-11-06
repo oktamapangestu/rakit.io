@@ -9,7 +9,6 @@
   import AiButton from '../AiButton.svelte';
   import SectionHead from './SectionHead.svelte';
   import TryPanel from './TryPanel.svelte';
-  import AiProviders from './AiProviders.svelte';
   import Secrets from './Secrets.svelte';
   import Logs from './Logs.svelte';
   import ScheduleDialog from './ScheduleDialog.svelte';
@@ -124,7 +123,6 @@
       <div class="fn-usage-top">
         <span class="fn-usage-count"><strong>{usage.today.toLocaleString('id-ID')}</strong>{` / ${usage.limit.toLocaleString('id-ID')} eksekusi hari ini`}</span>
         <span class="fn-usage-meta">
-          <span class="fn-chip">{`Paket ${usage.plan}`}</span>
           <span class="fn-chip" title="Batas per eksekusi">{`maks. ${data.limits.timeoutSeconds} dtk`}</span>
           <span class="fn-chip" title="Batas memori per eksekusi">{`${data.limits.memoryMb} MB`}</span>
         </span>
@@ -162,7 +160,6 @@
       {/each}
     </section>
 
-    <AiProviders {data} onData={setData} />
     <Secrets secrets={data.secrets} onData={setData} />
     <Logs functions={data.functions} {logs} filter={logFilter} onFilter={(name) => { logFilter = name; loadLogs(); }} onReload={loadLogs} />
 

@@ -95,10 +95,9 @@ export const activeMode = () => (ai.mode === 'agent' && !currentEngine() ? 'buil
 // Mode yang dikirim ke server: Builder lewat Claude Agent selama tombol Agen disembunyikan.
 const requestMode = () => (!SHOW_AGENT_MODE && activeMode() === 'build' && currentEngine() ? 'agent' : activeMode());
 
-// Unlimited menghitung prompt, bukan kredit: selama jatah hari ini masih ada, prompt apa pun (dengan gambar pun)
-// cukup memakai 1 dari jatah itu. Setelah habis, kredit biasa yang dipakai.
-export const unlimitedLeft = (c) => c?.plan?.id === 'unlimited' && c.plan.quotaRemaining > 0;
-export const canAfford = (c, cost) => unlimitedLeft(c) || c.remaining >= cost;
+// Jatah harian dihitung per prompt: selama masih ada, prompt apa pun (dengan gambar pun) memakai 1 dari jatah itu.
+// Setelah habis, kredit yang dibeli yang dipakai (prompt bergambar memakai lebih banyak kredit).
+export const canAfford = (c, cost) => Boolean(c.personal) || c.freeRemaining > 0 || c.purchased >= cost;
 // Biaya prompt yang sedang disusun: prompt dengan gambar memakai lebih banyak kredit.
 export const promptCost = () => (ai.images.length && ai.credits?.images ? ai.credits.images.cost : ai.credits?.costPerPrompt ?? 1);
 

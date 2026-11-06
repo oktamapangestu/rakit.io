@@ -50,11 +50,7 @@ func New(cfg *config.Config, db *store.Store, p *plans.Plans, models *aimodels.S
 // ---------- Harga langganan ----------
 
 type Limits struct {
-	MinPrice     int `json:"minPrice"`
-	MaxPrice     int `json:"maxPrice"`
-	MaxQuota     int `json:"maxQuota"`
 	FreeDailyMax int `json:"freeDailyMax"`
-	FreeBonusMax int `json:"freeBonusMax"`
 }
 
 type Usage struct {
@@ -64,17 +60,15 @@ type Usage struct {
 }
 
 type PlansView struct {
-	Plans            []plans.AdminPlan `json:"plans"`
-	Limits           Limits            `json:"limits"`
-	ModelCost        float64           `json:"modelCost"`
-	FreeDaily        int               `json:"freeDaily"`
-	FreeBonus        int               `json:"freeBonus"`
-	Usage            Usage             `json:"usage"`
-	CreditsPerPrompt int               `json:"creditsPerPrompt"`
+	Limits           Limits  `json:"limits"`
+	ModelCost        float64 `json:"modelCost"`
+	FreeDaily        int     `json:"freeDaily"` // prompt gratis per akun per hari
+	Usage            Usage   `json:"usage"`
+	CreditsPerPrompt int     `json:"creditsPerPrompt"`
 }
 
 func (s *Service) PlansView() (*PlansView, error) {
-	// Rata-rata token per prompt yang berhasil (30 hari), untuk memperkirakan biaya per paket.
+	// Rata-rata token per prompt yang berhasil (30 hari), untuk memperkirakan biaya jatah gratis.
 	var usage Usage
 	var avg float64
 	err := s.db.QueryRow(`
@@ -85,47 +79,29 @@ func (s *Service) PlansView() (*PlansView, error) {
 	}
 	usage.AvgTokens = int64(math.Floor(avg + 0.5))
 	return &PlansView{
-		Plans:            s.plans.AdminPlans(),
-		Limits:           Limits{plans.MinPrice, plans.MaxPrice, plans.MaxQuota, plans.FreeDailyMax, plans.FreeBonusMax},
+		Limits:           Limits{plans.DailyPromptsMax},
 		ModelCost:        s.plans.ModelCost(),
-		FreeDaily:        s.plans.FreeDailyCredits(),
-		FreeBonus:        s.plans.FreeBonusCredits(),
+		FreeDaily:        s.plans.DailyPrompts(),
 		Usage:            usage,
 		CreditsPerPrompt: s.cfg.AI.CreditsPerPrompt,
 	}, nil
 }
 
-// SavePlans menyimpan harga/kuota paket, biaya model, dan kredit gratis sekaligus: satu bagian gagal,
-// tidak ada yang tersimpan. Bagian yang tidak ada di body tidak diubah.
+// SavePlans menyimpan biaya model dan prompt gratis harian sekaligus: satu bagian gagal, tidak ada yang
+// tersimpan. Bagian yang tidak ada di body tidak diubah.
 func (s *Service) SavePlans(body map[string]any) error {
-	input := map[string]map[string]any{}
-	list, _ := body["plans"].([]any)
-	for _, item := range list {
-		p, _ := item.(map[string]any)
-		if id, ok := p["id"].(string); ok && s.plans.Get(id) != nil {
-			input[id] = p
-		}
-	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if err := s.plans.SavePlans(tx, input); err != nil {
-		return err
-	}
 	if v, ok := body["modelCost"]; ok {
 		if err := s.plans.SaveModelCost(tx, v); err != nil {
 			return err
 		}
 	}
 	if v, ok := body["freeDaily"]; ok {
-		if err := s.plans.SaveFreeDailyCredits(tx, v); err != nil {
-			return err
-		}
-	}
-	if v, ok := body["freeBonus"]; ok {
-		if err := s.plans.SaveFreeBonusCredits(tx, v); err != nil {
+		if err := s.plans.SaveDailyPrompts(tx, v); err != nil {
 			return err
 		}
 	}
@@ -283,8 +259,7 @@ type AI struct {
 type Credits struct {
 	UsedToday            int64 `json:"usedToday"`
 	PurchasedOutstanding int64 `json:"purchasedOutstanding"`
-	FreePerUser          int   `json:"freePerUser"`
-	FreeBonus            int   `json:"freeBonus"`
+	FreePerUser          int   `json:"freePerUser"` // prompt gratis per hari
 }
 
 type Revenue struct {
@@ -330,22 +305,19 @@ type RecentUser struct {
 // CreditUser: kredit & token per pengguna — bonus awal, jatah gratis hari ini, saldo beli, total
 // tersedia, dan token.
 type CreditUser struct {
-	Username       string  `json:"username"`
-	Email          string  `json:"email"`
-	Used           int64   `json:"used"`
-	FreeLimit      int64   `json:"freeLimit"`
-	FreeRemaining  int64   `json:"freeRemaining"`
-	BonusLimit     int64   `json:"bonusLimit"`
-	BonusUsed      int64   `json:"bonusUsed"`
-	BonusRemaining int64   `json:"bonusRemaining"`
-	Purchased      int64   `json:"purchased"`
-	Remaining      int64   `json:"remaining"`
-	AIRequests     int64   `json:"aiRequests"`
-	InTokens       int64   `json:"inTokens"`
-	OutTokens      int64   `json:"outTokens"`
-	Tokens         int64   `json:"tokens"`
-	LastAt         *string `json:"lastAt"`
-	SiteURL        string  `json:"siteUrl"`
+	Username      string  `json:"username"`
+	Email         string  `json:"email"`
+	Used          int64   `json:"used"`
+	FreeLimit     int64   `json:"freeLimit"`
+	FreeRemaining int64   `json:"freeRemaining"`
+	Purchased     int64   `json:"purchased"`
+	Remaining     int64   `json:"remaining"`
+	AIRequests    int64   `json:"aiRequests"`
+	InTokens      int64   `json:"inTokens"`
+	OutTokens     int64   `json:"outTokens"`
+	Tokens        int64   `json:"tokens"`
+	LastAt        *string `json:"lastAt"`
+	SiteURL       string  `json:"siteUrl"`
 }
 
 // TokenUser: satu baris ranking pemakaian token dalam periode — AI editor (input/output) dan asisten
@@ -396,7 +368,6 @@ type ActiveUser struct {
 	LastSeenAt string  `json:"lastSeenAt"`
 	LastAIAt   *string `json:"lastAiAt"`
 	Projects   int64   `json:"projects"`
-	Plan       *string `json:"plan"`
 	SiteURL    string  `json:"siteUrl"`
 }
 
@@ -414,23 +385,22 @@ const activitySQL = `
 	LEFT JOIN (SELECT user_id, MAX(created_at) AS lastAt FROM versions GROUP BY user_id) v ON v.user_id = u.id`
 
 type Stats struct {
-	GeneratedAt    string           `json:"generatedAt"`
-	Days           int              `json:"days"`
-	Users          Users            `json:"users"`
-	SignupsByDay   []Day            `json:"signupsByDay"`
-	AI             AI               `json:"ai"`
-	Credits        Credits          `json:"credits"`
-	Subscribers    map[string]int64 `json:"subscribers"`
-	CreditUsers    []CreditUser     `json:"creditUsers"`
-	Revenue        Revenue          `json:"revenue"`
-	RevenueByDay   []Day            `json:"revenueByDay"`
-	RecentPayments []Payment        `json:"recentPayments"`
-	TopUsers       []TopUser        `json:"topUsers"`
-	TokenRanking   TokenRanking     `json:"tokenRanking"`
-	RecentUsers    []RecentUser     `json:"recentUsers"`
-	ActiveUsers    ActiveUsers      `json:"activeUsers"`
-	Storage        *Storage         `json:"storage"`
-	Queue          aiqueue.Stats    `json:"queue"`
+	GeneratedAt    string        `json:"generatedAt"`
+	Days           int           `json:"days"`
+	Users          Users         `json:"users"`
+	SignupsByDay   []Day         `json:"signupsByDay"`
+	AI             AI            `json:"ai"`
+	Credits        Credits       `json:"credits"`
+	CreditUsers    []CreditUser  `json:"creditUsers"`
+	Revenue        Revenue       `json:"revenue"`
+	RevenueByDay   []Day         `json:"revenueByDay"`
+	RecentPayments []Payment     `json:"recentPayments"`
+	TopUsers       []TopUser     `json:"topUsers"`
+	TokenRanking   TokenRanking  `json:"tokenRanking"`
+	RecentUsers    []RecentUser  `json:"recentUsers"`
+	ActiveUsers    ActiveUsers   `json:"activeUsers"`
+	Storage        *Storage      `json:"storage"`
+	Queue          aiqueue.Stats `json:"queue"`
 }
 
 // siteURL: alamat website project pertama user, atau <username> bila belum punya project.
@@ -513,19 +483,8 @@ func (s *Service) Stats(days int) (*Stats, error) {
 	out.Credits = Credits{
 		UsedToday:            count("SELECT COALESCE(SUM(used), 0) FROM ai_usage WHERE period = ?", credits.FreePeriod()),
 		PurchasedOutstanding: count("SELECT COALESCE(SUM(balance), 0) FROM credit_balance"),
-		FreePerUser:          s.plans.FreeDailyCredits(),
-		FreeBonus:            s.plans.FreeBonusCredits(),
+		FreePerUser:          s.plans.DailyPrompts(),
 	}
-
-	// Langganan yang masih aktif, per paket
-	out.Subscribers = map[string]int64{}
-	keep(s.each(func(rows *sql.Rows) error {
-		var plan string
-		var n int64
-		err := rows.Scan(&plan, &n)
-		out.Subscribers[plan] = n
-		return err
-	}, "SELECT plan, COUNT(*) FROM subscriptions WHERE expires_at > ? GROUP BY plan", now))
 
 	// Pendapatan (hanya pembayaran berhasil)
 	out.Revenue = Revenue{
@@ -646,7 +605,7 @@ func (s *Service) Stats(days int) (*Stats, error) {
 		var slug *string
 		var seenAt int64
 		var lastAI sql.NullInt64
-		err := rows.Scan(&u.Username, &u.Email, &slug, &seenAt, &lastAI, &u.Projects, &u.Plan)
+		err := rows.Scan(&u.Username, &u.Email, &slug, &seenAt, &lastAI, &u.Projects)
 		u.LastSeenAt = plans.ISO(seenAt)
 		if lastAI.Valid {
 			iso := plans.ISO(lastAI.Int64)
@@ -657,24 +616,21 @@ func (s *Service) Stats(days int) (*Stats, error) {
 		return err
 	}, `
 		SELECT u.username, u.email, `+primarySlug+`, a.seenAt, a.lastAiAt,
-		       (SELECT COUNT(*) FROM projects p WHERE p.user_id = u.id),
-		       (SELECT plan FROM subscriptions sub WHERE sub.user_id = u.id AND sub.expires_at > ?)
+		       (SELECT COUNT(*) FROM projects p WHERE p.user_id = u.id)
 		FROM (`+activitySQL+`) a JOIN users u ON u.id = a.id
 		WHERE a.seenAt > 0
-		ORDER BY a.seenAt DESC, u.username LIMIT 20`, now))
+		ORDER BY a.seenAt DESC, u.username LIMIT 20`))
 
-	freeLimit := int64(s.plans.FreeDailyCredits())
-	bonusLimit := int64(s.plans.FreeBonusCredits())
+	freeLimit := int64(s.plans.DailyPrompts())
 	out.CreditUsers = []CreditUser{}
 	keep(s.each(func(rows *sql.Rows) error {
 		var id int64
 		var slug *string
 		var lastAt sql.NullInt64
-		u := CreditUser{FreeLimit: freeLimit, BonusLimit: bonusLimit}
-		err := rows.Scan(&id, &u.Username, &u.Email, &slug, &u.Used, &u.BonusUsed, &u.Purchased, &u.InTokens, &u.OutTokens, &u.AIRequests, &lastAt)
+		u := CreditUser{FreeLimit: freeLimit}
+		err := rows.Scan(&id, &u.Username, &u.Email, &slug, &u.Used, &u.Purchased, &u.InTokens, &u.OutTokens, &u.AIRequests, &lastAt)
 		u.FreeRemaining = max(0, freeLimit-u.Used)
-		u.BonusRemaining = max(0, bonusLimit-u.BonusUsed)
-		u.Remaining = u.FreeRemaining + u.BonusRemaining + u.Purchased
+		u.Remaining = u.FreeRemaining + u.Purchased
 		u.Tokens = u.InTokens + u.OutTokens
 		if lastAt.Valid {
 			iso := plans.ISO(lastAt.Int64)
@@ -686,7 +642,6 @@ func (s *Service) Stats(days int) (*Stats, error) {
 	}, `
 		SELECT u.id, u.username, u.email, `+primarySlug+`,
 		       COALESCE(usage.used, 0),
-		       COALESCE(bonus.used, 0),
 		       COALESCE(bal.balance, 0),
 		       COALESCE(agg.inTokens, 0),
 		       COALESCE(agg.outTokens, 0),
@@ -694,7 +649,6 @@ func (s *Service) Stats(days int) (*Stats, error) {
 		       agg.lastAt
 		FROM users u
 		LEFT JOIN ai_usage usage ON usage.user_id = u.id AND usage.period = ?
-		LEFT JOIN ai_usage bonus ON bonus.user_id = u.id AND bonus.period = '`+credits.BonusPeriod+`'
 		LEFT JOIN credit_balance bal ON bal.user_id = u.id
 		LEFT JOIN (
 			SELECT user_id,

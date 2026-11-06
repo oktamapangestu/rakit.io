@@ -271,6 +271,14 @@ func (s *Service) CreateManual(project *store.Project, userID int64, label strin
 // Remove menghapus seluruh riwayat project (baris versi ikut terhapus lewat CASCADE).
 func (s *Service) Remove(slug string) error { return os.RemoveAll(s.root(slug)) }
 
+// Move memindahkan riwayat versi ke subdomain baru (alamat project diganti).
+func (s *Service) Move(from, to string) error {
+	if err := os.Rename(s.root(from), s.root(to)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 // ---------- Daftar & perbandingan ----------
 
 type Summary struct {
@@ -420,7 +428,7 @@ func (s *Service) Restore(project *store.Project, userID int64, version *store.V
 			total += f.S
 		}
 		if count := int64(len(target.Files) + len(target.Dirs)); total > limits.TotalSize || count > limits.Entries {
-			return nil, httpx.Errorf(413, "Versi ini terlalu besar untuk kuota paketmu sekarang (%s MB, %d file & folder).", mb(limits.TotalSize), limits.Entries)
+			return nil, httpx.Errorf(413, "Versi ini terlalu besar untuk kuota project (%s MB, %d file & folder).", mb(limits.TotalSize), limits.Entries)
 		}
 	}
 

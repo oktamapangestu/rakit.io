@@ -15,7 +15,7 @@ const FAKE = `node ${fileURLToPath(new URL('./helpers/fake-agent.mjs', import.me
 let stack;
 before(async () => {
   if (!GO) return;
-  stack = await startStack({ AI_BONUS_CREDITS: '20', AI_DAILY_CREDITS: '0', AI_AGENT_ENGINES: 'claude,pi', AI_AGENT_CMD: FAKE });
+  stack = await startStack({ AI_DAILY_PROMPTS: '20', AI_AGENT_ENGINES: 'claude,pi', AI_AGENT_CMD: FAKE });
 });
 after(() => stack?.stop());
 
@@ -30,7 +30,7 @@ test('mode Agen: mesin aktif ditampilkan di info kredit; mesin tidak dikenal dia
   assert.deepEqual(credits.agents.map((a) => a.id), ['claude'], 'pi (sudah dihapus) tidak dikenal, jadi tidak aktif');
   const res = await user.startPrompt('halo', { mode: 'agent', engine: 'pi' });
   assert.equal(res.status, 400);
-  assert.equal((await user.credits()).remaining, credits.remaining, 'kredit tidak dipotong');
+  assert.equal((await user.credits()).freeRemaining, credits.freeRemaining, 'kredit tidak dipotong');
 });
 
 test('mode Agen: perubahan & tabel diterapkan dengan snapshot, Batalkan mengembalikan semuanya', { skip: !GO }, async () => {
@@ -47,7 +47,7 @@ test('mode Agen: perubahan & tabel diterapkan dengan snapshot, Batalkan mengemba
   assert.match(m.content, /Buku tamu sudah dibuat\./);
   assert.match(m.content, /catatan\.md/, 'file non-website disebut, tidak disimpan');
   assert.deepEqual(m.changes.map((c) => c.action === 'table' ? `tabel ${c.name}` : `${c.action} ${c.path}`), ['tabel tamu', 'write app.js', 'write index.html']);
-  assert.equal(final.credits.remaining, 19, '1 kredit, sama dengan Builder');
+  assert.equal(final.credits.freeRemaining, 19, '1 kredit, sama dengan Builder');
 
   // Diterapkan ke project; AGENTS.md & file lain milik agen tidak ikut.
   assert.match(read(user, 'index.html'), /x-data="tamu"/);
@@ -139,7 +139,7 @@ test('mode Agen: agen bertanya lewat ask_user, jawaban pengguna diteruskan ke ag
   assert.match(final.message.content, /Judul diganti jadi "Halo Dunia"/);
   assert.match(final.message.content, /400: options harus berisi 2 sampai 4 pilihan/, 'argumen salah ditolak ke agen');
   assert.match(read(user, 'index.html'), /<h1>Halo Dunia<\/h1>/);
-  assert.equal(final.credits.remaining, 19, 'tetap 1 kredit');
+  assert.equal(final.credits.freeRemaining, 19, 'tetap 1 kredit');
 
   // Saat menyambung ulang, pertanyaan & jawabannya ikut terkirim ulang (editor tidak membuka dialog lagi).
   const replay = await user.jobEvents(jobId);
@@ -157,7 +157,7 @@ test('mode Agen: Stop saat agen menunggu jawaban menghentikan job', { skip: !GO 
   for await (const ev of events) rest.push(ev);
   assert.equal(rest.at(-1).type, 'error', JSON.stringify(rest.at(-1)));
   assert.equal((await user.post(`/api/ai/jobs/${jobId}/answer`, { question: q.id, answer: 'Halo Dunia' })).status, 409);
-  assert.equal((await user.credits()).remaining, 20, 'kredit dikembalikan');
+  assert.equal((await user.credits()).freeRemaining, 20, 'kredit dikembalikan');
 });
 
 test('mode Agen: Catatan Project ikut di AGENTS.md', { skip: !GO }, async () => {

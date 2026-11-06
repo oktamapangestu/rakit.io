@@ -3,6 +3,7 @@
 package accounts
 
 import (
+	"crypto/rand"
 	"os"
 	"regexp"
 	"strings"
@@ -72,12 +73,9 @@ func (s *Service) SlugTaken(slug string) (bool, error) {
 	return u != nil, err
 }
 
-// CreateProject membuat project baru beserta file awalnya (berbahasa lang).
+// CreateProject membuat project baru beserta file awalnya (berbahasa lang). rawSlug kosong = alamat acak;
+// subdomain pilihan sendiri (selain username akun) dihitung dalam batas alamat custom.
 func (s *Service) CreateProject(user *store.User, rawSlug, name, lang string) (*store.Project, error) {
-	slug := strings.ToLower(strings.TrimSpace(rawSlug))
-	if msg := SlugError(slug); msg != "" {
-		return nil, httpx.Errorf(400, "%s", msg)
-	}
 	owned, err := s.db.ProjectsOf(user.ID)
 	if err != nil {
 		return nil, err
@@ -85,25 +83,24 @@ func (s *Service) CreateProject(user *store.User, rawSlug, name, lang string) (*
 	if len(owned) >= s.cfg.MaxProjects {
 		return nil, httpx.Errorf(403, "Maksimal %d project per akun. Hapus project lama untuk membuat yang baru.", s.cfg.MaxProjects)
 	}
-	taken := httpx.Errorf(409, "%s sudah dipakai", s.cfg.SiteHost(slug))
-	// Username orang lain juga dicadangkan, karena project pertama tiap akun memakai username-nya.
-	if p, err := s.db.ProjectBySlug(slug); err != nil {
-		return nil, err
-	} else if p != nil {
-		return nil, taken
-	}
-	if u, err := s.db.UserByUsername(slug); err != nil {
-		return nil, err
-	} else if u != nil && u.ID != user.ID {
-		return nil, taken
+	slug := strings.ToLower(strings.TrimSpace(rawSlug))
+	custom := false
+	if slug == "" {
+		if slug, err = s.RandomSlug(); err != nil {
+			return nil, err
+		}
+	} else {
+		if custom, err = s.CheckSlug(user, slug, owned, 0); err != nil {
+			return nil, err
+		}
 	}
 	title := jsconv.Slice(strings.TrimSpace(name), 60)
 	if title == "" {
 		title = slug
 	}
-	if err := s.db.InsertProject(user.ID, slug, title); err != nil {
+	if err := s.db.InsertProject(user.ID, slug, title, custom); err != nil {
 		if store.IsUnique(err) {
-			return nil, taken
+			return nil, s.taken(slug)
 		}
 		return nil, err
 	}
@@ -111,6 +108,64 @@ func (s *Service) CreateProject(user *store.User, rawSlug, name, lang string) (*
 		return nil, err
 	}
 	return s.db.ProjectBySlug(slug)
+}
+
+func (s *Service) taken(slug string) error {
+	return httpx.Errorf(409, "%s sudah dipakai", s.cfg.SiteHost(slug))
+}
+
+// CheckSlug memeriksa subdomain pilihan user untuk project baru (projectID 0) atau project yang diganti
+// alamatnya: valid, belum dipakai, dan masih dalam batas alamat custom. owned = semua project user.
+// Hasil custom: subdomain ini dihitung sebagai alamat custom (bukan username akun sendiri).
+func (s *Service) CheckSlug(user *store.User, slug string, owned []*store.Project, projectID int64) (custom bool, err error) {
+	if msg := SlugError(slug); msg != "" {
+		return false, httpx.Errorf(400, "%s", msg)
+	}
+	// Username orang lain juga dicadangkan, karena project pertama tiap akun memakai username-nya.
+	if p, err := s.db.ProjectBySlug(slug); err != nil {
+		return false, err
+	} else if p != nil {
+		return false, s.taken(slug)
+	}
+	if u, err := s.db.UserByUsername(slug); err != nil {
+		return false, err
+	} else if u != nil && u.ID != user.ID {
+		return false, s.taken(slug)
+	}
+	if slug == user.Username {
+		return false, nil
+	}
+	used := 0
+	for _, p := range owned {
+		if p.Custom && p.ID != projectID {
+			used++
+		}
+	}
+	if used >= s.cfg.MaxCustom {
+		return false, httpx.Errorf(403, "Maksimal %d alamat custom per akun. Pakai alamat acak, atau ganti project lain ke alamat acak dulu.", s.cfg.MaxCustom)
+	}
+	return true, nil
+}
+
+// RandomSlug: subdomain acak yang belum dipakai, mis. web-k7m2qx.
+func (s *Service) RandomSlug() (string, error) {
+	const chars = "abcdefghjkmnpqrstuvwxyz23456789" // tanpa huruf/angka yang mirip (i l o 0 1)
+	for range 20 {
+		b := make([]byte, 6)
+		if _, err := rand.Read(b); err != nil {
+			return "", err
+		}
+		for i := range b {
+			b[i] = chars[int(b[i])%len(chars)]
+		}
+		slug := "web-" + string(b)
+		if taken, err := s.SlugTaken(slug); err != nil {
+			return "", err
+		} else if !taken {
+			return slug, nil
+		}
+	}
+	return "", httpx.Errorf(503, "Gagal membuat alamat acak. Coba lagi.")
 }
 
 // templateDir: file awal project. Pengguna versi Inggris mendapat <TEMPLATE_DIR>-en (mis. templates/default-en)

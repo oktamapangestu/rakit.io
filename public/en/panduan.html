@@ -199,7 +199,7 @@
       <li><a class="nav-link" href="#f-riwayat"><span class="nav-n">F11</span><span class="nav-t">Version History</span></a></li>
       <li><a class="nav-link" href="#f-console"><span class="nav-n">F12</span><span class="nav-t">Console</span></a></li>
       <li><a class="nav-link" href="#f-publikasi"><span class="nav-n">F13</span><span class="nav-t">Publishing: Live or Dev/Prod</span></a></li>
-      <li><a class="nav-link" href="#f-kredit"><span class="nav-n">F14</span><span class="nav-t">AI Credits, Plans &amp; Payment</span></a></li>
+      <li><a class="nav-link" href="#f-kredit"><span class="nav-n">F14</span><span class="nav-t">AI Allowance, Credits &amp; Payment</span></a></li>
       <li><a class="nav-link" href="#f-pengaturan"><span class="nav-n">F15</span><span class="nav-t">Settings &amp; Keyboard Shortcuts</span></a></li>
       <li><a class="nav-link" href="#f-masalah"><span class="nav-n">F16</span><span class="nav-t">Common Problems &amp; Fixes</span></a></li>
     </ul>
@@ -263,7 +263,7 @@
 <ol class="steps">
   <li>Open the rakit.io home page and click <span class="ui">Sign up</span>. Fill in a <b>username</b>, <b>email</b> and <b>password</b> — or choose <span class="ui">Continue with Google</span>.</li>
   <li>Right after signing up, your first website is live at <code>yourname.rakit.io</code> and the editor opens automatically.</li>
-  <li>New accounts get a one-time <b>AI credit bonus</b>, plus <b>free credits every day</b> (see <a href="#f-kredit">Credits &amp; Plans</a>).</li>
+  <li>Every account gets <b>20 free AI prompts every day</b> (see <a href="#f-kredit">AI Allowance &amp; Credits</a>).</li>
 </ol>
 <div class="note">🔐 Accounts registered with email + password keep logging in with their password, even if the email matches your Google account. Accounts aren't merged automatically, for security.</div>
 
@@ -299,7 +299,7 @@
   <tr><td>Save all</td><td>Saves every open file that has unsaved changes.</td></tr>
   <tr><td>Settings</td><td>Light/dark theme, language, and AI code prediction.</td></tr>
   <tr><td>Bahasa Indonesia / English</td><td>Switch the interface language.</td></tr>
-  <tr><td>Subscription &amp; AI credits</td><td>See plans, buy credits, or subscribe.</td></tr>
+  <tr><td>Top up AI credits</td><td>Buy credits to keep going after the daily allowance runs out.</td></tr>
   <tr><td>Log out</td><td>Log out of your account in this browser.</td></tr>
 </table>
 
@@ -368,11 +368,11 @@
 <div class="tip">💡 The AI knows the list of images in your project, so you can write: <i>“use /images/hero.jpg as the hero section background”</i>. The AI can't create or edit images — upload the images you need yourself.</div>
 
 <table>
-  <tr><th>Limit</th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>One code file</td><td colspan="3">512 KB (.html · .css · .js)</td></tr>
-  <tr><td>One image</td><td>1 MB</td><td>5 MB</td><td>10 MB</td></tr>
-  <tr><td>Total storage per project</td><td>20 MB</td><td>100 MB</td><td>250 MB</td></tr>
-  <tr><td>Files &amp; folders</td><td>500</td><td>2,000</td><td>5,000</td></tr>
+  <tr><th>Limit</th><th>All accounts</th></tr>
+  <tr><td>One code file</td><td>512 KB (.html · .css · .js)</td></tr>
+  <tr><td>One image</td><td>5 MB</td></tr>
+  <tr><td>Total storage per project</td><td>100 MB</td></tr>
+  <tr><td>Files &amp; folders</td><td>2,000</td></tr>
 </table>
 
 <!-- ══════════════ F4. CODE EDITOR ══════════════ -->
@@ -598,10 +598,10 @@ await fetch('/api/db/products', {
 <div class="warn">⚠️ <b>Don't store images as base64</b> in a text column — it will be rejected. Use an <b>Image</b> column and upload as in the example above. Visitors can only upload if the table's <code>create</code> or <code>update</code> access is public.</div>
 
 <table>
-  <tr><th>Database limits</th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>Size per project</td><td>10 MB</td><td>50 MB</td><td>100 MB</td></tr>
-  <tr><td>Tables · columns</td><td colspan="3">20 tables · 30 columns per table</td></tr>
-  <tr><td>Requests from visitors</td><td colspan="3">300 reads &amp; 60 writes per minute per visitor · max. 20 uploads / 10 minutes</td></tr>
+  <tr><th>Database limits</th><th>All accounts</th></tr>
+  <tr><td>Size per project</td><td>50 MB</td></tr>
+  <tr><td>Tables · columns</td><td>20 tables · 30 columns per table</td></tr>
+  <tr><td>Requests from visitors</td><td>300 reads &amp; 60 writes per minute per visitor · max. 20 uploads / 10 minutes</td></tr>
 </table>
 
 <!-- ══════════════ F8. SERVERLESS FUNCTIONS ══════════════ -->
@@ -753,7 +753,7 @@ const data = await res.json();</code></pre></figure>
 }
 // from a page: fetch('/api/fn/admin-orders?status=new', { headers: { 'X-Admin-Key': key } })</code></pre></figure>
 
-<figure class="code" data-lang="js"><figcaption><span class="file">functions/daily-report.js</span><span class="desc">run by a schedule (Pro/Unlimited)</span></figcaption><pre><code>export default async function (req, { db, env, fetch }) {
+<figure class="code" data-lang="js"><figcaption><span class="file">functions/daily-report.js</span><span class="desc">run by a schedule</span></figcaption><pre><code>export default async function (req, { db, env, fetch }) {
   if (req.method !== 'CRON') return Response.json({ error: 'Schedules only' }, { status: 403 });
 
   const since = Date.now() - 24 * 3600e3;                      // the last 24 hours (created_at is in UTC)
@@ -823,8 +823,8 @@ const data = await res.json();</code></pre></figure>
     <p style="margin:6px 0">Enter a name (e.g. <code>TELEGRAM_TOKEN</code>) and its value, then click <span class="ui">Save</span>. Read it in code with <code>env.TELEGRAM_TOKEN</code>. The value isn't shown in the editor again.</p>
   </div>
   <div class="card">
-    <h3 style="margin-top:0">⏱ Schedules <span class="pill">Pro / Unlimited</span></h3>
-    <p style="margin:6px 0">Click <span class="ui">Schedule</span> on a function: every 5/15/30 minutes, every hour, every day at a set time, every week, or a custom cron (WIB time, UTC+7). Most frequent: Pro every 15 minutes, Unlimited every 5 minutes.</p>
+    <h3 style="margin-top:0">⏱ Schedules</h3>
+    <p style="margin:6px 0">Click <span class="ui">Schedule</span> on a function: every 5/15/30 minutes, every hour, every day at a set time, every week, or a custom cron (WIB time, UTC+7). At most every 15 minutes.</p>
   </div>
   <div class="card">
     <h3 style="margin-top:0">📜 Execution log</h3>
@@ -836,8 +836,8 @@ const data = await res.json();</code></pre></figure>
   </div>
 </div>
 <table>
-  <tr><th>Executions per day (WIB)</th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>All functions in the account</td><td>1,000</td><td>20,000</td><td>100,000</td></tr>
+  <tr><th>Executions per day (WIB)</th><th>All accounts</th></tr>
+  <tr><td>All functions in the account</td><td>20,000</td></tr>
 </table>
 <div class="warn">⚠️ <b>Never put API keys/tokens in a page's .html or .js files</b> — anyone can see them. Store them in Secrets (env) and use them through a function.</div>
 
@@ -930,9 +930,9 @@ const data = await res.json();</code></pre></figure>
 </div>
 <div class="warn">⚠️ <b>The database isn't included</b> in saves/restores, so data submitted by visitors isn't lost. Restoring the whole project also deletes files created after that version.</div>
 <table>
-  <tr><th>History limits per project</th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>Kept for</td><td>7 days</td><td>30 days</td><td>90 days</td></tr>
-  <tr><td>Number of versions</td><td>20</td><td>200</td><td>2,000</td></tr>
+  <tr><th>History limits per project</th><th>All accounts</th></tr>
+  <tr><td>Kept for</td><td>30 days</td></tr>
+  <tr><td>Number of versions</td><td>200</td></tr>
 </table>
 <p style="margin:6px 0;font-size:14px">History doesn't count toward your storage quota.</p>
 
@@ -984,53 +984,30 @@ const data = await res.json();</code></pre></figure>
 <div class="warn">⚠️ Switching from manual back to <b>live instantly</b> makes unpublished changes go live right away, and the test data in dev is replaced by the real data from the public website.</div>
 
 <!-- ══════════════ F14. CREDITS & PLANS ══════════════ -->
-<h2 id="f-kredit"><span class="n">F14</span>AI Credits, Plans &amp; Payment</h2>
-<p class="lead">The credit badge in the AI panel shows your remaining credits. Click it, or open the avatar menu → <span class="ui">Subscription &amp; AI credits</span>.</p>
+<h2 id="f-kredit"><span class="n">F14</span>AI Allowance, Credits &amp; Payment</h2>
+<p class="lead">The badge in the AI panel shows today's remaining free prompts (or your credits once the allowance is used up). Click it, or open the avatar menu → <span class="ui">Top up AI credits</span>.</p>
 
-<h3>What does each feature cost?</h3>
+<h3>Daily allowance</h3>
+<p>Every account gets <b>20 free AI prompts per day</b>. The allowance refills at 00:00 WIB (UTC+7) and leftovers don't accumulate. Each prompt counts as 1, including prompts with images. There are no subscription plans: every account gets the same storage, database, history and function limits.</p>
+
+<h3>After the allowance runs out</h3>
 <table>
-  <tr><th>Feature</th><th>Cost</th></tr>
+  <tr><th>Feature</th><th>Cost in purchased credits</th></tr>
   <tr><td>AI prompt (Builder / Plan)</td><td><b>1 credit</b></td></tr>
   <tr><td>Prompt with images</td><td><b>2 credits</b></td></tr>
-  <tr><td>Update diagram</td><td><b>1 credit</b></td></tr>
-  <tr><td>Code prediction, Code Walkthrough, diagram fixes</td><td><span class="badge b-ok">Free</span> (with a daily limit)</td></tr>
+  <tr><td>Diagram update</td><td><b>1 credit</b></td></tr>
+  <tr><td>Code prediction, Read Code Flow, diagram fixes</td><td><span class="badge b-ok">Free</span> (daily limits apply)</td></tr>
   <tr><td>AI in functions (<code>ai.*</code>)</td><td>Billed by the provider to your API key, not rakit.io credits</td></tr>
-  <tr><td>Failed / stopped prompts / full queue</td><td>Credits are <b>refunded</b></td></tr>
+  <tr><td>Failed / stopped prompt / full queue</td><td>Allowance/credits <b>refunded</b></td></tr>
 </table>
-
-<h3>Where credits come from (used in this order)</h3>
-<ol class="steps">
-  <li><b>Subscription quota</b> — if you subscribe to Pro/Unlimited.</li>
-  <li>The <b>welcome bonus</b> for new accounts (one-time), then <b>daily free credits</b> — reset at 00:00 WIB (UTC+7); leftovers don't accumulate.</li>
-  <li><b>Purchased credits</b> — never expire.</li>
-</ol>
-
-<h3>Plans</h3>
-<div class="table-scroll"><table>
-  <tr><th></th><th>Free</th><th>Pro</th><th>Unlimited</th></tr>
-  <tr><td>AI</td><td>Daily free credits</td><td>A credit quota every 30 days</td><td>No monthly quota, with a daily prompt limit</td></tr>
-  <tr><td>File storage / project</td><td>20 MB</td><td>100 MB</td><td>250 MB</td></tr>
-  <tr><td>Database / project</td><td>10 MB</td><td>50 MB</td><td>100 MB</td></tr>
-  <tr><td>Files &amp; folders</td><td>500</td><td>2,000</td><td>5,000</td></tr>
-  <tr><td>Image size</td><td>1 MB</td><td>5 MB</td><td>10 MB</td></tr>
-  <tr><td>Version history</td><td>7 days / 20</td><td>30 days / 200</td><td>90 days / 2,000</td></tr>
-  <tr><td>Function executions / day</td><td>1,000</td><td>20,000</td><td>100,000</td></tr>
-  <tr><td>Function schedules</td><td><span class="badge b-no">—</span></td><td>min. 15 minutes</td><td>min. 5 minutes</td></tr>
-</table></div>
-<p style="margin:6px 0;font-size:14px">Current prices and AI quotas are shown in the <span class="ui">Subscription &amp; AI credits</span> menu.</p>
+<p style="margin:6px 0;font-size:14px">Purchased credits never expire, and are only used after the day's 20 free prompts are gone.</p>
 
 <h3>Paying with QRIS</h3>
 <ol class="steps">
-  <li>Choose a credit package or a subscription, then click pay.</li>
-  <li>Scan the QRIS code with any Indonesian banking or e-wallet app that supports QRIS.</li>
-  <li>Keep the payment window open — the credits/plan activate automatically as soon as the payment is received.</li>
+  <li>Choose a credit package, then click pay.</li>
+  <li>Scan the QRIS code with any bank or e-wallet app.</li>
+  <li>Keep the payment window open — credits are added automatically once the payment is received.</li>
 </ol>
-<ul>
-  <li><b>30-day subscriptions</b>, paid once with no automatic billing.</li>
-  <li><b>Renewing</b> the same plan adds 30 days from its end date.</li>
-  <li><b>Upgrading</b> Pro → Unlimited: active immediately; the remaining Pro days are converted by price.</li>
-  <li>When a subscription ends, limits go back to Free. Files aren't deleted, but new/larger files are rejected until usage is below the limits.</li>
-</ul>
 
 <!-- ══════════════ F15. SETTINGS & SHORTCUTS ══════════════ -->
 <h2 id="f-pengaturan"><span class="n">F15</span>Settings &amp; Keyboard Shortcuts</h2>
@@ -1074,7 +1051,7 @@ const data = await res.json();</code></pre></figure>
   <tr><td>Changes don't appear on the public website</td><td>Manual publishing mode is on — press <span class="ui">Publish</span>. Or the file hasn't been saved.</td></tr>
   <tr><td>The AI's result isn't what you wanted</td><td>Press <span class="ui">Undo</span>, then rewrite your request more specifically, or use <span class="ui">Select blocks</span>. You can also go back via the History tab.</td></tr>
   <tr><td>“The AI is at capacity”</td><td>The queue is busy; your credits are refunded. Try again shortly.</td></tr>
-  <tr><td>Out of credits</td><td>Wait for the 00:00 WIB (UTC+7) reset, buy credits, or subscribe.</td></tr>
+  <tr><td>AI allowance used up</td><td>Wait for the 00:00 WIB (UTC+7) reset, or top up credits.</td></tr>
   <tr><td>A file/image is rejected because of the quota</td><td>Delete unused files, shrink images, or upgrade your plan.</td></tr>
   <tr><td>A function errors / times out</td><td>Check the Execution log in the Functions tab, then <span class="ui">✦ Fix with AI</span>. Make sure the secrets (env) it uses are set.</td></tr>
   <tr><td>A button does nothing when clicked</td><td>Open the Console tab → filter FE → read the red error → <span class="ui">✦ Fix with AI</span>.</td></tr>
@@ -2009,7 +1986,7 @@ A cheerful, colorful style with subtle animation.</div>
   <tr><th>Aspect</th><th>Limit</th></tr>
   <tr><td>File types</td><td><span class="badge b-ok">.html · .css · .js</span> + uploaded images</td></tr>
   <tr><td>Size per code file</td><td>Max <b>512 KB</b></td></tr>
-  <tr><td>Total per project</td><td><b>20 MB</b> &amp; 500 files/folders (more on the Pro/Unlimited plans)</td></tr>
+  <tr><td>Total per project</td><td><b>100 MB</b> &amp; 2,000 files/folders</td></tr>
   <tr><td>Length of one prompt</td><td>Max <b>20,000 characters</b>, max. 3 attached images</td></tr>
   <tr><td>Server code</td><td><span class="badge b-warn">serverless functions</span> in JavaScript in <code>functions/</code> — not PHP/Node.js, no npm</td></tr>
   <tr><td>Build step / npm</td><td><span class="badge b-no">None</span> — use CDNs for libraries</td></tr>
@@ -2047,7 +2024,7 @@ A cheerful, colorful style with subtle animation.</div>
   </div>
 </div>
 
-<div class="warn">⚠️ <b>Save your AI credits.</b> Each prompt uses credits (prompts with images use 2; new accounts get a one-time <b>welcome bonus</b>, then <b>free credits every day</b>, plus subscriptions &amp; top-ups — see <a href="#f-kredit">Credits &amp; Plans</a>). Plan first with Plan mode, then run it — so you don't go back and forth fixing things.</div>
+<div class="warn">⚠️ <b>Save your AI credits.</b> Every account gets <b>20 free prompts per day</b>; after that, prompts use purchased credits (see <a href="#f-kredit">AI Allowance &amp; Credits</a>). Plan first with Plan mode, then run it — so you don't go back and forth fixing things.</div>
 
 <!-- ══════════════ TEMPLATE ══════════════ -->
 <h2 id="template"><span class="n">★</span>Universal Prompt Template</h2>

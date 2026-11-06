@@ -185,7 +185,8 @@ func (s *Service) ProvidersView() ProvidersView {
 	return ProvidersView{Providers: list, MaxProviders: MaxProviders}
 }
 
-func cleanBaseURL(raw string) (string, error) {
+// CleanBaseURL: base URL provider yang dirapikan (tanpa / di akhir), atau kesalahan bila tidak valid.
+func CleanBaseURL(raw string) (string, error) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -224,7 +225,7 @@ func (s *Service) SaveProviders(input map[string]any) (ProvidersView, error) {
 		if p.Name == "" {
 			return ProvidersView{}, httpx.Errorf(400, `Nama provider "%s" wajib diisi`, p.ID)
 		}
-		base, err := cleanBaseURL(str("baseUrl"))
+		base, err := CleanBaseURL(str("baseUrl"))
 		if err != nil {
 			return ProvidersView{}, httpx.Errorf(400, "Base URL %s %s", p.Name, err.Error())
 		}
@@ -278,7 +279,12 @@ func (s *Service) TestProvider(ctx context.Context, input map[string]any) TestRe
 	if jsconv.Truthy(input["builtin"]) {
 		base, key = s.cfg.AI.BaseURL, s.cfg.AI.APIKey
 	}
-	base, err := cleanBaseURL(base)
+	return TestEndpoint(ctx, base, key)
+}
+
+// TestEndpoint menguji satu base URL + key dengan meminta daftar modelnya (GET {base}/models).
+func TestEndpoint(ctx context.Context, base, key string) TestResult {
+	base, err := CleanBaseURL(base)
 	if err != nil {
 		return TestResult{Error: "Base URL " + err.Error(), Models: []string{}}
 	}
