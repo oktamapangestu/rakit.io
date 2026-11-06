@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>rakit.io — Learn to build websites by building them</title>
-  <meta name="description" content="Learn to build websites from scratch, right in your browser. Practice HTML, CSS & JavaScript with an AI that can build things for you and explain them, and your work goes live at your own address.">
+  <title>rakit.io — Build websites with AI, in your browser or on your computer</title>
+  <meta name="description" content="Build websites and learn how they work with AI. 20 free AI prompts a day, unlimited with your own AI API key, live at your own address. Desktop app for Linux, macOS and Windows, open source on GitHub.">
   <link rel="alternate" hreflang="id" href="{{origin}}/">
   <link rel="alternate" hreflang="en" href="{{origin}}/en">
   <link rel="alternate" hreflang="x-default" href="{{origin}}/">
@@ -19,7 +19,9 @@
     <a class="brand" href="/en" aria-label="rakit.io"><img class="logo" src="/logo.svg" alt=""><span class="wordmark">rakit<span class="dim">.io</span></span><span class="pixel-tag">beta</span></a>
     <nav class="nav-actions" aria-label="Main navigation">
       <a class="nav-link lang" href="/?lang=id" hreflang="id" lang="id" title="Versi bahasa Indonesia">ID</a>
-      <a class="nav-link" href="/en/panduan"><span class="long">Learning </span>Guide</a>
+      <a class="nav-link hide-sm" href="/en/panduan">Guide</a>
+      <a class="nav-link hide-sm" href="#download">Desktop</a>
+      <a class="nav-icon" href="https://github.com/oktamapangestu/rakit.icu" target="_blank" rel="noopener" title="Source code on GitHub" aria-label="GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0"/></svg></a>
       <a class="nav-btn" href="#auth" data-go="login">Log in</a>
       <a class="nav-btn primary" href="#auth" data-go="register">Sign up<span class="long">&nbsp;free</span></a>
     </nav>
@@ -27,19 +29,21 @@
 
   <main class="hero">
     <section class="pitch">
-      <p class="eyebrow">A place for anyone to learn web building</p>
-      <h1>Building and<br>Learning Websites<br><em>made easier.</em></h1>
+      <a class="badge" href="#download"><span class="badge-dot"></span>New: desktop app + Claude Agent mode <span aria-hidden="true">→</span></a>
+      <h1>Build websites<br>with AI,<br><em>then understand the code.</em></h1>
       <p class="lead">
-        Start from scratch, right in your browser. Write the code yourself or ask the AI for help —
-        then look at it, change it, and understand how it works. Your work is instantly live at
+        Write HTML, CSS & JavaScript yourself or let AI do it — see what changed, ask why,
+        and your work goes live at
         <span class="domain"><span id="heroUser">yourname</span>.<span class="base">rakit.io</span></span>
       </p>
-
-      <ul class="features">
-        <li><span><strong>Learn by doing.</strong> Try HTML, CSS and JavaScript yourself instead of just reading about them.</span></li>
-        <li><span><strong>AI as a study buddy.</strong> Ask it to build something, to explain it, or why your code throws an error.</span></li>
-        <li><span><strong>See results instantly.</strong> Every code change shows up in the preview right away.</span></li>
-        <li><span><strong>Beginner-friendly.</strong> Free, nothing to install, with step-by-step guides.</span></li>
+      <div class="hero-cta">
+        <a class="cta-btn" href="#auth" data-go="register">Start in your browser</a>
+        <a class="ghost-btn" href="#download"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.5 1h1v8.3l2.6-2.6.7.7L8 11.2 4.2 7.4l.7-.7 2.6 2.6zM2 13h12v1H2z"/></svg>Download desktop</a>
+      </div>
+      <ul class="facts" aria-label="At a glance">
+        <li><strong>20</strong><span>free AI prompts every day</span></li>
+        <li><strong>∞</strong><span>with your own AI API key</span></li>
+        <li><strong>100&nbsp;MB</strong><span>per project, no subscription</span></li>
       </ul>
     </section>
 
@@ -112,6 +116,29 @@
     </section>
   </main>
 
+  <section class="peek" aria-label="Editor preview">
+    <div class="window">
+      <div class="window-bar"><i></i><i></i><i></i><span>cake-shop.rakit.io — rakit</span></div>
+      <div class="window-body">
+        <div class="pane pane-chat">
+          <p class="msg me">Make a cake shop menu page with an order form</p>
+          <p class="msg ai"><b>Builder</b> created <code>index.html</code>, <code>style.css</code> and an <code>orders</code> table. The form saves to the database — review it before keeping it.</p>
+          <p class="msg ai step">✓ index.html &nbsp;✓ style.css &nbsp;✓ orders table</p>
+        </div>
+        <pre class="pane pane-code" aria-hidden="true"><span class="t">&lt;form</span> <span class="a">x-data</span>=<span class="v">"order"</span><span class="t">&gt;</span>
+  <span class="t">&lt;input</span> <span class="a">x-model</span>=<span class="v">"name"</span><span class="t">&gt;</span>
+  <span class="t">&lt;select</span> <span class="a">x-model</span>=<span class="v">"cake"</span><span class="t">&gt;</span>…<span class="t">&lt;/select&gt;</span>
+  <span class="t">&lt;button&gt;</span>Order<span class="t">&lt;/button&gt;</span>
+<span class="t">&lt;/form&gt;</span></pre>
+        <div class="pane pane-site" aria-hidden="true">
+          <b>Sari's Cakes</b>
+          <span class="row"></span><span class="row short"></span>
+          <span class="btn">Order</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="showcase" aria-labelledby="fiturTitle">
     <div class="showcase-head">
       <p class="eyebrow">Inside the editor</p>
@@ -150,10 +177,10 @@
           <p class="learn"><strong>You learn:</strong> to see your website's structure the way a system designer does.</p>
         </article>
         <article class="feature-card image">
-          <span class="feature-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 2zM2 3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v7.3l-3-3-2.5 2.5-3-3L2 11.8zM10.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3"/></svg></span>
-          <h3>Image uploads</h3>
-          <p>Drag images into the file list, then copy their &lt;img&gt; or CSS code with one click.</p>
-          <p class="learn"><strong>You learn:</strong> how to add images and assets to a web page.</p>
+          <span class="feature-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 1a4.5 4.5 0 0 0-4.32 5.77L1 11.95V15h3.05v-1.5h1.5V12h1.5l1.18-1.18A4.5 4.5 0 1 0 10.5 1m0 1a3.5 3.5 0 1 1-1.2 6.79l-.3-.11L6.64 11H4.55v1.5h-1.5V14H2v-1.64l5.32-5.32-.11-.3A3.5 3.5 0 0 1 10.5 2m1 1.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2"/></svg></span>
+          <h3>Your own AI</h3>
+          <p>Connect an OpenAI, Claude, DeepSeek, Groq, OpenRouter or Ollama API key in the AI Providers tab — use it as much as you like without touching your daily allowance.</p>
+          <p class="learn"><strong>You learn:</strong> how apps connect to AI services through an API.</p>
         </article>
         <article class="feature-card history">
           <span class="feature-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1-6.14 4.35l.94.33A5.5 5.5 0 1 0 8 2.5c-1.77 0-3.35.84-4.35 2.15H5.5v1H2V2.15h1v1.72A6.48 6.48 0 0 1 8 1.5M7.5 4h1v3.8l2.6 1.5-.5.87-3.1-1.8z"/></svg></span>
@@ -174,15 +201,67 @@
           <p class="learn"><strong>You learn:</strong> to turn an idea into a website, one step at a time.</p>
         </article>
     </div>
-    <div class="showcase-cta">
-      <a class="cta-btn" href="#auth" data-go="register">Start learning for free</a>
-      <span>Free, nothing to install, right in your browser.</span>
+  </section>
+
+  <section class="plan" aria-labelledby="planTitle">
+    <div class="plan-copy">
+      <p class="eyebrow">No subscription</p>
+      <h2 id="planTitle">Free for everyone, <em>no plans</em></h2>
+      <p>Every account gets the same limits. Want more AI? Top up credits now and then, or connect your own AI API key and use it as much as you like.</p>
+    </div>
+    <ul class="plan-list">
+      <li><b>20 AI prompts / day</b><span>Resets at 00:00 WIB (UTC+7). Prompts with images count as 1 too.</span></li>
+      <li><b>Personal AI</b><span>OpenAI, Claude, DeepSeek, Groq, OpenRouter or Ollama — without using your allowance.</span></li>
+      <li><b>Website address</b><span>Automatic <code>web-xxxxxx.rakit.io</code>, or up to 5 addresses of your choice.</span></li>
+      <li><b>Room to create</b><span>100 MB of files, 50 MB database, 30-day history, 20 projects per account.</span></li>
+    </ul>
+  </section>
+
+  <section class="download" id="download" aria-labelledby="downloadTitle">
+    <div class="download-copy">
+      <p class="eyebrow">rakit desktop</p>
+      <h2 id="downloadTitle">rakit on your computer, <em>even offline</em></h2>
+      <p>The same editor, with projects stored on your own computer. Use Ollama for fully local AI, or a Claude API key for <b>Agent mode</b> — AI that builds, opens and tests your website by itself.</p>
+      <ul class="checks">
+        <li>No sign-up, you're in right away</li>
+        <li>Claude Agent SDK Agent mode, no Docker</li>
+        <li>Project websites at <code>projectname.localhost</code></li>
+      </ul>
+    </div>
+    <div class="download-card">
+      <a class="os-btn" data-os="windows" href="https://github.com/oktamapangestu/rakit.icu/releases/latest" target="_blank" rel="noopener"><span class="os-name">Windows</span><span class="os-file">.exe · .msi</span></a>
+      <a class="os-btn" data-os="mac" href="https://github.com/oktamapangestu/rakit.icu/releases/latest" target="_blank" rel="noopener"><span class="os-name">macOS</span><span class="os-file">.dmg · macOS 14+</span></a>
+      <a class="os-btn" data-os="linux" href="https://github.com/oktamapangestu/rakit.icu/releases/latest" target="_blank" rel="noopener"><span class="os-name">Linux</span><span class="os-file">.AppImage · .deb</span></a>
+      <p class="download-note">Downloads come from the GitHub releases page. Want to build it yourself? See <a href="https://github.com/oktamapangestu/rakit.icu/tree/master/desktop" target="_blank" rel="noopener">desktop/README.md</a>.</p>
+    </div>
+  </section>
+
+  <section class="oss" aria-labelledby="ossTitle">
+    <span class="oss-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0"/></svg></span>
+    <div>
+      <h2 id="ossTitle">Open source on GitHub</h2>
+      <p>See how rakit is built — Go server, Svelte editor, Tauri app — report issues, or contribute.</p>
+    </div>
+    <a class="ghost-btn" href="https://github.com/oktamapangestu/rakit.icu" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0"/></svg>Open on GitHub</a>
+  </section>
+
+  <section class="final-cta">
+    <h2>Ready to build your first website?</h2>
+    <div class="hero-cta">
+      <a class="cta-btn" href="#auth" data-go="register">Sign up free</a>
+      <a class="ghost-btn" href="#download"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.5 1h1v8.3l2.6-2.6.7.7L8 11.2 4.2 7.4l.7-.7 2.6 2.6zM2 13h12v1H2z"/></svg>Download desktop</a>
     </div>
   </section>
 
   <footer class="foot">
-    <p>© rakit.io · Learn, build, and go online from your browser</p>
-    <p>Contact us: <a href="mailto:halorakitio@gmail.com">halorakitio@gmail.com</a></p>
+    <nav class="foot-links" aria-label="Links">
+      <a href="/en/panduan">Guide</a>
+      <a href="#download">Download desktop</a>
+      <a href="https://github.com/oktamapangestu/rakit.icu" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/oktamapangestu/rakit.icu/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="mailto:halorakitio@gmail.com">halorakitio@gmail.com</a>
+    </nav>
+    <p>© rakit.io · Learn, create, and go live — in your browser or on your computer</p>
   </footer>
 
   <script src="/js/en/auth.js"></script>

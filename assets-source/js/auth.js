@@ -132,4 +132,9 @@
     e.preventDefault();
     submit(loginForm, '/api/login');
   });
+
+  // Download desktop: sorot tombol untuk OS pengunjung (Windows / macOS / Linux) dan taruh paling atas.
+  const ua = `${navigator.userAgentData?.platform ?? ''} ${navigator.platform ?? ''} ${navigator.userAgent}`.toLowerCase();
+  const os = /android|iphone|ipad/.test(ua) ? '' : /win/.test(ua) ? 'windows' : /mac/.test(ua) ? 'mac' : /linux|x11/.test(ua) ? 'linux' : '';
+  if (os) document.querySelector(`.os-btn[data-os="${os}"]`)?.classList.add('recommended');
 })();

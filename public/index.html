@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>rakit.io — Belajar bikin website sambil langsung praktik</title>
-  <meta name="description" content="Tempat belajar bikin website dari nol, langsung dari browser. Praktik HTML, CSS & JavaScript ditemani AI yang bisa membuatkan sekaligus menjelaskan, dan karyamu langsung online dengan alamatmu sendiri.">
+  <title>rakit.io — Bikin website dengan AI, di browser atau di komputermu</title>
+  <meta name="description" content="Bikin dan belajar website dengan AI. Gratis 20 prompt AI per hari, pakai API key AI milikmu sendiri tanpa batas, langsung online di alamatmu. Ada versi desktop untuk Linux, macOS, dan Windows, dan kodenya terbuka di GitHub.">
   <link rel="alternate" hreflang="id" href="{{origin}}/">
   <link rel="alternate" hreflang="en" href="{{origin}}/en">
   <link rel="alternate" hreflang="x-default" href="{{origin}}/">
@@ -19,7 +19,9 @@
     <a class="brand" href="/" aria-label="rakit.io"><img class="logo" src="/logo.svg" alt=""><span class="wordmark">rakit<span class="dim">.io</span></span><span class="pixel-tag">beta</span></a>
     <nav class="nav-actions" aria-label="Navigasi utama">
       <a class="nav-link lang" href="/en" hreflang="en" lang="en" title="English version">EN</a>
-      <a class="nav-link" href="/panduan">Panduan<span class="long"> belajar</span></a>
+      <a class="nav-link hide-sm" href="/panduan">Panduan</a>
+      <a class="nav-link hide-sm" href="#download">Desktop</a>
+      <a class="nav-icon" href="https://github.com/oktamapangestu/rakit.icu" target="_blank" rel="noopener" title="Kode sumber di GitHub" aria-label="GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0"/></svg></a>
       <a class="nav-btn" href="#auth" data-go="login">Masuk</a>
       <a class="nav-btn primary" href="#auth" data-go="register">Daftar<span class="long">&nbsp;gratis</span></a>
     </nav>
@@ -27,19 +29,21 @@
 
   <main class="hero">
     <section class="pitch">
-      <p class="eyebrow">Tempat belajar bikin website untuk siapa saja</p>
-      <h1>Buat dan Belajar<br>Bikin Website<br><em>jadi lebih mudah.</em></h1>
+      <a class="badge" href="#download"><span class="badge-dot"></span>Baru: versi desktop + mode Agen Claude <span aria-hidden="true">→</span></a>
+      <h1>Bikin website<br>bareng AI,<br><em>lalu pahami kodenya.</em></h1>
       <p class="lead">
-        Mulai dari nol, langsung dari browser. Tulis kodenya sendiri atau minta bantuan AI —
-        lalu lihat, ubah, dan pahami cara kerjanya. Karyamu langsung bisa dibuka di
+        Tulis HTML, CSS & JavaScript sendiri atau minta AI mengerjakannya — lihat perubahannya,
+        tanya kenapa, dan karyamu langsung online di
         <span class="domain"><span id="heroUser">namamu</span>.<span class="base">rakit.io</span></span>
       </p>
-
-      <ul class="features">
-        <li><span><strong>Belajar dengan praktik.</strong> HTML, CSS, dan JavaScript langsung kamu coba, bukan cuma dibaca.</span></li>
-        <li><span><strong>AI jadi teman belajar.</strong> Minta dibuatkan, minta dijelaskan, atau tanya kenapa kodenya error.</span></li>
-        <li><span><strong>Hasilnya langsung terlihat.</strong> Setiap perubahan kode muncul di preview saat itu juga.</span></li>
-        <li><span><strong>Ramah pemula.</strong> Gratis, tanpa instal apa pun, dan ada panduan langkah demi langkah.</span></li>
+      <div class="hero-cta">
+        <a class="cta-btn" href="#auth" data-go="register">Mulai di browser</a>
+        <a class="ghost-btn" href="#download"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.5 1h1v8.3l2.6-2.6.7.7L8 11.2 4.2 7.4l.7-.7 2.6 2.6zM2 13h12v1H2z"/></svg>Download desktop</a>
+      </div>
+      <ul class="facts" aria-label="Sekilas">
+        <li><strong>20</strong><span>prompt AI gratis tiap hari</span></li>
+        <li><strong>∞</strong><span>dengan API key AI milikmu</span></li>
+        <li><strong>100&nbsp;MB</strong><span>per project, tanpa langganan</span></li>
       </ul>
     </section>
 
@@ -112,6 +116,29 @@
     </section>
   </main>
 
+  <section class="peek" aria-label="Tampilan editor">
+    <div class="window">
+      <div class="window-bar"><i></i><i></i><i></i><span>toko-kue.rakit.io — rakit</span></div>
+      <div class="window-body">
+        <div class="pane pane-chat">
+          <p class="msg me">Buatkan halaman menu toko kue dengan form pesanan</p>
+          <p class="msg ai"><b>Builder</b> membuat <code>index.html</code>, <code>style.css</code>, dan tabel <code>pesanan</code>. Form sudah menyimpan ke database — cek dulu sebelum disimpan.</p>
+          <p class="msg ai step">✓ index.html &nbsp;✓ style.css &nbsp;✓ tabel pesanan</p>
+        </div>
+        <pre class="pane pane-code" aria-hidden="true"><span class="t">&lt;form</span> <span class="a">x-data</span>=<span class="v">"pesan"</span><span class="t">&gt;</span>
+  <span class="t">&lt;input</span> <span class="a">x-model</span>=<span class="v">"nama"</span><span class="t">&gt;</span>
+  <span class="t">&lt;select</span> <span class="a">x-model</span>=<span class="v">"kue"</span><span class="t">&gt;</span>…<span class="t">&lt;/select&gt;</span>
+  <span class="t">&lt;button&gt;</span>Pesan<span class="t">&lt;/button&gt;</span>
+<span class="t">&lt;/form&gt;</span></pre>
+        <div class="pane pane-site" aria-hidden="true">
+          <b>Kue Bu Sari</b>
+          <span class="row"></span><span class="row short"></span>
+          <span class="btn">Pesan</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="showcase" aria-labelledby="fiturTitle">
     <div class="showcase-head">
       <p class="eyebrow">Di dalam editor</p>
@@ -150,10 +177,10 @@
           <p class="learn"><strong>Kamu belajar:</strong> melihat struktur websitemu seperti seorang perancang sistem.</p>
         </article>
         <article class="feature-card image">
-          <span class="feature-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 2A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 2zM2 3.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v7.3l-3-3-2.5 2.5-3-3L2 11.8zM10.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3"/></svg></span>
-          <h3>Upload gambar</h3>
-          <p>Seret gambar ke daftar file, lalu salin kode &lt;img&gt; atau CSS-nya dengan satu klik.</p>
-          <p class="learn"><strong>Kamu belajar:</strong> cara memasang gambar dan aset di halaman web.</p>
+          <span class="feature-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 1a4.5 4.5 0 0 0-4.32 5.77L1 11.95V15h3.05v-1.5h1.5V12h1.5l1.18-1.18A4.5 4.5 0 1 0 10.5 1m0 1a3.5 3.5 0 1 1-1.2 6.79l-.3-.11L6.64 11H4.55v1.5h-1.5V14H2v-1.64l5.32-5.32-.11-.3A3.5 3.5 0 0 1 10.5 2m1 1.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2"/></svg></span>
+          <h3>AI milikmu sendiri</h3>
+          <p>Sambungkan API key OpenAI, Claude, DeepSeek, Groq, OpenRouter, atau Ollama di tab Provider AI — pakai sepuasnya tanpa memotong jatah harian.</p>
+          <p class="learn"><strong>Kamu belajar:</strong> cara aplikasi tersambung ke layanan AI lewat API.</p>
         </article>
         <article class="feature-card history">
           <span class="feature-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1-6.14 4.35l.94.33A5.5 5.5 0 1 0 8 2.5c-1.77 0-3.35.84-4.35 2.15H5.5v1H2V2.15h1v1.72A6.48 6.48 0 0 1 8 1.5M7.5 4h1v3.8l2.6 1.5-.5.87-3.1-1.8z"/></svg></span>
@@ -174,15 +201,67 @@
           <p class="learn"><strong>Kamu belajar:</strong> menyusun ide menjadi website, satu langkah demi satu langkah.</p>
         </article>
     </div>
-    <div class="showcase-cta">
-      <a class="cta-btn" href="#auth" data-go="register">Mulai belajar gratis</a>
-      <span>Gratis, tanpa instal, langsung di browser.</span>
+  </section>
+
+  <section class="plan" aria-labelledby="planTitle">
+    <div class="plan-copy">
+      <p class="eyebrow">Tanpa langganan</p>
+      <h2 id="planTitle">Gratis untuk semua, <em>tanpa paket</em></h2>
+      <p>Setiap akun mendapat batas yang sama. Mau AI lebih banyak? Isi ulang kredit sesekali, atau sambungkan API key AI milikmu dan pakai sepuasnya.</p>
+    </div>
+    <ul class="plan-list">
+      <li><b>20 prompt AI / hari</b><span>Reset 00.00 WIB. Prompt bergambar juga dihitung 1.</span></li>
+      <li><b>AI pribadi</b><span>OpenAI, Claude, DeepSeek, Groq, OpenRouter, atau Ollama — tanpa memotong jatah.</span></li>
+      <li><b>Alamat website</b><span>Otomatis <code>web-xxxxxx.rakit.io</code>, atau sampai 5 alamat pilihanmu sendiri.</span></li>
+      <li><b>Lega untuk berkarya</b><span>100 MB file, database 50 MB, riwayat 30 hari, 20 project per akun.</span></li>
+    </ul>
+  </section>
+
+  <section class="download" id="download" aria-labelledby="downloadTitle">
+    <div class="download-copy">
+      <p class="eyebrow">rakit desktop</p>
+      <h2 id="downloadTitle">rakit di komputermu, <em>bisa offline</em></h2>
+      <p>Editor yang sama, project tersimpan di komputermu sendiri. Pakai Ollama untuk AI yang sepenuhnya lokal, atau API key Claude untuk <b>mode Agen</b> — AI yang mengerjakan, membuka, dan menguji websitemu sendiri.</p>
+      <ul class="checks">
+        <li>Tanpa daftar akun, langsung masuk</li>
+        <li>Mode Agen Claude Agent SDK, tanpa Docker</li>
+        <li>Website project di <code>namaproject.localhost</code></li>
+      </ul>
+    </div>
+    <div class="download-card">
+      <a class="os-btn" data-os="windows" href="https://github.com/oktamapangestu/rakit.icu/releases/latest" target="_blank" rel="noopener"><span class="os-name">Windows</span><span class="os-file">.exe · .msi</span></a>
+      <a class="os-btn" data-os="mac" href="https://github.com/oktamapangestu/rakit.icu/releases/latest" target="_blank" rel="noopener"><span class="os-name">macOS</span><span class="os-file">.dmg · macOS 14+</span></a>
+      <a class="os-btn" data-os="linux" href="https://github.com/oktamapangestu/rakit.icu/releases/latest" target="_blank" rel="noopener"><span class="os-name">Linux</span><span class="os-file">.AppImage · .deb</span></a>
+      <p class="download-note">Unduhan dari halaman rilis GitHub. Mau membangun sendiri? Lihat <a href="https://github.com/oktamapangestu/rakit.icu/tree/master/desktop" target="_blank" rel="noopener">desktop/README.md</a>.</p>
+    </div>
+  </section>
+
+  <section class="oss" aria-labelledby="ossTitle">
+    <span class="oss-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0"/></svg></span>
+    <div>
+      <h2 id="ossTitle">Kodenya terbuka di GitHub</h2>
+      <p>Lihat cara rakit dibuat — server Go, editor Svelte, aplikasi Tauri — laporkan masalah, atau ikut berkontribusi.</p>
+    </div>
+    <a class="ghost-btn" href="https://github.com/oktamapangestu/rakit.icu" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0"/></svg>Buka di GitHub</a>
+  </section>
+
+  <section class="final-cta">
+    <h2>Siap bikin website pertamamu?</h2>
+    <div class="hero-cta">
+      <a class="cta-btn" href="#auth" data-go="register">Daftar gratis</a>
+      <a class="ghost-btn" href="#download"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.5 1h1v8.3l2.6-2.6.7.7L8 11.2 4.2 7.4l.7-.7 2.6 2.6zM2 13h12v1H2z"/></svg>Download desktop</a>
     </div>
   </section>
 
   <footer class="foot">
-    <p>© rakit.io · Belajar, berkarya, dan online dari browser</p>
-    <p>Hubungi kami: <a href="mailto:halorakitio@gmail.com">halorakitio@gmail.com</a></p>
+    <nav class="foot-links" aria-label="Tautan">
+      <a href="/panduan">Panduan</a>
+      <a href="#download">Download desktop</a>
+      <a href="https://github.com/oktamapangestu/rakit.icu" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/oktamapangestu/rakit.icu/releases" target="_blank" rel="noopener">Rilis</a>
+      <a href="mailto:halorakitio@gmail.com">halorakitio@gmail.com</a>
+    </nav>
+    <p>© rakit.io · Belajar, berkarya, dan online — di browser atau di komputermu</p>
   </footer>
 
   <script src="/js/auth.js"></script>
