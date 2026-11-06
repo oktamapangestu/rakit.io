@@ -43,13 +43,15 @@ test('skrip pemilih hanya disisipkan ke halaman HTML yang dimuat di iframe', { s
 
   const framed = await stack.site('toko-pilih', '/', { headers: { 'Sec-Fetch-Dest': 'iframe' } });
   assert.equal(framed.status, 200);
-  assert.ok(framed.body.includes(`<script data-app="${stack.origin}">`));
-  // Skrip Console dipasang paling awal di <head> (log sejak awal halaman), skrip pemilih tepat sebelum </body>;
-  // sisanya tidak berubah.
-  const consoleTag = framed.body.match(/<head><script src="\/api\/_console\.js\?v=\w+" data-app="[^"]+"><\/script>/)?.[0];
-  assert.ok(consoleTag, 'skrip Console di awal <head>');
-  assert.ok(framed.body.replace(consoleTag, '<head>').startsWith(PAGE.slice(0, PAGE.lastIndexOf('</body>'))));
-  assert.ok(framed.body.endsWith('</script></body>\n</html>'));
+  // Skrip Console & pemilih dipasang paling awal di <head>, satu baris (nomor baris halaman tidak bergeser);
+  // sisanya tidak berubah. Pemilih memakai defer, jadi tetap berjalan setelah halaman selesai dibaca.
+  const tags = framed.body.match(/<head><script src="\/api\/_console\.js\?v=\w+" data-app="[^"]+"><\/script><script defer src="\/api\/_picker\.js\?v=(\w+)" data-app="[^"]+"><\/script>/);
+  assert.ok(tags, 'skrip Console & pemilih di awal <head>');
+  assert.equal(framed.body.replace(tags[0], '<head>'), PAGE);
+  const picker = await stack.site('toko-pilih', `/api/_picker.js?v=${tags[1]}`);
+  assert.equal(picker.status, 200);
+  assert.match(picker.headers['content-type'], /javascript/);
+  assert.match(picker.body, /document\.currentScript/);
   assert.equal(Number(framed.headers['content-length']), Buffer.byteLength(framed.body));
   assert.notEqual(framed.headers.etag, plain.headers.etag);
   const again = await stack.site('toko-pilih', '/', { headers: { 'Sec-Fetch-Dest': 'iframe', 'If-None-Match': framed.headers.etag } });

@@ -126,8 +126,8 @@ func main() {
 			}
 			path := strings.ToLower(r.URL.Path)
 			switch {
-			case r.URL.Path == sites.ConsolePath:
-				sites.ServeConsole(w, r)
+			case sites.IsSystemScript(r.URL.Path):
+				sites.ServeScript(w, r)
 			case siteapi.Matches(r.URL.Path):
 				siteDB.Serve(w, r, slug)
 			case path == "/api/ai/chat":
@@ -191,8 +191,8 @@ func main() {
 			http.Redirect(w, r, cfg.AppOrigin+r.URL.RequestURI(), http.StatusMovedPermanently)
 		case !usernameRE.MatchString(slug):
 			http.Error(w, "Not found", http.StatusNotFound)
-		case r.URL.Path == sites.ConsolePath:
-			sites.ServeConsole(w, r)
+		case sites.IsSystemScript(r.URL.Path):
+			sites.ServeScript(w, r)
 		case siteapi.Matches(r.URL.Path):
 			// Database versi yang sedang dibuka: prod di <slug>, dev di <slug>--dev.
 			key := sub

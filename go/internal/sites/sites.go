@@ -3,7 +3,6 @@
 package sites
 
 import (
-	"bytes"
 	"crypto/sha256"
 	_ "embed"
 	"fmt"
@@ -115,16 +114,21 @@ var pickerJS string
 
 func inFrame(r *http.Request) bool { return r.Header.Get("Sec-Fetch-Dest") == "iframe" }
 
-// Penangkap log untuk tab Console di editor (lihat console.js). Disisipkan bersama pemilih blok sebagai
-// <script src> satu baris, bukan inline: skrip inline di <head> menggeser nomor baris error di halaman.
+// Penangkap log untuk tab Console di editor (lihat console.js).
 //
 //go:embed console.js
 var consoleJS string
 
-// ConsolePath: alamat skrip console di domain website (/api/ di domain website dicadangkan untuk sistem).
-const ConsolePath = "/api/_console.js"
+// Alamat skrip sistem di domain website (/api/ di domain website dicadangkan untuk sistem).
+const (
+	ConsolePath = "/api/_console.js"
+	PickerPath  = "/api/_picker.js"
+)
 
-var consoleVersion = fmt.Sprintf("%x", sha256.Sum256([]byte(consoleJS)))[:12]
+var (
+	consoleVersion = fmt.Sprintf("%x", sha256.Sum256([]byte(consoleJS)))[:12]
+	pickerFileVer  = fmt.Sprintf("%x", sha256.Sum256([]byte(pickerJS)))[:12]
+)
 
 // pickerVersion masuk ke ETag halaman versi iframe: tanpanya, setelah server diperbarui browser tetap
 // mendapat 304 dan memakai halaman dari cache yang masih membawa skrip pemilih/console lama.
@@ -138,20 +142,27 @@ func pageETag(info os.FileInfo, picker bool) string {
 	return fmt.Sprintf(`W/"%x-%x"`, info.Size(), info.ModTime().UnixNano())
 }
 
-// ServeConsole mengirim skrip console. Alamatnya memuat versi isi (?v=), jadi boleh di-cache lama.
-func ServeConsole(w http.ResponseWriter, r *http.Request) {
+// IsSystemScript: alamat skrip console/pemilih yang dilayani ServeScript.
+func IsSystemScript(path string) bool { return path == ConsolePath || path == PickerPath }
+
+// ServeScript mengirim skrip console atau pemilih. Alamatnya memuat versi isi (?v=), jadi boleh di-cache lama.
+func ServeScript(w http.ResponseWriter, r *http.Request) {
+	body, version := consoleJS, consoleVersion
+	if r.URL.Path == PickerPath {
+		body, version = pickerJS, pickerFileVer
+	}
 	hd := w.Header()
 	hd.Set("Content-Type", "text/javascript; charset=utf-8")
 	hd.Set("X-Content-Type-Options", "nosniff")
-	if r.URL.Query().Get("v") == consoleVersion {
+	if r.URL.Query().Get("v") == version {
 		hd.Set("Cache-Control", "public, max-age=31536000, immutable")
 	} else {
 		hd.Set("Cache-Control", "no-cache")
 	}
-	io.WriteString(w, consoleJS)
+	io.WriteString(w, body)
 }
 
-// Tempat skrip console: setelah tag pembuka <head>, atau <html>, atau doctype (yang pertama ada, dalam
+// Tempat skrip sistem: setelah tag pembuka <head>, atau <html>, atau doctype (yang pertama ada, dalam
 // urutan itu). Tidak pernah sebelum doctype: browser bisa masuk quirks mode.
 var headPositions = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)<head(?:\s[^>]*)?>`),
@@ -169,21 +180,19 @@ func headEnd(page []byte) int {
 	return 0
 }
 
-// withPicker menyisipkan skrip console paling awal (sebelum skrip website, supaya log-nya ikut tertangkap)
-// dan skrip pemilih sebelum </body> terakhir (atau di akhir dokumen).
+// withPicker menyisipkan skrip console & pemilih di awal halaman, dalam satu baris (nomor baris error di
+// halaman tidak bergeser). Console berjalan paling awal, sebelum skrip website, supaya log-nya ikut
+// tertangkap; pemilih memakai defer sehingga baru berjalan setelah seluruh halaman dibaca. Keduanya sengaja
+// tidak ditaruh di akhir: HTML yang sedang diketik (mis. "</h" yang belum selesai, <textarea> yang belum
+// ditutup) bisa menelan tag <script> di akhir halaman, dan isi skripnya tampil sebagai teks di preview.
 func (h *Handler) withPicker(page []byte) []byte {
 	app := html.EscapeString(h.cfg.AppOrigin)
-	console := `<script src="` + ConsolePath + `?v=` + consoleVersion + `" data-app="` + app + `"></script>`
-	picker := `<script data-app="` + app + `">` + pickerJS + `</script>`
+	scripts := `<script src="` + ConsolePath + `?v=` + consoleVersion + `" data-app="` + app + `"></script>` +
+		`<script defer src="` + PickerPath + `?v=` + pickerFileVer + `" data-app="` + app + `"></script>`
 	head := headEnd(page)
-	body := bytes.LastIndex(bytes.ToLower(page), []byte("</body>"))
-	if body < head {
-		body = len(page)
-	}
-	out := make([]byte, 0, len(page)+len(console)+len(picker))
-	out = append(append(out, page[:head]...), console...)
-	out = append(append(out, page[head:body]...), picker...)
-	return append(out, page[body:]...)
+	out := make([]byte, 0, len(page)+len(scripts))
+	out = append(append(out, page[:head]...), scripts...)
+	return append(out, page[head:]...)
 }
 
 func (h *Handler) sendFile(w http.ResponseWriter, r *http.Request, target *Target, file *siteFile, status int) {
