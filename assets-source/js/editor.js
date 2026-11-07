@@ -14,7 +14,7 @@ import { activate, closeTab, copyText, createEntry, isDirty, loadTree, openFile,
 import { bindBlockPicker, currentRoute, pick, previewGo, reloadPreview, setDevice, setPick, setTextEdit, textEdit } from '../editor/app/preview.js';
 import { bindAiEvents, loadCredits, setLayout, setMobileView, setMode, showFeatureInfo, showHistoryMenu, toggleAi, togglePreview, toggleSidebar } from '../editor/app/shell.js';
 import { editorContext, openDialog } from '../editor/app/context.js';
-import { openPublish, openTopup, projectUrl, refreshPublish, showAccountMenu, showProjectMenu } from '../editor/app/project.js';
+import { openCloud, openPublish, openTopup, projectUrl, refreshPublish, showAccountMenu, showProjectMenu } from '../editor/app/project.js';
 import { askFlow, bindFlowEvents, explainFlow, flashFlowLines, flowGoBack, openFlowRef, selectFlowStep, stopFlowPlay, toggleFlow, toggleFlowPlay } from '../editor/app/flow.js';
 
 // ---------- Event ----------
@@ -34,6 +34,7 @@ function appActions() {
     accountMenu: showAccountMenu,
     copySite: () => copyText(state.project.siteUrl),
     publish: openPublish,
+    cloud: () => openCloud(),
     topup: (tab) => openTopup(tab),
     info: showFeatureInfo,
     createEntry: (type, dir) => createEntry(type, dir),

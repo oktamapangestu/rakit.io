@@ -290,4 +290,25 @@ var en = map[string]string{
 	// ---------- Website project ----------
 	"Halaman tidak ditemukan": "Page not found",
 	"Alamat tidak valid":      "Invalid address",
+
+	// ---------- Aplikasi desktop <-> rakit.io (api/sync.go, api/cloud.go, bundle, userdb/sync.go) ----------
+	"Kode login sudah tidak berlaku. Coba masuk lagi.":      "This sign-in code is no longer valid. Try signing in again.",
+	"Kode ini sudah dipakai akun lain":                      "This code was already used by another account",
+	"File project tidak valid":                              "Invalid project file",
+	"Maksimal %d file & folder":                             "Maximum %d files & folders",
+	"Database terlalu besar":                                "Database too large",
+	"Sebelum dipublikasikan dari aplikasi desktop":          "Before publishing from the desktop app",
+	"Dipublikasikan dari aplikasi desktop":                  "Published from the desktop app",
+	"Diunduh dari rakit.io":                                 "Downloaded from rakit.io",
+	"Sesi akun rakit.io berakhir. Masuk lagi.":              "Your rakit.io session has ended. Sign in again.",
+	"Tidak bisa terhubung ke %s. Periksa koneksi internet.": "Can't connect to %s. Check your internet connection.",
+	"Jawaban server rakit.io tidak dikenali":                "Unrecognized response from the rakit.io server",
+	"Server rakit.io menjawab %d":                           "The rakit.io server responded with %d",
+	"Unduhan dari server rakit.io terputus. Coba lagi.":     "The download from rakit.io was interrupted. Try again.",
+	"Project ini sudah ada di komputer (%s)":                "This project is already on this computer (%s)",
+	"Project pasangannya di rakit.io sudah tidak ada. Tekan Publikasikan lagi untuk membuat project baru.": "The linked project on rakit.io no longer exists. Press Publish again to create a new project.",
+	"Tabel %s tidak bisa dibuat: %s":                                 "Table %s couldn't be created: %s",
+	"Kolom %s.%s tidak bisa ditambahkan: %s":                         "Column %s.%s couldn't be added: %s",
+	"Aturan akses tabel %s tidak bisa diubah: %s":                    "Access rules of table %s couldn't be changed: %s",
+	"Kolom %s.%s di server bertipe %s, di komputer %s; tidak diubah": "Column %s.%s is %s on the server and %s on this computer; left unchanged",
 }

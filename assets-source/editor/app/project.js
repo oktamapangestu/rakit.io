@@ -9,6 +9,7 @@ import Assistant from '../assistant/Assistant.svelte';
 import SettingsDialog from '../settings/SettingsDialog.svelte';
 import PublishDialog from '../publish/PublishDialog.svelte';
 import PublishModeDialog from '../publish/PublishModeDialog.svelte';
+import CloudDialog from '../cloud/CloudDialog.svelte';
 import { SPARK } from '../icons.js';
 import { ai } from '../ai/state.svelte.js';
 import { diagram, rerender as rerenderDiagram } from '../diagram/state.svelte.js';
@@ -27,6 +28,8 @@ export function showAccountMenu() {
     '-',
     { label: 'Buka website publik', run: () => window.open(state.project.siteUrl, '_blank', 'noopener') },
     { label: 'Salin URL website', run: () => copyText(state.project.siteUrl) },
+    state.me.desktop && { label: 'Publikasikan ke rakit.io', run: () => openCloud('publish') },
+    state.me.desktop && { label: 'Project di rakit.io', run: () => openCloud('projects') },
     { label: 'Mode publikasi', hint: isManual() ? 'manual' : 'langsung', run: openPublishMode },
     { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
     { label: 'Pengaturan', run: openSettings },
@@ -217,6 +220,13 @@ export function openPublishMode() {
     slug: state.project.slug,
     onApplied: (res) => { applyProject(res.project); ui.pubStatus = res.publish; },
   });
+}
+
+// ---------- Akun rakit.io (aplikasi desktop) ----------
+// Login opsional, publikasi project lokal ke rakit.io, dan unduh project dari sana: komponen Svelte
+// assets-source/editor/cloud/CloudDialog.svelte. tab: 'publish' | 'projects'.
+export function openCloud(tab = 'publish') {
+  openDialog(CloudDialog, { tab, onSwitch: switchProject });
 }
 
 // ---------- Asisten AI untuk website pengguna ----------

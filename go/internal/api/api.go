@@ -67,6 +67,8 @@ type Handler struct {
 	reads, writes *httpx.RateLimiter
 	authLimiter   *httpx.RateLimiter
 	dummyHash     string // supaya waktu respons login sama walau user tidak ada
+	devices       *devices
+	cloud         *cloudState // hanya aplikasi desktop (cloud.go)
 }
 
 func New(cfg *config.Config, db *store.Store, a *auth.Auth, svc Services) (*Handler, error) {
@@ -81,6 +83,8 @@ func New(cfg *config.Config, db *store.Store, a *auth.Auth, svc Services) (*Hand
 		writes:      httpx.NewRateLimiter(time.Minute, 300, busy),
 		authLimiter: httpx.NewRateLimiter(15*time.Minute, 30, ""),
 		dummyHash:   dummy,
+		devices:     &devices{byUC: map[string]*deviceRequest{}},
+		cloud:       &cloudState{},
 	}, nil
 }
 
@@ -137,7 +141,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Semua *.rakit.io dianggap "same-site" oleh browser, jadi SameSite=Lax saja tidak cukup untuk
 	// mencegah website user mengirim request ke API. Wajibkan Origin = origin aplikasi.
-	if !reading(r) && r.Method != http.MethodOptions {
+	// /api/sync dengan token aplikasi desktop (atau tanpa login sama sekali) tidak memakai cookie: bebas CSRF.
+	if !reading(r) && r.Method != http.MethodOptions && !syncRequest(parts, r) {
 		ok := r.Header.Get("Sec-Fetch-Site") == "same-origin"
 		if origin := r.Header.Get("Origin"); origin != "" {
 			ok = origin == h.cfg.AppOrigin
@@ -148,7 +153,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	req := &request{w: w, r: r, user: h.auth.User(r)}
+	req := &request{w: w, r: r}
+	if strings.EqualFold(parts[0], "sync") && auth.BearerToken(r) != "" {
+		req.user = h.auth.BearerUser(r) // token aplikasi desktop; cookie tidak dipakai sama sekali
+	} else {
+		req.user = h.auth.User(r)
+	}
 	who := httpx.ClientIP(r)
 	if req.user != nil {
 		who = "u" + jsconv.String(float64(req.user.ID))
@@ -202,6 +212,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = h.publish(req)
 	case "functions":
 		err = h.functions(req)
+	case "sync":
+		err = h.sync(req)
+	case "cloud":
+		err = h.cloudRoutes(req)
 	default:
 		err = errNotFound
 	}

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -221,6 +222,35 @@ func (h *Handler) serveStatic(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// nextCookie: halaman yang dibuka setelah login (hanya /desktop/authorize).
+const nextCookie = "rakit_next"
+
+func validNext(p string) bool {
+	return strings.HasPrefix(p, "/desktop/authorize?") && !strings.ContainsAny(p, "\\\r\n")
+}
+
+func (h *Handler) setNext(w http.ResponseWriter, next string) {
+	if !validNext(next) {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: nextCookie, Value: url.QueryEscape(next), Path: "/", MaxAge: 15 * 60,
+		HttpOnly: true, Secure: h.cfg.SecureCookies, SameSite: http.SameSiteLaxMode})
+}
+
+// takeNext: halaman tujuan setelah login (sekali pakai), atau "".
+func (h *Handler) takeNext(w http.ResponseWriter, r *http.Request) string {
+	c, err := r.Cookie(nextCookie)
+	if err != nil {
+		return ""
+	}
+	http.SetCookie(w, &http.Cookie{Name: nextCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: h.cfg.SecureCookies, SameSite: http.SameSiteLaxMode})
+	next, err := url.QueryUnescape(c.Value)
+	if err != nil || !validNext(next) {
+		return ""
+	}
+	return next
+}
+
 // NotFound: jawaban untuk path di domain utama yang bukan halaman, aset, maupun API.
 func (h *Handler) NotFound(w http.ResponseWriter) {
 	securityHeaders(w)
@@ -294,9 +324,22 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) bool {
 		securityHeaders(w)
 		if h.auth.User(r) == nil {
 			redirect(w, r, i18n.Path(lang, "/"))
+		} else if next := h.takeNext(w, r); next != "" {
+			redirect(w, r, next)
 		} else {
 			h.sendHTML(w, r, page("editor.html"), "no-store")
 		}
+	case "/desktop/authorize":
+		// Login aplikasi desktop (internal/api/sync.go): pengguna menyetujui kode yang tampil di aplikasinya.
+		// Belum login: setelah masuk (password atau Google, keduanya berakhir di /editor) kembali ke sini.
+		securityHeaders(w)
+		if h.cfg.Desktop {
+			return false
+		}
+		if h.auth.User(r) == nil {
+			h.setNext(w, r.URL.RequestURI())
+		}
+		h.sendHTML(w, r, "desktop-authorize.html", "no-store")
 	case "/admin":
 		securityHeaders(w)
 		user := h.auth.User(r)

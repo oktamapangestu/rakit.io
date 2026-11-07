@@ -510,6 +510,12 @@ Folder `desktop/`: aplikasi Tauri 2 (Rust) yang menjalankan server Go ini di kom
 `go/internal/desktop`). Mode Agen di desktop berjalan tanpa Docker (`AI_AGENT_LOCAL` = folder runtime berisi
 `claude_driver.mjs`, Node, SDK, Chromium; `AI_AGENT_NODE` = binary Node). Lihat `desktop/README.md`.
 
+Akun rakit.io di desktop (opsional): aplikasi masuk lewat login perangkat (`/api/sync/device`, disetujui pengguna di
+`/desktop/authorize`), lalu memakai token Bearer yang hanya diterima rute `/api/sync` untuk melihat, mengunduh, dan
+memublikasikan project (`go/internal/api/sync.go`, `cloud.go`, `go/internal/bundle`). Server tujuan desktop:
+`RAKIT_CLOUD_URL` (bawaan `https://rakit.io`). Nginx perlu `client_max_body_size` lebih besar untuk `/api/sync/`
+(lihat `deploy/nginx-rakit.conf`).
+
 ## Deploy ke VPS
 
 1. **DNS** — arahkan dua record ke IP VPS:

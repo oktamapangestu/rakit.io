@@ -35,6 +35,9 @@ type Config struct {
 	Desktop      bool
 	DesktopToken string
 	DesktopProxy bool
+	// CloudURL: server rakit tempat aplikasi desktop login, mengunduh, dan memublikasikan project
+	// (RAKIT_CLOUD_URL, bawaan https://rakit.io). Lihat internal/api/cloud.go.
+	CloudURL string
 
 	// Login dengan Google (OAuth client tipe "Web application").
 	GoogleEnabled      bool
@@ -312,6 +315,7 @@ func Load() (*Config, error) {
 	c.Desktop = os.Getenv("DESKTOP") == "1"
 	c.DesktopToken = os.Getenv("DESKTOP_TOKEN")
 	c.DesktopProxy = c.Desktop && os.Getenv("DESKTOP_PROXY") == "1"
+	c.CloudURL = strings.TrimRight(envOr("RAKIT_CLOUD_URL", "https://rakit.io"), "/")
 	c.MaxCustom = 5
 	if n, convErr := strconv.Atoi(os.Getenv("MAX_CUSTOM_DOMAINS")); convErr == nil {
 		c.MaxCustom = max(0, n)

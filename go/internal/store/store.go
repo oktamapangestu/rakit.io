@@ -126,6 +126,8 @@ func (s *Store) UserByUsername(username string) (*User, error) {
 
 func (s *Store) UserByEmail(email string) (*User, error) { return s.userWhere("email = ?", email) }
 
+func (s *Store) UserByID(id int64) (*User, error) { return s.userWhere("id = ?", id) }
+
 func (s *Store) UserByLogin(login string) (*User, error) {
 	return s.userWhere("username = ? OR email = ?", login, login)
 }

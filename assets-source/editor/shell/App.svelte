@@ -31,7 +31,7 @@
   import { FEATURE_INFO } from '../features.js';
 
   // actions (editor.js): toggleSidebar() · togglePreview() · setLayout(l) · setMode(m) · setMobileView(v) ·
-  // projectMenu(anchor) · accountMenu() · copySite() · publish() · topup(tab?) · info(key) · createEntry(type, dir?) ·
+  // projectMenu(anchor) · accountMenu() · copySite() · publish() · cloud() · topup(tab?) · info(key) · createEntry(type, dir?) ·
   // upload() · refresh() · collapse() · openIndex() · tree (attachment #tree: klik, menu, keyboard, seret gambar) ·
   // selectTab(path) · closeTab(path) · toggleFlow() · flowKey(e) · flow (aksi FlowPanel) · setAutosave(on) ·
   // historyMenu(anchor) · clearHistory() · newConversation() · newTable() · preview (aksi PreviewPanel)
@@ -116,6 +116,12 @@
       <span>Publikasikan</span>
       <i class="release-dot" aria-hidden="true"></i>
     </button>
+    {#if core.me?.desktop}
+      <button type="button" class="chip-btn" id="cloudBtn" onclick={actions.cloud} title="Akun rakit.io: publikasikan project ini ke internet atau unduh project dari rakit.io">
+        <svg viewBox="0 0 16 16"><path d="M8 2a4.5 4.5 0 0 1 4.37 3.43A3.25 3.25 0 0 1 12 12h-1.5v-1H12a2.25 2.25 0 0 0 .1-4.5l-.44-.02-.08-.43A3.5 3.5 0 0 0 4.66 6l-.08.42-.43.04A2.25 2.25 0 0 0 4.5 11H6v1H4.5a3.25 3.25 0 0 1-.83-6.4A4.5 4.5 0 0 1 8 2m0 5 2.85 2.85-.7.7L8.5 8.9V14h-1V8.9L5.85 10.55l-.7-.7z"/></svg>
+        <span>rakit.io</span>
+      </button>
+    {/if}
     <a class="publish-btn" id="visitSite" target="_blank" rel="noopener" href={p?.siteUrl}>
       <svg viewBox="0 0 16 16"><path d="M9 2v1h3.3L6.6 8.6l.8.8L13 3.7V7h1V2zM12 13H3V4h4V3H2v11h11V9h-1z"/></svg>
       <span>Lihat situs</span>

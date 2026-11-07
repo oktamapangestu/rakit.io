@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Masuk ke aplikasi desktop — rakit.io</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+  <link rel="stylesheet" href="/css/authorize.css">
+</head>
+<body>
+  <main class="card">
+    <a class="brand" href="/" aria-label="rakit.io"><img class="logo" src="/logo.svg" alt=""><span class="wordmark">rakit<span class="dim">.io</span></span></a>
+    <h1 id="title">Masuk ke aplikasi desktop</h1>
+
+    <section id="loading"><p class="muted" data-t="loading">Memuat…</p></section>
+
+    <section id="login" hidden>
+      <p data-t="loginLead">Masuk dulu ke akun rakit.io kamu. Setelah itu kamu kembali ke halaman ini.</p>
+      <a class="btn primary" href="/#auth" data-t="loginBtn">Masuk</a>
+    </section>
+
+    <section id="ask" hidden>
+      <p><strong id="device"></strong> <span data-t="askLead">ingin masuk ke akun</span> <strong id="user"></strong>.</p>
+      <p class="muted" data-t="codeLead">Pastikan kode ini sama dengan yang tampil di aplikasi:</p>
+      <p class="code" id="code"></p>
+      <p class="muted small" data-t="askNote">Aplikasi itu akan bisa melihat project kamu, mengunduhnya, dan memublikasikan perubahan ke rakit.io. Izin bisa dicabut dengan menekan Keluar di aplikasinya.</p>
+      <div class="actions">
+        <button class="btn primary" id="approve" type="button" data-t="approve">Izinkan</button>
+        <button class="btn" id="deny" type="button" data-t="deny">Tolak</button>
+      </div>
+    </section>
+
+    <section id="done" hidden>
+      <p class="ok" data-t="done">Berhasil. Kembali ke aplikasi desktop — kamu sudah masuk di sana.</p>
+      <p class="muted small" data-t="closeTab">Tab ini boleh ditutup.</p>
+    </section>
+
+    <section id="denied" hidden>
+      <p data-t="denied">Permintaan ditolak. Aplikasi desktop tidak mendapat akses.</p>
+    </section>
+
+    <p class="error" id="error" role="alert" hidden></p>
+  </main>
+  <script src="/js/authorize.js"></script>
+</body>
+</html>

@@ -141,6 +141,58 @@ func (a *Auth) Login(w http.ResponseWriter, userID int64) error {
 	return nil
 }
 
+// DeviceTTL: umur token aplikasi desktop (login lewat browser, lihat internal/api/sync.go).
+const DeviceTTL = 365 * 24 * time.Hour
+
+// IssueToken membuat sesi tanpa cookie untuk aplikasi desktop; tokennya dikirim lewat header
+// Authorization: Bearer <token>.
+func (a *Auth) IssueToken(userID int64) (string, error) {
+	token, hash, err := NewToken()
+	if err != nil {
+		return "", err
+	}
+	if err := a.sessions.InsertSession(hash, userID, time.Now().Add(DeviceTTL).UnixMilli()); err != nil {
+		return "", err
+	}
+	a.touch(userID, true)
+	return token, nil
+}
+
+// BearerToken: token dari header Authorization: Bearer, atau "".
+func BearerToken(r *http.Request) string {
+	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(token)
+}
+
+// BearerUser: pemilik token aplikasi desktop di header Authorization, atau nil.
+func (a *Auth) BearerUser(r *http.Request) *store.User {
+	token := BearerToken(r)
+	if token == "" {
+		return nil
+	}
+	user, err := a.sessions.SessionUser(sha256Hex(token), time.Now().UnixMilli())
+	if err != nil {
+		log.Printf("auth: membaca token: %v", err)
+		return nil
+	}
+	if user != nil {
+		a.touch(user.ID, false)
+	}
+	return user
+}
+
+// Revoke menghapus sesi/token milik user (yang didapat dari User atau BearerUser).
+func (a *Auth) Revoke(user *store.User) {
+	if user != nil && user.TokenHash != "" {
+		if err := a.sessions.DeleteSession(user.TokenHash); err != nil {
+			log.Printf("auth: menghapus sesi: %v", err)
+		}
+	}
+}
+
 // Logout menghapus sesi (bila ada) dan cookie-nya.
 func (a *Auth) Logout(w http.ResponseWriter, user *store.User) {
 	if user != nil && user.TokenHash != "" {

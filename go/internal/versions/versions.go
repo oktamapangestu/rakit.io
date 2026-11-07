@@ -262,6 +262,17 @@ func (s *Service) BeforeAI(project *store.Project, userID int64, label string) {
 	}
 }
 
+// Checkpoint menyimpan versi berlabel bila ada yang berubah sejak versi terakhir (mis. sebelum & sesudah
+// project ditimpa dari aplikasi desktop). Tidak pernah menggagalkan pemanggil.
+func (s *Service) Checkpoint(project *store.Project, userID int64, label string) {
+	unlock := s.lock(project.Slug)
+	_, err := s.create(project, userID, "manual", label, false)
+	unlock()
+	if err != nil {
+		log.Printf("Versi %s gagal: %v", project.Slug, err)
+	}
+}
+
 // CreateManual: tombol "Simpan versi" — selalu dibuat.
 func (s *Service) CreateManual(project *store.Project, userID int64, label string) (int64, error) {
 	defer s.lock(project.Slug)()

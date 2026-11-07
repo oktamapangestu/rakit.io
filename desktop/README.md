@@ -12,6 +12,11 @@ pengguna sebagai *sidecar*. Editornya sama dengan versi web, tetapi:
   mode Agen* berformat Anthropic (preset **Claude**: `https://api.anthropic.com/v1`, atau DeepSeek), dibayar
   pengguna langsung — tanpa jatah/kredit;
 - website project tampil di `http://<slug>.localhost:<port>`;
+- **akun rakit.io (opsional)**: tombol *rakit.io* di header. Masuk lewat browser (kode dicocokkan di
+  `rakit.io/desktop/authorize`), lalu project lokal bisa **dipublikasikan ke rakit.io** (file + struktur tabel; data
+  database dan gambar kiriman pengunjung di server tidak ditimpa, versi sebelumnya masuk Riwayat di server) dan
+  project di rakit.io bisa **diunduh** ke komputer (file, gambar, dan database beserta datanya). Server tujuan:
+  `RAKIT_CLOUD_URL` (bawaan `https://rakit.io`). Lihat `go/internal/api/cloud.go` (desktop) dan `sync.go` (server);
 - fungsi serverless berjalan di runtime **WebAssembly** (QuickJS yang dikompilasi ke wasm, dijalankan wazero di
   dalam server Go — sama dengan versi web).
 

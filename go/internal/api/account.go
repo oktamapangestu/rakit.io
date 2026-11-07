@@ -151,7 +151,8 @@ func (h *Handler) me(q *request) error {
 		"user": struct {
 			publicUser
 			IsAdmin bool `json:"isAdmin"`
-		}{publicUser{q.user.Username, q.user.Email}, h.cfg.IsAdmin(q.user.Email)},
+			Desktop bool `json:"desktop,omitempty"` // aplikasi desktop: tampilkan menu akun rakit.io (cloud.go)
+		}{publicUser{q.user.Username, q.user.Email}, h.cfg.IsAdmin(q.user.Email), h.cfg.Desktop},
 		"project":     h.public(project),
 		"projects":    h.publicAll(all),
 		"maxProjects": h.cfg.MaxProjects,
