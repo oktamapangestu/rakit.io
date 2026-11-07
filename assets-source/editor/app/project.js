@@ -30,6 +30,7 @@ export function showAccountMenu() {
     { label: 'Salin URL website', run: () => copyText(state.project.siteUrl) },
     state.me.desktop && { label: 'Publikasikan ke rakit.io', run: () => openCloud('publish') },
     state.me.desktop && { label: 'Project di rakit.io', run: () => openCloud('projects') },
+    state.me.desktop && { label: 'Periksa update aplikasi', run: checkUpdate },
     { label: 'Mode publikasi', hint: isManual() ? 'manual' : 'langsung', run: openPublishMode },
     { label: 'Simpan semua', hint: '⌥⌘S', run: saveAll },
     { label: 'Pengaturan', run: openSettings },
@@ -227,6 +228,20 @@ export function openPublishMode() {
 // assets-source/editor/cloud/CloudDialog.svelte. tab: 'publish' | 'projects'.
 export function openCloud(tab = 'publish') {
   openDialog(CloudDialog, { tab, onSwitch: switchProject });
+}
+
+// Periksa versi baru aplikasi desktop sekarang (tanpa cache); bila ada, halaman unduhannya dibuka di browser.
+// Pemberitahuan otomatis: shell/UpdateNotice.svelte.
+export async function checkUpdate() {
+  try {
+    const info = await api('GET', '/api/desktop/update?force=1');
+    if (!info.current) return toast('Versi aplikasi tidak diketahui (mode pengembangan)');
+    if (!info.available) return toast(`rakit desktop ${info.current} sudah versi terbaru`);
+    toast(`Versi baru ${info.latest} tersedia. Membuka halaman unduhan…`);
+    await api('POST', '/api/desktop/open', { url: info.url });
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 // ---------- Asisten AI untuk website pengguna ----------

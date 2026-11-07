@@ -32,7 +32,11 @@ if [ ! -e "$out/node/.version-$NODE_VERSION-$dist" ]; then
   tmp="$(mktemp -d)"
   if [[ $dist == win-* ]]; then
     curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-$dist.zip" -o "$tmp/node.zip"
-    unzip -q "$tmp/node.zip" -d "$tmp"
+    if command -v unzip >/dev/null; then
+      unzip -q "$tmp/node.zip" -d "$tmp"
+    else # Git Bash di Windows tidak selalu punya unzip
+      powershell -NoProfile -Command "Expand-Archive -Path '$(cygpath -w "$tmp/node.zip")' -DestinationPath '$(cygpath -w "$tmp")'"
+    fi
     cp "$tmp/node-v$NODE_VERSION-$dist/node.exe" "$out/node/"
   else
     curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-$dist.tar.gz" | tar -xz -C "$tmp"

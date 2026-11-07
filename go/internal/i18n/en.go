@@ -311,4 +311,5 @@ var en = map[string]string{
 	"Kolom %s.%s tidak bisa ditambahkan: %s":                         "Column %s.%s couldn't be added: %s",
 	"Aturan akses tabel %s tidak bisa diubah: %s":                    "Access rules of table %s couldn't be changed: %s",
 	"Kolom %s.%s di server bertipe %s, di komputer %s; tidak diubah": "Column %s.%s is %s on the server and %s on this computer; left unchanged",
+	"Tidak bisa memeriksa update. Periksa koneksi internet.":         "Couldn't check for updates. Check your internet connection.",
 }

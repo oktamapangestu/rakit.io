@@ -1373,5 +1373,11 @@
   "Lepaskan": "Unlink",
   "Mengunduh…": "Downloading…",
   "Akun ${serverHost}": "${serverHost} account",
-  "Izinkan": "Allow"
+  "Izinkan": "Allow",
+  "Periksa update aplikasi": "Check for app updates",
+  "Versi aplikasi tidak diketahui (mode pengembangan)": "App version unknown (development mode)",
+  "rakit desktop ${info.current} sudah versi terbaru": "rakit desktop ${info.current} is up to date",
+  "Versi baru ${info.latest} tersedia. Membuka halaman unduhan…": "New version ${info.latest} available. Opening the download page…",
+  "Versi baru rakit desktop ${info.latest}": "New rakit desktop version ${info.latest}",
+  "Kamu memakai ${info.current}. Unduh lalu pasang versi baru; project & data di komputer ini tetap aman.": "You're on ${info.current}. Download and install the new version; your projects & data on this computer stay safe."
 }

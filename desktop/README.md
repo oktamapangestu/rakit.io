@@ -89,3 +89,24 @@ Installer dibangun per OS (build macOS di Mac, Windows di Windows), atau lewat C
 - Pembayaran, login Google, dan dashboard pemilik tidak dipakai.
 - Tautan yang membuka tab baru (mis. "Lihat situs") belum diatur khusus; alamat `*.localhost` bisa dibuka di
   Chrome/Firefox selama aplikasi berjalan.
+
+## Rilis otomatis (GitHub Actions)
+
+`.github/workflows/desktop.yml`: setiap push ke `master` yang mengubah kode aplikasi (atau *Run workflow* manual di
+tab Actions) membangun installer Linux (`.deb`, `.AppImage`, `.rpm`), macOS Apple Silicon & Intel (`.dmg`), dan
+Windows (`.msi`, `.exe`), lalu menerbitkannya sebagai GitHub Release `desktop-v<major>.<minor>.<nomor run>`
+(major/minor dari `version` di `src-tauri/tauri.conf.json`). Release baru menjadi *latest* hanya setelah semua OS
+berhasil, jadi link `releases/latest` di landing page selalu lengkap. Di CI, langkah `beforeBuildCommand` dijalankan
+terpisah lewat Git Bash (`src-tauri/tauri.ci.conf.json` mengosongkannya).
+
+Belum ditandatangani: macOS perlu klik kanan → Open saat pertama kali, Windows menampilkan SmartScreen. Untuk
+menandatangani macOS, isi secret `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
+`APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` lalu teruskan ke langkah `tauri-action`.
+
+### Notifikasi update
+
+Aplikasi mengirim versinya ke server lokal (`APP_VERSION`). Saat editor dibuka (lalu tiap 6 jam), server mengecek
+release terbaru di `DESKTOP_RELEASES_REPO` (bawaan `oktamapangestu/rakit.io`, tag `desktop-vX.Y.Z`); bila lebih
+baru, editor menampilkan pemberitahuan dengan tombol **Unduh** (membuka halaman release di browser) dan **Nanti**
+(disembunyikan sampai ada versi yang lebih baru lagi). Menu akun → *Periksa update aplikasi* mengecek langsung.
+Lihat `go/internal/api/update.go` dan `assets-source/editor/shell/UpdateNotice.svelte`.

@@ -2905,3 +2905,28 @@ a.docs-btn-link { display: inline-flex; align-items: center; text-decoration: no
 .cloud-item a { overflow: hidden; color: var(--muted); font: 11.5px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .cloud-list button { flex-shrink: 0; height: 30px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--raised); color: var(--text); font: 600 12px var(--ui); cursor: pointer; }
 .cloud-list button:disabled { opacity: 0.55; cursor: default; }
+
+/* ---------- Notifikasi versi baru (aplikasi desktop, shell/UpdateNotice.svelte) ---------- */
+.update-notice {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: var(--panel-2);
+  box-shadow: 0 16px 40px var(--shadow);
+  animation: pop 0.15s ease-out;
+}
+.update-notice > svg { flex-shrink: 0; width: 20px; height: 20px; margin-top: 1px; fill: var(--accent-text); }
+.update-text { display: grid; flex: 1; min-width: 0; gap: 2px; font-size: 12.5px; line-height: 1.45; }
+.update-text strong { color: var(--white); font-size: 13px; }
+.update-text span { color: var(--muted); }
+.update-actions { display: grid; gap: 6px; }
+.update-actions button { height: 30px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--raised); color: var(--text); font: 600 12px var(--ui); cursor: pointer; }
+.update-actions button.primary { border: 0; background: var(--grad); color: var(--on-accent); }

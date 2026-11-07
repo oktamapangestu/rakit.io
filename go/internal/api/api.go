@@ -216,6 +216,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = h.sync(req)
 	case "cloud":
 		err = h.cloudRoutes(req)
+	case "desktop":
+		err = h.desktopRoutes(req)
 	default:
 		err = errNotFound
 	}

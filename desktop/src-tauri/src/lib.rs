@@ -66,6 +66,8 @@ fn start(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         ("TEMPLATE_DIR", resources.join("templates").join("default").to_string_lossy().into_owned()),
         ("DESKTOP", "1".to_string()),
         ("DESKTOP_TOKEN", token.clone()),
+        // Versi terpasang, untuk notifikasi update (server membandingkannya dengan GitHub Releases).
+        ("APP_VERSION", app.package_info().version.to_string()),
         // Mode Agen (Claude Agent SDK) tanpa Docker: runtime dibundel (scripts/build-agent-runtime.sh).
         ("AI_AGENT_ENGINES", "claude".to_string()),
         ("AI_AGENT_LOCAL", resources.join("agent").to_string_lossy().into_owned()),

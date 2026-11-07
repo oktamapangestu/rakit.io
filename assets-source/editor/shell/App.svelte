@@ -8,6 +8,7 @@
   import { ui, toasts, views } from './state.svelte.js';
   import { splitter } from './resize.js';
   import ContextMenu from './ContextMenu.svelte';
+  import UpdateNotice from './UpdateNotice.svelte';
   import FileTree from '../files/FileTree.svelte';
   import FileUsage from '../files/Usage.svelte';
   import Tabs from '../files/Tabs.svelte';
@@ -360,4 +361,5 @@
 </nav>
 
 <ContextMenu />
+{#if core.me?.desktop}<UpdateNotice />{/if}
 <div class="toasts" id="toasts">{#each toasts as t (t.id)}<div class="toast {t.type}" role="status">{t.message}</div>{/each}</div>
